@@ -1,0 +1,15 @@
+import React from 'react';
+import Svg, { Path } from 'react-native-svg';
+
+const Location = ({ color = "#fff", size = 24 }) => (
+  <Svg width={size} height={size} viewBox="0 0 12 15" fill="none">
+    <Path d="M0 0h24v24H0z" fill="none" />
+    <Path
+   d="M6.0075 8.88776C4.82325 8.88776 3.86025 7.92476 3.86025 6.74051C3.86025 5.55626 4.82325 4.59326 6.0075 4.59326C7.19175 4.59326 8.1555 5.55626 8.1555 6.74051C8.1555 7.92476 7.19175 8.88776 6.0075 8.88776ZM6 0.583008C2.69175 0.583008 0 3.30776 0 6.65726C0 10.7133 3.4905 14.833 6 14.833C8.50875 14.833 12 10.7133 12 6.65726C12 3.30776 9.30825 0.583008 6 0.583008Z" clip-rule="evenodd" fill-rule="evenodd"
+      fill={color}
+    />
+  </Svg>
+);
+
+export default Location;
+

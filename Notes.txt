@@ -1,0 +1,14 @@
+Bash:
+export JAVA_HOME="$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home"
+export PATH="$JAVA_HOME/bin:$PATH"
+
+brew install --cask react-native-debugger
+open -a "React Native Debugger" --args --port 8081
+Open your app in Expo Go.
+Shake the device (or press Ctrl+D in Android emulator / Cmd+D in iOS simulator).
+Choose Debug Remote JS.
+Expo will open Chrome DevTools — close that.
+In React Native Debugger, press:
+Cmd+T → set port to 8081.
+
+Chat body format: [{"id": "IPGSgem58qXgJ7Tg0OxH", "isBroadcast": false, "sender": "other", "text": "Hello from student", "time": "11:48 PM", "timestamp": 2025-08-23T18:18:17.778Z}]

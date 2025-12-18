@@ -1,0 +1,169 @@
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Dimensions,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+} from "react-native";
+import ArrowBack from "../../assets/svgIcons/ArrowBack";
+import Pdf from "../../assets/svgIcons/Pdf";
+import BottomNavigation from "./BottomNavigation";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
+import DownloadIcon from "../../assets/svgIcons/Downlode";
+
+const { width, height } = Dimensions.get("window");
+
+const invoices = ["Invoice_1.pdf", "Invoice_2.pdf", "Invoice_3.pdf"," Invoice_4.pdf", "Invoice_5.pdf", "Invoice_6.pdf", "Invoice_7.pdf", "Invoice_8.pdf", "Invoice_9.pdf", "Invoice_10.pdf"];
+
+const Billing = () => {
+  const [userType, setUserType] = useState<"student" | "teacher" | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const type = await AsyncStorage.getItem("user_role");
+        const email = await AsyncStorage.getItem("user_email");
+
+        if (type && email) {
+          setUserType(type as "student" | "teacher");
+          setUserEmail(email);
+        }
+      } catch (err) {
+        console.error("❌ Failed to load user data", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadUserData();
+  }, []);
+
+  useEffect(() => {
+    if (userType && userEmail) {
+      console.log("✅ Loaded User:", userEmail, "Role:", userType);
+    }
+  }, [userEmail, userType]);
+
+  if (loading || !userType || !userEmail) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#5f5fff" />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => {
+            router.back();
+          }}
+        >
+          <ArrowBack size={30} />
+        </TouchableOpacity>
+        <Text style={styles.headerText}>Billing</Text>
+      </View>
+
+      <View style={styles.content}>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Invoices</Text>
+          <TouchableOpacity>
+            <Text style={styles.seeAll}>See all</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.invoiceList}>
+          {invoices.map((file, index) => (
+            <TouchableOpacity key={index} style={styles.invoiceItem}>
+              <Pdf width={24} height={24} />
+              <Text style={styles.invoiceText}>{file}</Text>
+              <TouchableOpacity
+                onPress={() => {
+                 
+                  console.log(`Downloading ${file}`);
+                }}
+                style={{ marginLeft: "auto" }}
+              >
+                <DownloadIcon/>
+            </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      <BottomNavigation userType={userType} />
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#5f5fff",
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: width * 0.05,
+    paddingTop: height * 0.08,
+    paddingBottom: height * 0.02,
+  },
+  headerText: {
+    fontSize: width * 0.06,
+    color: "#fff",
+    fontWeight: "bold",
+    marginLeft: 12,
+  },
+  content: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: width * 0.06,
+    paddingTop: height * 0.03,
+  },
+  titleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: height * 0.02,
+  },
+  title: {
+    fontSize: width * 0.05,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  seeAll: {
+    fontSize: width * 0.035,
+    color: "#c2c2c2",
+   lineHeight:16
+  },
+  invoiceList: {
+    paddingBottom: 80,
+  },
+  invoiceItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+ 
+  },
+  invoiceText: {
+    fontSize: width * 0.04,
+    marginLeft: 12,
+    color: "#333",
+  },
+});
+
+export default Billing;

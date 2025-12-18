@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "144030897819",
+    "project_id": "go-grow-smart",
+    "storage_bucket": "go-grow-smart.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:144030897819:android:d6a67aef85b159e12bd83e",
+        "android_client_info": {
+          "package_name": "com.gogrowsmart.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC2_fHw4pfCmD2JfUBTOpdgQGoxc5ouq2A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
