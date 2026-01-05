@@ -1,0 +1,22 @@
+1. compact screens * for the student.tsx file
+2. fonts for all screens fix it by smaller size
+3. Ui zard changes; for favorites screen
+4. see all remove add a switch
+5. teacher Introduction fix it by making dynamic screens there
+7. add remove doubt session screen
+
+priority: 
+0) mapping
+1) brush ups for all screens sizes and gaps just like UIzard
+2) json
+
+3) start video audio call research;
+4)  
+
+
+
+focus on Profile2.tsx
+webrtc 
+login Ui
+
+pagination in screens of student fix it below

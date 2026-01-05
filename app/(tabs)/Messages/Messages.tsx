@@ -765,7 +765,7 @@ headerTitle: {
 },
 growsmartText: {
   color: '#e5e7eb',
-  fontSize: wp('3.98%'),
+  fontSize: wp('3.78%'),
   fontFamily: 'Poppins_400Regular',
   fontWeight: '500',
   textAlign: 'center',

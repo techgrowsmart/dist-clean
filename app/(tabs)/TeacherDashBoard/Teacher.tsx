@@ -822,7 +822,7 @@ welcomeRow: {
   flex: 1, // Add this to allow it to take available space
 },
 welcome: {
-  fontSize: wp('3.733%'),
+  fontSize: wp('3.3%'),
   lineHeight: hp('2.422%'),
   textTransform: 'uppercase',
   color: '#393939',
@@ -956,7 +956,7 @@ gradientOverlay: {
  headerContainer: { 
   backgroundColor: "#5f5fff", 
   paddingHorizontal: wp("4.8%"), 
-  paddingTop: hp("5%"), // Keep same as Student.tsx
+  paddingTop: hp("4%"), // Keep same as Student.tsx
   paddingBottom: hp("2%"), // Keep same as Student.tsx
   borderBottomLeftRadius: wp("4.53%"), 
   borderBottomRightRadius: wp("4.53%") 
@@ -998,12 +998,10 @@ notificationButton: {
 
 logoText: {
   color: '#e5e7eb',
-  fontSize: wp('3.98%'),
+  fontSize: wp('3.78%%'),
   fontFamily: 'Poppins_400Regular',
   fontWeight: '500',
   textAlign: 'center',
-  letterSpacing: wp('0.2%'),
-  lineHeight: wp('5%'),
 },
 leftHeaderSection: {
   flexDirection: 'row',
@@ -1080,9 +1078,9 @@ logoTextContainer: {
   
   // Main content - adjust marginTop to match Student.tsx
   mainContent: { 
-    paddingHorizontal: wp("3.2%"), 
-    marginTop: hp("1.08%"), 
-    paddingBottom: 150 
+    paddingHorizontal: wp("2.5%"), 
+    marginTop: hp("1.5%"), 
+    paddingBottom: 100 
   },
 
 });

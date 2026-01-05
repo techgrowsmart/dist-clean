@@ -13,6 +13,7 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
   NativeEventSubscription,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Bars from "../../../assets/svgIcons/Bars";
@@ -441,7 +442,24 @@ useEffect(() => {
 )}
 
   <View style={styles.headerIcons}>
-    <TouchableOpacity onPress={() => setShowOptions(!showOptions)}>
+    <TouchableOpacity 
+      style={styles.iconButton} 
+      onPress={() => Alert.alert('Coming Soon', 'Voice call feature will be available soon!')}
+      hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+    >
+      <Ionicons name="call-outline" size={wp('5.5%')} color="#FFF" />
+    </TouchableOpacity>
+    <TouchableOpacity 
+      style={[styles.iconButton, {marginHorizontal: wp('2%')}]} 
+      onPress={() => Alert.alert('Coming Soon', 'Video call feature will be available soon!')}
+      hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+    >
+      <Ionicons name="videocam-outline" size={wp('5.5%')} color="#FFF" />
+    </TouchableOpacity>
+    <TouchableOpacity 
+      onPress={() => setShowOptions(!showOptions)}
+      hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+    >
       <Bars />
     </TouchableOpacity>
   </View>
@@ -547,11 +565,12 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_400Regular",
   },
   headerIcons: {
-    flexDirection: "row",
-    marginLeft: "auto",
-    marginRight:wp('4.8%'),
-    width:wp('7.46%'),
-    height:hp('2.826%')
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 'auto',
+    marginRight: wp('4.8%'),
+    minWidth: wp('30%'),
+    justifyContent: 'flex-end',
   },
   messageBubble: {
     paddingHorizontal:wp('5.33%'),
@@ -721,6 +740,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderTopWidth: 1,
     borderColor: "#e0e0e0",
+  },
+  iconButton: {
+    padding: wp('2%'),
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   studentBroadcastText: {
     fontSize: wp('3.5%'),

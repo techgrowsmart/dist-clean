@@ -214,14 +214,14 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255,255,255,0.1)',
   },
   androidSafeArea: {
-    paddingBottom: 2,
+    paddingBottom: -10,
   },
   navBar: { 
     flexDirection: 'row', 
     justifyContent: 'space-around', 
     alignItems: 'center', 
     paddingVertical: 8,
-    paddingBottom: Platform.OS === 'android' ? 10 : 12,
+    paddingBottom: Platform.OS === 'android' ? 6 : 12,
     height: 76,
     paddingHorizontal: 5,
   },
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     justifyContent: 'center', 
     flex: 1, 
-    paddingVertical: 8,
+    paddingVertical: 2,
     minWidth: 60,
     borderRadius: 8,
     marginHorizontal: 2,
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   iconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 2,
+    marginBottom: 1,
     backgroundColor: 'transparent',
   },
   navLabel: { 

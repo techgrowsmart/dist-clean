@@ -4,29 +4,12 @@ import BookOpenReaderIcon from "../../../assets/svgIcons/BookOpenReader";
 import NotificationBellIcon from "../../../assets/svgIcons/NotificationBell";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
-import {
-  Poppins_400Regular,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-  useFonts,
-} from "@expo-google-fonts/poppins";
+import { Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold, useFonts } from "@expo-google-fonts/poppins";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Alert,
-  Dimensions,
-  Image,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  Animated,
-} from "react-native";
+import { Alert, Dimensions, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Animated, PanResponder, StyleProp, ViewStyle } from "react-native";
 import RazorpayCheckout from "react-native-razorpay";
 import AllBoardsPage from "./AllBoardsPage";
 import ClassSelection from "./ClassSelection";
@@ -38,25 +21,13 @@ import SubjectSelection from "./SubjectSelection";
 import TeachersList from "./TeachersList";
 import MyTeacher from "./MyTeacher";
 import AllSkills from "./AllSkills";
-
+import LeftScreen from './LeftScreen';
+import RightScreen from './RightScreen';
 import { Roboto_500Medium } from "@expo-google-fonts/roboto";
-import {
-  OpenSans_500Medium,
-  OpenSans_300Light,
-  OpenSans_400Regular,
-} from "@expo-google-fonts/open-sans";
-
-import {
-  Montserrat_400Regular,
-} from "@expo-google-fonts/montserrat";
-
-
-
+import { OpenSans_500Medium, OpenSans_300Light, OpenSans_400Regular } from "@expo-google-fonts/open-sans";
+import { Montserrat_400Regular } from "@expo-google-fonts/montserrat";
 import { isTablet } from "../../../utils/devices";
-import {
-  widthPercentageToDP as wp,
-  heightPercentageToDP as hp,
-} from "react-native-responsive-screen";
+import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
 
 try {
   if (Platform.OS === "ios" || Platform.OS === "android") {
@@ -68,45 +39,112 @@ try {
   console.log("Razorpay module not available:", error);
 }
 
-interface CheckoutOptions {
-  description: string;
-  image?: string;
-  currency: string;
-  key: string;
-  amount: number;
-  order_id: string;
-  name: string;
-  prefill: {
-    email: string;
-    name: string;
-  };
-  theme: {
-    color: string;
-  };
-}
-
-const { width, height } = Dimensions.get("window");
-
-interface Teacher {
-  profilePic: string;
-  name: string;
-  email: string;
-  isPopular: boolean;
-  tutions: any[];
-  qualifications: any[];
-  qualification: string;
-  language: string;
-}
-
 interface StudentState {
   name: string;
   profileImage: string | null;
 }
 
+interface Teacher {
+  _id: string;
+  name: string;
+  email: string;
+  profilePic?: string;
+  qualifications?: string[];
+  subjects?: string[];
+  isPopular?: boolean;
+  rating?: number;
+  experience?: number;
+  price?: number;
+  about?: string;
+  tutions?: any[];
+  language?: string;
+  qualification?: string;
+}
+
+const SWIPE_THRESHOLD = 120;
+const SWIPE_OUT_DURATION = 250;
+const SCREEN_COUNT = 3;
+
 export default function Home() {
   const router = useRouter();
   const { email } = useLocalSearchParams();
-  let [fontsLoaded] = useFonts({
+  
+  // Swipe animation values
+  const position = useRef(new Animated.Value(0)).current;
+  const [currentScreenIndex, setCurrentScreenIndex] = useState(1);
+  const swipeAnim = useRef(new Animated.Value(0)).current;
+  const { width } = Dimensions.get('window');
+  
+  const panResponder = useRef(
+  PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: (_, gestureState) => {
+      const { dx, dy } = gestureState;
+      return Math.abs(dx) > Math.abs(dy) * 2 && Math.abs(dx) > 5;
+    },
+    onPanResponderGrant: () => {
+      swipeAnim.stopAnimation();
+    },
+    onPanResponderMove: (_, gestureState) => {
+      const { dx } = gestureState;
+      const newPosition = -width * currentScreenIndex + dx;
+      
+      // Clamp the movement
+      const minPosition = -width * (SCREEN_COUNT - 1);
+      const maxPosition = 0;
+      const clampedPosition = Math.max(minPosition, Math.min(maxPosition, newPosition));
+      
+      swipeAnim.setValue(clampedPosition);
+    },
+    onPanResponderRelease: (_, gestureState) => {
+      const { dx, vx } = gestureState;
+      const swipeThreshold = width * 0.2;
+      const velocityThreshold = 0.5;
+      
+      let newIndex = currentScreenIndex;
+      
+      const isSwipeLeft = dx < -swipeThreshold || (dx < 0 && vx < -velocityThreshold);
+      const isSwipeRight = dx > swipeThreshold || (dx > 0 && vx > velocityThreshold);
+      
+      if (isSwipeLeft) {
+        newIndex = Math.min(SCREEN_COUNT - 1, currentScreenIndex + 1);
+      } else if (isSwipeRight) {
+        newIndex = Math.max(0, currentScreenIndex - 1);
+      }
+      
+      Animated.spring(swipeAnim, {
+        toValue: -width * newIndex,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 50,
+        overshootClamping: true,
+      }).start();
+      
+      setCurrentScreenIndex(newIndex);
+    },
+    onPanResponderTerminate: () => {
+      Animated.spring(swipeAnim, {
+        toValue: -width * currentScreenIndex,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 50,
+      }).start();
+    },
+  })
+).current;
+
+  const animateTransition = (toValue: number) => {
+    Animated.spring(position, {
+      toValue,
+      useNativeDriver: true,
+      tension: 50,
+      friction: 10,
+    }).start();
+  };
+
+  const { height } = Dimensions.get('window');
+  
+  const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_600SemiBold,
     Poppins_700Bold,
@@ -116,63 +154,39 @@ export default function Home() {
     OpenSans_400Regular,
     Montserrat_400Regular,
   });
+  
   const [blinkAnim] = useState(new Animated.Value(1));
-  const [student, setStudent] = useState<StudentState>({
-    name: "",
-    profileImage: null,
-  });
+  const [student, setStudent] = useState<StudentState>({ name: "", profileImage: null });
   const [studentName, setStudentName] = useState("");
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
   const [filteredTeachers, setFilteredTeachers] = useState<Teacher[]>([]);
-  const [filteredPopularTeachers, setFilteredPopularTeachers] = useState<
-    Teacher[]
-  >([]);
-  const [filteredSpotlightTeachers, setFilteredSpotlightTeachers] = useState<
-    Teacher[]
-  >([]);
-  const [allSpotlightTeachers, setAllSpotlightTeachers] = useState<Teacher[]>(
-    []
-  );
+  const [filteredPopularTeachers, setFilteredPopularTeachers] = useState<Teacher[]>([]);
+  const [filteredSpotlightTeachers, setFilteredSpotlightTeachers] = useState<Teacher[]>([]);
+  const [allSpotlightTeachers, setAllSpotlightTeachers] = useState<Teacher[]>([]);
   const [allPopularTeachers, setAllPopularTeachers] = useState<Teacher[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>("");
   const [selectedSubject, setSelectedSubject] = useState<string>("");
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
-  const [allSpotlightSubjectTeachers, setAllSpotlightSubjectTeachers] =
-    useState<Teacher[]>([]);
-  const [allSpotlightSkillTeachers, setAllSpotlightSkillTeachers] = useState<
-    Teacher[]
-  >([]);
-
-  const [allPopularSubjectTeachers, setAllPopularSubjectTeachers] = useState<
-    Teacher[]
-  >([]);
-  const [allPopularSkillTeachers, setAllPopularSkillTeachers] = useState<
-    Teacher[]
-  >([]);
-
-  const [activeSubText, setActiveSubText] = useState<string | null>(
-    "Dashboard"
-  );
+  const [allSpotlightSubjectTeachers, setAllSpotlightSubjectTeachers] = useState<Teacher[]>([]);
+  const [allSpotlightSkillTeachers, setAllSpotlightSkillTeachers] = useState<Teacher[]>([]);
+  const [allPopularSubjectTeachers, setAllPopularSubjectTeachers] = useState<Teacher[]>([]);
+  const [allPopularSkillTeachers, setAllPopularSkillTeachers] = useState<Teacher[]>([]);
+  const [activeSubText, setActiveSubText] = useState<string | null>("Dashboard");
   const [showAllPopular, setShowAllPopular] = useState(false);
-  const { userType, userEmail } = useLocalSearchParams<{
-    userType: string;
-    userEmail: string;
-  }>();
+  const { userType, userEmail } = useLocalSearchParams<{ userType: string; userEmail: string }>();
   const [storedUserEmail, setStoredUserEmail] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMoreData, setHasMoreData] = useState(true);
   const [spotLightTeachers, setSpotLightTeachers] = useState<Teacher[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
-
   const [activeMenu, setActiveMenu] = useState("Dashboard");
   const [currentSection, setCurrentSection] = useState("home");
   const [userRole, setUserRole] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-
   const [showAiText, setShowAiText] = useState(false);
   const [selectedAiTextIndex, setSelectedAiTextIndex] = useState(0);
   const aiTexts = [
@@ -183,23 +197,22 @@ export default function Home() {
   ];
 
   useEffect(() => {
-  if (isSearching && searchQuery.trim() !== "") {
-    // Randomly select an AI text
-    const randomIndex = Math.floor(Math.random() * aiTexts.length);
-    setSelectedAiTextIndex(randomIndex);
-  }
-}, [isSearching, searchQuery]);
+    // Set initial position to show home screen (index 1)
+    swipeAnim.setValue(-width);
+    setCurrentScreenIndex(1);
+  }, [swipeAnim, width]);
 
-  // Fetch unread count on component mount and set up polling
+  useEffect(() => {
+    if (isSearching && searchQuery.trim() !== "") {
+      const randomIndex = Math.floor(Math.random() * aiTexts.length);
+      setSelectedAiTextIndex(randomIndex);
+    }
+  }, [isSearching, searchQuery]);
+
   useEffect(() => {
     if (studentName) {
-      // Fetch immediately
       fetchUnreadCount();
-      
-      // Set up polling every 30 seconds
       const interval = setInterval(fetchUnreadCount, 30000);
-      
-      // Clean up interval on component unmount
       return () => clearInterval(interval);
     }
   }, [studentName, fetchUnreadCount]);
@@ -215,31 +228,24 @@ export default function Home() {
   } | null>(null);
 
   useEffect(() => {
-  // Create blinking animation
-  const blinkAnimation = Animated.loop(
-    Animated.sequence([
-      Animated.timing(blinkAnim, {
-        toValue: 0.3,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(blinkAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ])
-  );
+    const blinkAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(blinkAnim, {
+          toValue: 0.3,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(blinkAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    blinkAnimation.start();
+    return () => blinkAnimation.stop();
+  }, []);
 
-  blinkAnimation.start();
-
-  // Cleanup animation on component unmount
-  return () => {
-    blinkAnimation.stop();
-  };
-}, []);
-
-  // Fetch unread notification count
   const fetchUnreadCount = useCallback(async () => {
     try {
       console.log('🔍 [fetchUnreadCount] Fetching unread count...');
@@ -248,19 +254,10 @@ export default function Home() {
         console.log('🔑 [fetchUnreadCount] No auth token found');
         return;
       }
-
-      const response = await axios.get(
-        `${BASE_URL}/api/notifications/unread-count`,
-        {
-          headers: {
-            'Authorization': `Bearer ${auth.token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
+      const response = await axios.get(`${BASE_URL}/api/notifications/unread-count`, {
+        headers: { 'Authorization': `Bearer ${auth.token}`, 'Content-Type': 'application/json' },
+      });
       console.log('📊 [fetchUnreadCount] Response:', response.data);
-      
       if (response.data && typeof response.data.count === 'number') {
         console.log(`✅ [fetchUnreadCount] Setting unread count to: ${response.data.count}`);
         setUnreadCount(response.data.count);
@@ -275,17 +272,13 @@ export default function Home() {
   useEffect(() => {
     if (studentName) {
       fetchUnreadCount();
-      
-      // Set up polling every 30 seconds
       const interval = setInterval(fetchUnreadCount, 30000);
       return () => clearInterval(interval);
     }
   }, [studentName, fetchUnreadCount]);
 
   const fetchProfileAndBalance = async () => {
-
     try {
-
       const keys = await AsyncStorage.getAllKeys();
       const stores = await AsyncStorage.multiGet(keys);
 
@@ -786,6 +779,8 @@ const MarqueeTeacherList = ({ teachers, isSkill = false, reverseDirection = fals
   // Initialize scrollX after totalContentWidth is calculated
   const scrollX = useRef(reverseDirection ? totalContentWidth : 0);
 
+ 
+
   // Auto-scroll animation with seamless looping - UPDATED FOR REVERSE DIRECTION
   const startAutoScroll = () => {
     if (scrollInterval.current) {
@@ -833,6 +828,7 @@ const MarqueeTeacherList = ({ teachers, isSkill = false, reverseDirection = fals
       stopAutoScroll();
     };
   }, [isPaused, teachers.length]);
+
 
   const handleTouchStart = () => {
     setIsPaused(true);
@@ -957,10 +953,11 @@ const renderHome = () => {
   };
 
 return (
-    <ContainerComponent 
-      style={{ flex: 1 }}
-      {...containerProps}
-    >
+    <View style={{ flex: 1 }}>
+      <ContainerComponent 
+        style={{ flex: 1 }}
+        {...containerProps}
+      >
       {/* Show search results indicator when searching */}
       {isSearching && (
         <View style={styles.searchResultsContainer}>
@@ -979,6 +976,7 @@ return (
       {!isSearching && (
         <>
           <View style={styles.mytutorsContainer}>
+            <TouchableOpacity onPress={() => setCurrentSection("boards")}>
             <View style={styles.mytutorsContainerTitle}>
               <BookOpenReaderIcon
                 width={wp("13.33%")}
@@ -987,8 +985,6 @@ return (
               />
               <Text style={styles.titleText}>My Tutors</Text>
             </View>
-            <TouchableOpacity onPress={() => setCurrentSection("boards")}>
-              <Text style={styles.seeAllText}>See all</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -1089,12 +1085,12 @@ return (
 
           {/* Skill Classes Section */}
           <View style={styles.mytutorsContainer}>
+            <TouchableOpacity onPress={() => setCurrentSection("skill")}>
+
             <View style={styles.mytutorsContainerTitle}>
               <BookOpenReaderIcon width={50} height={50} color="#ffffff" />
               <Text style={styles.titleText}>Skill Classes</Text>
             </View>
-            <TouchableOpacity onPress={() => setCurrentSection("skill")}>
-              <Text style={styles.seeAllText}>See all</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -1194,160 +1190,209 @@ return (
         </View>
       )}
     </ContainerComponent>
+    </View>
   );
 };
 
-  return (
+   return (
     <View style={styles.container}>
-<View style={styles.headerContainer}>
-<View style={styles.logoContainer}>
-  <Text style={styles.logoText}>GROWSMART</Text>
-</View>
+      {/* Header - Only show on home screen */}
+      {currentScreenIndex === 1 && (
+        <View style={styles.headerContainer}>
+          <View style={styles.logoContainer}>
+            <Text style={styles.logoText}>GROWSMART</Text>
+          </View>
 
-  <View style={styles.topRow}>
-          {/* Profile */}
-          <TouchableOpacity
-            onPress={() => setIsSidebarVisible(true)}
-            style={styles.profileContainer}
-          >
-            <Image
-              style={styles.profileImage}
-              source={
-                profileImage
-                  ? { uri: profileImage }
-                  : require("../../../assets/images/Profile.png")
-              }
-            />
-          </TouchableOpacity>
+          <View style={styles.topRow}>
+            {/* Profile */}
+            <TouchableOpacity
+              onPress={() => setIsSidebarVisible(true)}
+              style={styles.profileContainer}
+            >
+              <Image
+                style={styles.profileImage}
+                source={
+                  profileImage
+                    ? { uri: profileImage }
+                    : require("../../../assets/images/Profile.png")
+                }
+              />
+            </TouchableOpacity>
 
- {/* Search */}
-<View style={styles.searchRow}>
-  <View style={styles.searchInputContainer}>
-    <Image
-      style={styles.searchIcon}
-      source={require("../../../assets/images/Search.png")}
-    />
-    <TextInput
-      style={styles.searchInput}
-      placeholder="Search teachers"
-      placeholderTextColor="#82878F"
-      value={searchQuery}
-      onChangeText={(text) => {
-        setSearchQuery(text);
-        if (text.trim() === "") {
-          setIsSearching(false);
-          setShowAiText(false);
-          setPage(1);
-          setHasMoreData(true);
-          fetchTeachers(false);
-        }
-      }}
-      returnKeyType="search"
-      onSubmitEditing={() => {
-        if (searchQuery.trim() !== "") {
-          setIsSearching(true);
-          setShowAiText(false); // Don't show AI text on traditional search
-          setPage(1);
-          setHasMoreData(true);
-          fetchTeachers(false);
-        }
-      }}
-    />
-    
-{/* Show AntDesign icon when typing */}
-{searchQuery.length > 0 && (
-  <TouchableOpacity 
-    onPress={() => {
-      if (searchQuery.trim() !== "") {
-        setShowAiText(true);
-        setIsSearching(true);
-        setPage(1);
-        setHasMoreData(true);
-        fetchTeachers(false);
-        
-        // Randomly select an AI text
-        const randomIndex = Math.floor(Math.random() * aiTexts.length);
-        setSelectedAiTextIndex(randomIndex);
-      }
-    }}
-    style={styles.questionButton}
-  >
-    <AntDesign name="question" size={wp("4.5%")} color="#5f5fff" />
-  </TouchableOpacity>
-)}
-  </View>
-</View>
-
-          <TouchableOpacity
-            onPress={() =>
-              router.push("/(tabs)/StudentDashBoard/StudentNotification")
-            }
-          >
-            <View style={{ position: "relative" }}>
-              <NotificationBellIcon size={wp("6.4%")} />
-              {unreadCount > 0 && (
-                <View style={styles.notificationBadge}>
-                  <Text style={styles.notificationText}>
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </Text>
-                </View>
-              )}
+            {/* Search */}
+            <View style={styles.searchRow}>
+              <View style={styles.searchInputContainer}>
+                <Image
+                  style={styles.searchIcon}
+                  source={require("../../../assets/images/Search.png")}
+                />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search teachers"
+                  placeholderTextColor="#82878F"
+                  value={searchQuery}
+                  onChangeText={(text) => {
+                    setSearchQuery(text);
+                    if (text.trim() === "") {
+                      setIsSearching(false);
+                      setShowAiText(false);
+                      setPage(1);
+                      setHasMoreData(true);
+                      fetchTeachers(false);
+                    }
+                  }}
+                  returnKeyType="search"
+                  onSubmitEditing={() => {
+                    if (searchQuery.trim() !== "") {
+                      setIsSearching(true);
+                      setShowAiText(false);
+                      setPage(1);
+                      setHasMoreData(true);
+                      fetchTeachers(false);
+                    }
+                  }}
+                />
+                
+                {/* Show AntDesign icon when typing */}
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity 
+                    onPress={() => {
+                      if (searchQuery.trim() !== "") {
+                        setShowAiText(true);
+                        setIsSearching(true);
+                        setPage(1);
+                        setHasMoreData(true);
+                        fetchTeachers(false);
+                        
+                        const randomIndex = Math.floor(Math.random() * aiTexts.length);
+                        setSelectedAiTextIndex(randomIndex);
+                      }
+                    }}
+                    style={styles.questionButton}
+                  >
+                    <AntDesign name="question" size={wp("4.5%")} color="#5f5fff" />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
-          </TouchableOpacity>
-        </View>
-      </View>
 
-      <Sidebar
-        visible={isSidebarVisible}
-        onClose={() => setIsSidebarVisible(false)}
-        activeSubText={activeSubText}
-        setActiveSubText={setActiveSubText}
-        studentName={studentName}
-        profileImage={profileImage}
-        userEmail={userEmail || ""}
-        onItemPress={(itemName: string) => {
-          setActiveMenu(itemName);
-          if (itemName === "Billing") {
-            router.push({
-              pathname: "/(tabs)/Billing",
-              params: {
-                userEmail: storedUserEmail,
-                userType: userRole,
-              },
-            });
-          }
-          if (itemName === "My Tuitions") {
-            setCurrentSection("myTeachers");
-          }
-          if (itemName === "Faq") router.push("/(tabs)/StudentDashBoard/Faq");
-          if (itemName === "Share") {
-            router.push({
-              pathname: "/(tabs)/StudentDashBoard/Share",
-              params: { userEmail, studentName, profileImage },
-            });
-          }
-          if (itemName === "Subscription") {
-            router.push({
-              pathname: "/(tabs)/StudentDashBoard/Subscription",
-              params: { userEmail },
-            });
-          }
-          if (itemName === "Terms") {
-            router.push({
-              pathname: "/(tabs)/StudentDashBoard/TermsAndConditions",
-            });
-          }
-          if (itemName === "Contact Us") {
-         
-            router.push({ pathname: "/(tabs)/Contact" });
-          }
-          if (itemName === "Privacy Policy") {
-            router.push({ pathname: "/(tabs)/StudentDashBoard/PrivacyPolicy" });
-          }
-        }}
-      />
-      {renderContent()}
-      <BottomNavigation userType="student" />
+            <TouchableOpacity
+              onPress={() =>
+                router.push("/(tabs)/StudentDashBoard/StudentNotification")
+              }
+            >
+              <View style={{ position: "relative" }}>
+                <NotificationBellIcon size={wp("6.4%")} />
+                {unreadCount > 0 && (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationText}>
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+      
+      {/* Swipeable Content Area */}
+   {/* FIXED Swipeable Content Area */}
+    <View style={styles.swipeContainer}>
+      <Animated.View
+        style={[
+          styles.swipeContent,
+          {
+            transform: [{ translateX: swipeAnim }],
+            width: width * SCREEN_COUNT,
+          },
+        ]}
+        {...panResponder.panHandlers}
+      >
+        {/* Left Screen (Index 0) */}
+        <View style={[styles.screen, { width }]}>
+          <LeftScreen />
+        </View>
+        
+        {/* Home Screen (Index 1) */}
+        <View style={[styles.screen, { width }]}>
+          {renderContent()}
+        </View>
+        
+        {/* Right Screen (Index 2) */}
+        <View style={[styles.screen, { width }]}>
+          <RightScreen />
+        </View>
+      </Animated.View>
+    </View>
+
+      
+      {/* Swipe Indicators - Only show on home screen */}
+      {currentScreenIndex === 1 && (
+        <View style={styles.swipeIndicator}>
+          <Text style={styles.swipeHintText}>Swipe left or right</Text>
+          <View style={styles.dotContainer}>
+            <View style={[styles.dot, currentScreenIndex === 0 && styles.activeDot]} />
+            <View style={[styles.dot, currentScreenIndex === 1 && styles.activeDot]} />
+            <View style={[styles.dot, currentScreenIndex === 2 && styles.activeDot]} />
+          </View>
+        </View>
+      )}
+      
+      {/* Sidebar and BottomNav - Only show on home screen */}
+      {currentScreenIndex === 1 && (
+        <>
+          <Sidebar
+            visible={isSidebarVisible}
+            onClose={() => setIsSidebarVisible(false)}
+            activeSubText={activeSubText}
+            setActiveSubText={setActiveSubText}
+            studentName={studentName}
+            profileImage={profileImage}
+            userEmail={userEmail || ""}
+            onItemPress={(itemName: string) => {
+              setActiveMenu(itemName);
+              if (itemName === "Billing") {
+                router.push({
+                  pathname: "/(tabs)/Billing",
+                  params: {
+                    userEmail: storedUserEmail,
+                    userType: userRole,
+                  },
+                });
+              }
+              if (itemName === "My Tuitions") {
+                setCurrentSection("myTeachers");
+              }
+              if (itemName === "Faq") router.push("/(tabs)/StudentDashBoard/Faq");
+              if (itemName === "Share") {
+                router.push({
+                  pathname: "/(tabs)/StudentDashBoard/Share",
+                  params: { userEmail, studentName, profileImage },
+                });
+              }
+              if (itemName === "Subscription") {
+                router.push({
+                  pathname: "/(tabs)/StudentDashBoard/Subscription",
+                  params: { userEmail },
+                });
+              }
+              if (itemName === "Terms") {
+                router.push({
+                  pathname: "/(tabs)/StudentDashBoard/TermsAndConditions",
+                });
+              }
+              if (itemName === "Contact Us") {
+                router.push({ pathname: "/(tabs)/Contact" });
+              }
+              if (itemName === "Privacy Policy") {
+                router.push({ pathname: "/(tabs)/StudentDashBoard/PrivacyPolicy" });
+              }
+            }}
+          />
+          <BottomNavigation userType="student" />
+        </>
+      )}
     </View>
   );
 }
@@ -1355,6 +1400,31 @@ return (
 
 export const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
+  screen: {
+    flex: 1,
+  },
+swipeContainer: {
+  flex: 1,
+  overflow: 'hidden',
+  backgroundColor: '#fff', // Add this to ensure background
+},
+  headerContainer: { 
+    backgroundColor: "#5f5fff", 
+    paddingHorizontal: wp("4.8%"), 
+    paddingTop: hp("5%"), // Reduced from hp("5.1%")
+    paddingBottom: hp("2%"), // Reduced from hp("2.96%")
+    borderBottomLeftRadius: wp("4.53%"), 
+    borderBottomRightRadius: wp("4.53%"),
+  },
+  screenContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+  },
   carouselContainer: {
   height: wp("55%"),
   marginBottom: hp("2%"),
@@ -1370,6 +1440,36 @@ teachersRow: {
   flex: 1,
   paddingHorizontal: wp("1%"),
 },
+swipeIndicator: {
+  position: 'absolute',
+  bottom: hp('10%'),
+  alignSelf: 'center',
+  alignItems: 'center',
+  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+  paddingHorizontal: wp('4%'),
+  paddingVertical: hp('1%'),
+  borderRadius: wp('2%'),
+},
+swipeHintText: {
+  fontSize: wp('3%'),
+  color: '#666',
+  marginBottom: hp('1%'),
+  fontFamily: 'Poppins_400Regular',
+},
+dotContainer: {
+  flexDirection: 'row',
+  gap: wp('2%'),
+},
+dot: {
+  width: wp('2%'),
+  height: wp('2%'),
+  borderRadius: wp('1%'),
+  backgroundColor: '#ddd',
+},
+activeDot: {
+  backgroundColor: '#5f5fff',
+  width: wp('4%'),
+},
 imageContainer: {
   position: 'relative',
   marginBottom: hp("1%"),
@@ -1383,15 +1483,6 @@ dotsContainer: {
 },
 dotWrapper: {
   padding: wp("1%"),
-},
-dot: {
-  width: wp("2%"),
-  height: wp("2%"),
-  borderRadius: wp("1%"),
-},
-activeDot: {
-  backgroundColor: '#4255FF',
-  width: wp("6%"),
 },
 inactiveDot: {
   backgroundColor: '#E5E7EB',
@@ -1526,8 +1617,30 @@ teacherSub: {
   lineHeight: hp("2.422%"), 
   textAlign: "center" 
 },
-  mytutorsContainer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", margin: "auto", backgroundColor: "#dbe2ff", height: hp("10%"), paddingHorizontal: wp("5%"), paddingVertical: hp("1.5%"), marginHorizontal: wp("4%"), borderRadius: wp("4.533%"), marginTop: hp("2.69%"), borderWidth: wp("1.06%"), borderColor: "#5f5fff" },
-  mytutorsContainerTitle: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: wp("50%"), margin: "auto" },
+  mytutorsContainer: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    margin: "auto", 
+    backgroundColor: "#dbe2ff", 
+    height: hp("7.5%"), 
+    paddingHorizontal: wp("4.5%"), 
+    paddingVertical: hp("0.2%"), 
+    marginHorizontal: wp("4%"), 
+    borderRadius: wp("4.533%"), 
+    marginTop: hp("1.8%"), 
+    borderWidth: wp("1%"), 
+    borderColor: "#5f5fff" 
+  },
+  mytutorsContainerTitle: { 
+    flex: 1, 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    width: wp("50%"), 
+    margin: 0,
+    padding: 0
+  },
  titleText: { 
   color: "#454358", 
   fontSize: wp("4.5%"), 
@@ -1542,18 +1655,31 @@ seeAllText: {
   fontWeight: "500", 
   fontFamily: "Roboto_500Medium" // Changed from Poppins_400Regular
 },
-  spotlight: { marginTop: hp("2.69%"), marginHorizontal: wp("4%") },
-  spotlightHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: hp("1.345") },
+  spotlight: { 
+    marginTop: hp("1.2%"), 
+    marginHorizontal: wp("4%"),
+    marginBottom: hp("0.5%")
+  },
+  spotlightHeader: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "center", 
+    marginBottom: hp("0.5%")
+  },
   teacherCard: { marginRight: wp("2.66%"), alignItems: "center", width: wp("29.33%") },
   teacherImage: { width: wp("29.33%"), height: wp("29.33%"), borderRadius: wp("0.8%"), backgroundColor: "rgba(201,59,59,0)" },
- thanksCard: { 
-  height: hp("20%"), 
-  backgroundColor: "#663259", 
-  marginTop: hp("2.69%"), 
-  paddingVertical: hp("5%"), // Changed from padding: wp("4%")
-  paddingHorizontal: wp("4%"), // Added horizontal padding
-  justifyContent: "center" 
-},
+  thanksCard: { 
+    height: hp("18%"), 
+    backgroundColor: "#663259", 
+    marginTop: hp("1.5%"), 
+    marginBottom: hp("1.2%"),
+    borderRadius: 0,
+    paddingVertical: hp("3.5%"),
+    paddingHorizontal: wp("4%"),
+    marginHorizontal: 0,
+    width: '100%',
+    justifyContent: "center" 
+  },
  thanksTitle: { 
   color: "#fff", 
   fontSize: wp("5%"), 
@@ -1605,22 +1731,6 @@ logoImage: {
   marginTop: -hp('5%'),
   marginBottom: -hp("1.5%"),
 },
-// questionButton: {
-//   padding: wp("1%"),
-//   marginLeft: wp("1%"),
-//   justifyContent: "center",
-//   alignItems: "center",
-// },
-
-// clearButton: {
-//   padding: wp("1%"),
-//   marginLeft: wp("1%"),
-// },
-
-// clearButtonText: {
-//   fontSize: wp("4%"),
-//   color: "#666",
-// },
 
 searchResultsContainer: {
   padding: wp("4%"),
@@ -1684,4 +1794,12 @@ searchInput: {
   textAlignVertical: "center",
   paddingHorizontal: wp("1%"), // Added padding
 },
+
+swipeContent: {
+  flex: 1,
+  flexDirection: 'row',
+  height: '100%',
+},
+
+
 });

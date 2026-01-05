@@ -116,11 +116,12 @@ const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Sat
 
   const [introduction, setIntroduction] = useState("");
 
-  const [qualifications, setQualifications] = useState([
-    { subject: "", college: "", year: "" },
-    { subject: "", college: "", year: "" },
-    { subject: "", college: "", year: "" },
-  ]);
+const [qualifications, setQualifications] = useState([
+  { subject: "", college: "", year: "" },
+  { subject: "", college: "", year: "" },
+  { subject: "", college: "", year: "" },
+  { subject: "", college: "", year: "" }, // Add 4th qualification
+]);
 
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(
     moment().month()
@@ -223,7 +224,6 @@ const validateForm = () => {
   if (!introduction.trim()) {
     newErrors.introduction = "Please enter your introduction.";
   }
-
 // Only validate first qualification as required
 if (!qualifications[0]?.subject?.trim()) {
   newErrors.qualification_subject_0 = "Enter subject for qualification";
@@ -285,25 +285,31 @@ if (!qualifications[0]?.year?.trim()) {
   return Object.keys(newErrors).length === 0;
 };
 
-  const addTuition = () => {
-    if (tuitionCount < 3) { // Limit to 3 entries as per your original design
-    setTuitionCount(tuitionCount + 1);
-    }
-  };
-
+ const addTuition = () => {
+  setTuitionCount(tuitionCount + 1);
+  
+  // Add a new empty tuition if needed
+  if (tuitions.length <= tuitionCount) {
+    setTuitions([
+      ...tuitions,
+      {
+        class: "",
+        subject: "",
+        timeFrom: "",
+        timeTo: "",
+        charge: "", 
+        day: "",
+        board: "",
+        skill: "",
+      },
+    ]);
+  }
+};
   // Add this function to handle deleting tuition entries
 const deleteTuition = (index: number) => {
-  if (tuitionCount > 1 && index > 0) {
+  if (tuitionCount > 1) {
     const updatedTuitions = [...tuitions];
-    
-    // Remove the tuition at the specified index
     updatedTuitions.splice(index, 1);
-    
-    // Add an empty tuition at the end with EMPTY charge
-    updatedTuitions.push({
-      class: "", subject: "", timeFrom: "", timeTo: "", 
-      charge: "", day: "", board: "", skill: "", // Empty charge
-    });
     
     setTuitions(updatedTuitions);
     setTuitionCount(tuitionCount - 1);
@@ -445,16 +451,17 @@ useEffect(() => {
           const qualifications = Array.isArray(profileData.qualifications)
             ? profileData.qualifications
             : [];
-          // Ensure we always have 3 qualification slots
+          // Ensure we always have 4 qualification slots
           const qualificationsWithDefaults = [
-            { subject: "", college: "", year: "" },
-            { subject: "", college: "", year: "" },
-            { subject: "", college: "", year: "" }
-          ];
+              { subject: "", college: "", year: "" },
+              { subject: "", college: "", year: "" },
+              { subject: "", college: "", year: "" },
+              { subject: "", college: "", year: "" } // Add 4th slot
+            ];
 
           if (qualifications.length > 0) {
             qualifications.forEach((qual: any, index: number) => {
-              if (index < 3) {
+              if (index < 4) {
                 qualificationsWithDefaults[index] = {
                   ...qualificationsWithDefaults[index],
                   ...qual
@@ -477,7 +484,7 @@ useEffect(() => {
 
           if (tuitions.length > 0) {
             tuitions.forEach((savedTuition: any, index: number) => {
-              if (index < 3) {
+              if (index < 4) {
                 defaultTuitions[index] = {
                   ...defaultTuitions[index],
                   ...savedTuition,
@@ -553,12 +560,13 @@ useEffect(() => {
         const qualificationsWithDefaults = [
           { subject: "", college: "", year: "" },
           { subject: "", college: "", year: "" },
+          { subject: "", college: "", year: "" },
           { subject: "", college: "", year: "" }
         ];
 
         if (Array.isArray(parsedQualifications)) {
           parsedQualifications.forEach((qual: any, index: number) => {
-            if (index < 3) {
+            if (index < 4) {
               qualificationsWithDefaults[index] = {
                 ...qualificationsWithDefaults[index],
                 ...qual
@@ -595,7 +603,7 @@ useEffect(() => {
 
         if (Array.isArray(parsedTuitions)) {
           parsedTuitions.forEach((savedTuition: any, index: number) => {
-            if (index < 3) {
+            if (index < 4) {
               defaultTuitions[index] = {
                 ...defaultTuitions[index],
                 ...savedTuition,
@@ -608,6 +616,7 @@ useEffect(() => {
         setTuitions(defaultTuitions);
       } catch {
         setTuitions([
+          { class: "", subject: "", timeFrom: "", timeTo: "", charge: "", day: "", board: "", skill: "" },
           { class: "", subject: "", timeFrom: "", timeTo: "", charge: "", day: "", board: "", skill: "" },
           { class: "", subject: "", timeFrom: "", timeTo: "", charge: "", day: "", board: "", skill: "" },
           { class: "", subject: "", timeFrom: "", timeTo: "", charge: "", day: "", board: "", skill: "" }
@@ -1218,19 +1227,19 @@ const validateTimeRange = () => {
     <TouchableOpacity style={styles.editUniversity}>
       <Pencil color="#000" />
     </TouchableOpacity>
-    <TextInput
-      placeholder="Edit recent University"
-      placeholderTextColor={"#ffffff"}
-      style={styles.universityInput}
-      editable={isEditable}
-      value={university}
-      onChangeText={setUniversity}
-    />
+<TextInput
+  placeholder="Edit recent University"
+  placeholderTextColor={"#ffffff"}
+  style={styles.universityInput}
+  editable={isEditable}
+  value={university}
+  onChangeText={setUniversity}
+/>
   </View>
 </View>
         </View>
 
-        <View style={{ paddingHorizontal: 18, paddingVertical: 25 }}>
+        <View style={{ paddingHorizontal: 12, paddingVertical: 25 }}>
             <View style={styles.infoContainer}>
             <View style={styles.introContainer}>
   <Text style={styles.introductionHeading}>
@@ -1250,20 +1259,27 @@ const validateTimeRange = () => {
 )}
 
               <View style={styles.feildsContainer}>
-                <TextInput
-                  value={introduction}
-                  onChangeText={setIntroduction}
-                  editable={isEditable}
-                  placeholder="Edit your introduction"
-                  placeholderTextColor={"#686868"}
-                  multiline
-                  style={[
-                    styles.intorInput,
-                    { height: hp(isTablet ? "28%" : "38.66%") },
-                  ]}
-                />
+            <TextInput
+  value={introduction}
+  onChangeText={setIntroduction}
+  editable={isEditable}
+  placeholder="Edit your introduction"
+  placeholderTextColor={"#686868"}
+  multiline
+  style={[
+    styles.intorInput,
+    { 
+      // Start with minimum height, let it grow
+      minHeight: hp("7%"),
+      // Remove fixed height entirely for auto-sizing
+      height: undefined,
+      // Add maxHeight to prevent it from growing too large
+      maxHeight: hp("80%")
+    }
+  ]}
+/>
 
-         <View style={styles.edContent}>
+      <View style={styles.edContent}>
   <View style={styles.educationTitle}>
     <View>
       <Text style={styles.edTitle}>
@@ -1285,8 +1301,8 @@ const validateTimeRange = () => {
   {/* First Qualification */}
   <View style={styles.educationItem}>
     <View style={{ flexDirection: "row", gap: wp("2.4%") }}>
-      <View style={styles.buldingIcon}>
-        <Building size={wp("4.533%")} />
+      <View style={[styles.buldingIcon, { backgroundColor: "#f3e9ff" }]}> {/* Pinkish */}
+        <Building size={wp("4.533%")} color="#A855F7" />
       </View>
       <View style={styles.edTitles}>
         <TextInput
@@ -1335,8 +1351,8 @@ const validateTimeRange = () => {
   {/* Second Qualification */}
   <View style={styles.educationItem}>
     <View style={{ flexDirection: "row", gap: wp("2.4%") }}>
-      <View style={styles.buldingIcon}>
-        <Building size={wp("4.533%")} />
+      <View style={[styles.buldingIcon, { backgroundColor: "#daeafe" }]}> {/* Blueish */}
+        <Building size={wp("4.533%")} color="#3a82f6" />
       </View>
       <View style={styles.edTitles}>
         <TextInput
@@ -1370,41 +1386,78 @@ const validateTimeRange = () => {
   </View>
 
   {/* Third Qualification */}
-  <View style={styles.educationItem}>
-    <View style={{ flexDirection: "row", gap: wp("2.4%") }}>
-      <View style={styles.buldingIcon}>
-        <Building size={wp("4.533%")} />
-      </View>
-      <View style={styles.edTitles}>
-        <TextInput
-          placeholder="Edit Subject Name"
-          placeholderTextColor={"#475569"}
-          value={qualifications[2]?.subject || ""}
-          onChangeText={(text) => updateQualification(2, "subject", text)}
-          editable={isEditable}
-          style={styles.subjectInput}
-        />
-        <TextInput
-          placeholder="Edit College Name"
-          placeholderTextColor={"#475569"}
-          value={qualifications[2]?.college || ""}
-          onChangeText={(text) => updateQualification(2, "college", text)}
-          editable={isEditable}
-          style={styles.collegeInput}
-        />
-      </View>
+<View style={styles.educationItem}>
+  <View style={{ flexDirection: "row", gap: wp("2.4%") }}>
+    <View style={[styles.buldingIcon, { backgroundColor: "#f3e9ff" }]}> {/* Blueish */}
+      <Building size={wp("4.533%")} color="#A855F7" />
     </View>
-    <View style={styles.years}>
+    <View style={styles.edTitles}>
       <TextInput
-        placeholder="Year - Year"
+        placeholder="Edit Subject Name"
         placeholderTextColor={"#475569"}
-        value={qualifications[2]?.year || ""}
-        onChangeText={(text) => updateQualification(2, "year", text)}
+        value={qualifications[2]?.subject || ""}
+        onChangeText={(text) => updateQualification(2, "subject", text)}
         editable={isEditable}
-        style={styles.year}
+        style={styles.subjectInput}
+      />
+      <TextInput
+        placeholder="Edit College Name"
+        placeholderTextColor={"#475569"}
+        value={qualifications[2]?.college || ""}
+        onChangeText={(text) => updateQualification(2, "college", text)}
+        editable={isEditable}
+        style={styles.collegeInput}
       />
     </View>
   </View>
+  <View style={styles.years}>
+    <TextInput
+      placeholder="Year - Year"
+      placeholderTextColor={"#475569"}
+      value={qualifications[2]?.year || ""}
+      onChangeText={(text) => updateQualification(2, "year", text)}
+      editable={isEditable}
+      style={styles.year}
+    />
+  </View>
+</View>
+
+{/* Fourth Qualification */}
+<View style={styles.educationItem}>
+  <View style={{ flexDirection: "row", gap: wp("2.4%") }}>
+    <View style={[styles.buldingIcon, { backgroundColor: "#daeafe" }]}> {/* Blueish */}
+      <Building size={wp("4.533%")} color="#3a82f6" />
+    </View>
+    <View style={styles.edTitles}>
+      <TextInput
+        placeholder="Edit Subject Name"
+        placeholderTextColor={"#475569"}
+        value={qualifications[3]?.subject || ""}
+        onChangeText={(text) => updateQualification(3, "subject", text)}
+        editable={isEditable}
+        style={styles.subjectInput}
+      />
+      <TextInput
+        placeholder="Edit College Name"
+        placeholderTextColor={"#475569"}
+        value={qualifications[3]?.college || ""}
+        onChangeText={(text) => updateQualification(3, "college", text)}
+        editable={isEditable}
+        style={styles.collegeInput}
+      />
+    </View>
+  </View>
+  <View style={styles.years}>
+    <TextInput
+      placeholder="Year - Year"
+      placeholderTextColor={"#475569"}
+      value={qualifications[3]?.year || ""}
+      onChangeText={(text) => updateQualification(3, "year", text)}
+      editable={isEditable}
+      style={styles.year}
+    />
+  </View>
+</View>
 </View>
               </View>
             </View>
@@ -1423,7 +1476,6 @@ const validateTimeRange = () => {
       }}
       style={styles.category}
     >
-      <Picker.Item style={{ fontSize: wp("3.2%") }} label="Select Category" value={null} />
       <Picker.Item style={{ fontSize: wp("3.2%") }} label="Subject teacher" value="Subject teacher" />
       <Picker.Item style={{ fontSize: wp("3.2%") }} label="Skill teacher" value="Skill teacher" />
     </Picker>
@@ -1677,7 +1729,7 @@ const validateTimeRange = () => {
 {errors[`tuition_${index}_board`] && (
   <Text style={[styles.errorText, styles.boardError]}>{errors[`tuition_${index}_board`]}</Text>
 )}
-                    {index === tuitionCount - 1 && tuitionCount < 3 && (
+                    {index === tuitionCount - 1 && tuitionCount < 100 && (
                       <TouchableOpacity onPress={addTuition} style={styles.addButton}>
                         <Text style={styles.addButtonText}>+ Add Another Tuition</Text>
                       </TouchableOpacity>
@@ -1731,24 +1783,32 @@ const validateTimeRange = () => {
             <Text style={styles.workExperienceTitle}>
               Work Experience (optional)
             </Text>
-            <View style={{ marginTop: hp("1.40%") }}>
-              <View
-                style={{
-                  height: hp("60.96%"),
-                  borderWidth: wp("0.22%"),
-                  borderColor: "#edeeee",
-                  borderRadius: wp("2.133%"),
-                  paddingTop: hp("1.480%"),
-                  paddingHorizontal: wp("3.46%%"),
-                }}
-              >
-                <TextInput
-                  value={workExperience}
-                  onChangeText={setWorkExperience}
-                  style={styles.expInput}
-                  placeholder="Add your Work Experience"
-                  multiline
-                />
+          <View style={{ marginTop: hp("1.40%") }}>
+  <View
+    style={{
+      minHeight: hp("6%"), // Minimum container height
+      borderWidth: wp("0.22%"),
+      borderColor: "#edeeee",
+      borderRadius: wp("2.133%"),
+      paddingTop: hp("1.480%"),
+      paddingHorizontal: wp("3.46%"),
+    }}
+  >
+    <TextInput
+      value={workExperience}
+      onChangeText={setWorkExperience}
+      style={[
+        styles.expInput,
+        { 
+          // Start with minimum height, let it grow
+          minHeight: hp("10%"),
+          // Remove fixed height entirely for auto-sizing
+          height: undefined,
+        }
+      ]}
+      placeholder="Add your Work Experience"
+      multiline
+    />
               </View>
             </View>
           </View>
@@ -2338,10 +2398,18 @@ dayBoxMonth: {
   feildsContainer: { borderWidth: wp("0.22%"), borderColor: "#edeeee", borderRadius: 10, padding: wp('3%'), minHeight: hp('20%') },
   intorInput: { fontSize: wp("4%"), borderWidth: wp("0.22%"), lineHeight: hp("3%"), borderColor: "#ccc", borderRadius: wp("2.66%"), padding: wp("3%"), minHeight: hp("15%"), textAlignVertical: "top", backgroundColor: "#fff", includeFontPadding: false },
   educationDetailsTitle: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: hp("3.1%") },
-  edContent: { flexDirection: "column", alignItems: "center", marginTop: hp("5.11%") },
+  edContent: { flexDirection: "column", alignItems: "center", marginTop: hp("2.11%") },
   educationTitle: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: hp("1.480%") },
   edTitle: { fontSize: wp("4.533%"), lineHeight: hp("3.09%"), fontWeight: "500", color: "#000" },
-  educationItem: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 10, width: "100%" },
+educationItem: { 
+  flexDirection: "row", 
+  justifyContent: "space-between", 
+  alignItems: "center", 
+  width: "100%",
+  marginBottom: hp("-1.5%"), // Changed to NEGATIVE value to reduce space
+  paddingVertical: 0, // Remove vertical padding
+},
+  // educationItem: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 5, width: "100%" },
   buldingIcon: { width: wp("9.6%"), height: wp("9.6%"), borderRadius: "50%", backgroundColor: "#f0f0f0", justifyContent: "center", alignItems: "center" },
   edTitles: { marginLeft: 10, flexDirection: "column", gap: 5 },
   subjectInput: { color: "#0f172a", fontSize: wp("3.773%"), lineHeight: hp("2.691%"), opacity: 0.95, width: width * 0.4, top: hp("-1.3%") },
@@ -2370,7 +2438,7 @@ dayBoxMonth: {
   // feesContainer: { borderWidth: wp("0.22%"), borderColor: "#d1d5db", borderRadius: 4, width: wp("35"), height: hp("5.6%"), justifyContent: "center", backgroundColor: "transparent", color: "#030303" },
   // chargeInput: { width: '100%', height: '100%', fontSize: wp('3.5%'), color: '#030303', textAlign: 'center', padding: 0, fontWeight: "400", backgroundColor: 'transparent' },
   noticeContainer: { marginTop: hp("2.633%"), paddingHorizontal: wp("6.4%") },
-  noticeText: { color: "#000000", fontSize: wp("3.733%"), fontWeight: "500", textAlign: "center", opacity: 0.74 },
+  noticeText: { color: "red", fontSize: wp("3.733%"), fontWeight: "500", textAlign: "center", opacity: 0.74 },
   modeContainer: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-around", marginTop: hp("1.615%") },
   modeTitle: { color: "#000000", fontSize: wp("3.46%"), lineHeight: hp("2.557%"), fontWeight: "600", fontFamily: "OpenSans_400Regular" },
   modeOptions: { flexDirection: "row", gap: wp("5.866%"), alignItems: "center", paddingVertical: 10 },
@@ -2404,8 +2472,8 @@ introductionHeading: {
   fontWeight: "500",
   color: "#162e54",
   fontFamily: "OpenSans_500Medium",
-  fontSize: wp("4%"),
-  lineHeight: hp("5%"), // Increased line height
+  fontSize: wp("3.98%"),
+  lineHeight: hp("5.2%"), // Increased line height
   includeFontPadding: false,
   textAlignVertical: 'center'
 },
