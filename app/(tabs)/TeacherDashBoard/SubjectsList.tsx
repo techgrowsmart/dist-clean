@@ -166,7 +166,7 @@ export default function SubjectsList() {
               <View style={styles.leftSection}>
                 <View style={styles.iconContainer}>
                 <Image 
-                  source={require("../../../assets/images/book.png")} // Note: "images" instead of "image"
+                  source={require("../../../assets/images/book.svg")} // Note: "images" instead of "image"
                   style={styles.bookIcon} 
                   resizeMode="contain"
                 />

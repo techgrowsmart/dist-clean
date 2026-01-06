@@ -45,7 +45,7 @@ const RightScreen: React.FC = () => {
       description: 'Hi everyone, I am struggling with integration techniques and need ...',
       likes: 5,
       comments: 2,
-      image: require('../../../assets/image/book.png'),
+      image: require('../../../assets/image/book.svg'),
       likeType: 'like',
     },
     {
