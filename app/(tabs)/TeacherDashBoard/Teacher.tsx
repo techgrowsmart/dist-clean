@@ -7,13 +7,15 @@ import {
   Poppins_400Regular,
   Poppins_700Bold,
   Poppins_600SemiBold,
-  useFonts,
 } from "@expo-google-fonts/poppins";
+import { useFonts } from 'expo-font';
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
 import axios from "axios";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState, useCallback } from "react";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+
 import {
   Alert,
   Dimensions,
@@ -22,13 +24,23 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Image
+  Image,
 } from "react-native";
 import { LineChart } from "react-native-chart-kit";
 import SidebarMenu from "./TeacherSidebar";
-import { Animated, Easing } from 'react-native';
 const screenWidth = Dimensions.get("window").width;
 const { width, height } = Dimensions.get("window");
+import { Animated, PanResponder } from 'react-native';
+import LeftScreen from '../TeacherDashBoard/LeftScreen';  // Adjust path as needed
+import RightScreen from '../TeacherDashBoard/RightScreen';  // Adjust path as needed
+import * as Haptics from 'expo-haptics';
+
+const SCREEN_COUNT = 3;
+const CACHE_KEYS = {
+  PROFILE: "teacher_dashboard_profile_cache",
+  CONTACTS: "teacher_dashboard_contacts_cache",
+  SUBJECT_COUNT: "teacher_dashboard_subject_count_cache",
+};
 
 import {
   widthPercentageToDP as wp,
@@ -38,6 +50,7 @@ import { OpenSans_400Regular } from "@expo-google-fonts/open-sans";
 import StudentsList from "./StudentList";
 import SubjectsList from "./SubjectsList";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+
 interface Contact {
   name: string;
   profilePic: string;
@@ -162,8 +175,7 @@ const InfiniteReviewScroll = () => {
 
 export default function TeacherDashboard() {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  // const { userEmail } = params;
+  // Removed unused params reference
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [menuVisible, setMenuVisible] = useState(false);
   const [activeMenuItem, setActiveMenuItem] = useState("Dashboard");
@@ -172,15 +184,147 @@ export default function TeacherDashboard() {
   const [selectedCity, setSelectedCity] = useState("");
   const [userType, setUserType] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [createdAt, setCreatedAt] = useState<string | null>(null);
-  const [subjectCount, setSubjectCount] = useState(0);
-  const [showStudentsList, setShowStudentsList] = useState(false);
+  // Initialize states with cached values if available
+  const [isSpotlight, setIsSpotlight] = useState<boolean>(() => {
+    try {
+      const cached = localStorage.getItem('teacher_spotlight_status');
+      return cached ? JSON.parse(cached) : false;
+    } catch (e) {
+      return false;
+    }
+  });
+  
+  const [subjectCount, setSubjectCount] = useState<number>(() => {
+    try {
+      const cached = localStorage.getItem('teacher_subject_count');
+      return cached ? parseInt(cached, 10) : 0;
+    } catch (e) {
+      return 0;
+    }
+  });
   const [showSubjectsList, setShowSubjectsList] = useState(false);
+  const [showStudentsList, setShowStudentsList] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [userStatus, setUserStatus] = useState('dormant'); // Will be updated from API
-  const [isSpotlight, setIsSpotlight] = useState(false); // Track if teacher is in spotlight
+  const [isDashboardLoading, setIsDashboardLoading] = useState(true);
+  const [subjectsLoading, setSubjectsLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [contactsLoading, setContactsLoading] = useState(true);
+  const [createdAt, setCreatedAt] = useState<string | null>(null);
+
   const pulseAnim = React.useRef(new Animated.Value(1)).current;
   const floatAnim = React.useRef(new Animated.Value(0)).current;
+  const rafRef = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
+
+  const swipeAnim = React.useRef(new Animated.Value(-width)).current;
+  const [currentScreenIndex, setCurrentScreenIndex] = useState(1);
+
+  React.useEffect(() => {
+    swipeAnim.setValue(-width);
+    setCurrentScreenIndex(1);
+  }, [swipeAnim, width]);
+
+  const panResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, { dx, dy }) => {
+        // Only take over when a clear, strong horizontal intent is detected.
+        // Prefer vertical scrolling in children.
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        return absDx > 28 && absDx > absDy * 3 && absDy < 6;
+      },
+
+      onPanResponderGrant: () => {
+        swipeAnim.stopAnimation();
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      },
+      onPanResponderMove: (_, { dx }) => {
+        const basePosition = -width * currentScreenIndex;
+        const minPosition = -width * (SCREEN_COUNT - 1);
+        const maxPosition = 0;
+        const nextPos = basePosition + dx;
+        const clamped = Math.max(minPosition, Math.min(maxPosition, nextPos));
+        swipeAnim.setValue(clamped);
+      },
+      onPanResponderRelease: (_, { dx, vx }) => {
+        // If movement/velocity are tiny, snap back to current screen
+        const minimalMove = width * 0.08;
+        if (Math.abs(dx) < minimalMove && Math.abs(vx) < 0.15) {
+          Animated.spring(swipeAnim, {
+            toValue: -width * currentScreenIndex,
+            useNativeDriver: true,
+            stiffness: 160,
+            damping: 20,
+            mass: 0.9,
+            velocity: vx * 0.35,
+            overshootClamping: true,
+          }).start();
+          return;
+        }
+
+        // Gentle bias to make returning to center easier from edges
+        const edgeReturnThreshold = width * 0.05;
+        let newIndex = currentScreenIndex;
+        if (currentScreenIndex === 0 && dx < -edgeReturnThreshold) {
+          newIndex = 1;
+        } else if (currentScreenIndex === SCREEN_COUNT - 1 && dx > edgeReturnThreshold) {
+          newIndex = SCREEN_COUNT - 2;
+        } else {
+          // Project intent using both distance and velocity for a premium, snappy feel
+          const basePosition = -width * currentScreenIndex;
+          const currentOffset = basePosition + dx;
+          const projection = currentOffset + vx * 160; // velocity influence
+          const projectedIndex = Math.round(-projection / width);
+          newIndex = Math.max(0, Math.min(SCREEN_COUNT - 1, projectedIndex));
+        }
+
+        if (newIndex !== currentScreenIndex) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+
+        Animated.spring(swipeAnim, {
+          toValue: -width * newIndex,
+          useNativeDriver: true,
+          stiffness: 160,
+          damping: 20,
+          mass: 0.9,
+          velocity: vx * 0.35,
+          overshootClamping: true,
+          restDisplacementThreshold: 0.2,
+          restSpeedThreshold: 0.2,
+        }).start(() => {
+          setCurrentScreenIndex(newIndex);
+        });
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(swipeAnim, {
+          toValue: -width * currentScreenIndex,
+          useNativeDriver: true,
+          stiffness: 140,
+          damping: 18,
+        }).start();
+      },
+    })
+  ).current;
+
+  const loadCachedProfile = useCallback(async () => {
+    try {
+      const cached = await AsyncStorage.getItem(CACHE_KEYS.PROFILE);
+      if (cached) {
+        const cachedProfile = JSON.parse(cached);
+        if (cachedProfile?.name) setTeacherName(cachedProfile.name);
+        if (cachedProfile?.email) setUserEmail(cachedProfile.email);
+        if (cachedProfile?.profileimage) setProfileImage(cachedProfile.profileimage);
+        if (cachedProfile?.status) setUserStatus(cachedProfile.status);
+        if (cachedProfile?.created_at) setCreatedAt(cachedProfile.created_at);
+        if (typeof cachedProfile.isSpotlight === "boolean") setIsSpotlight(cachedProfile.isSpotlight);
+      }
+    } catch (err) {
+      console.warn("Failed to load cached profile", err);
+    }
+  }, []);
 
   console.log("user", userEmail);
   const fetchProfile = async () => {
@@ -202,7 +346,7 @@ export default function TeacherDashboard() {
         { email },
         { 
           headers,
-          timeout: 10000 // 10 second timeout
+          timeout: 10000
         }
       );
       
@@ -212,16 +356,24 @@ export default function TeacherDashboard() {
         console.log('Profile Data:', JSON.stringify(profileData, null, 2));
         console.log('isSpotlight from API:', profileData.isSpotlight);
         
+        // Update isSpotlight immediately if available
+        if (profileData.isSpotlight !== undefined) {
+          const newSpotlightStatus = Boolean(profileData.isSpotlight);
+          setIsSpotlight(newSpotlightStatus);
+          try {
+            localStorage.setItem('teacher_spotlight_status', JSON.stringify(newSpotlightStatus));
+          } catch (e) {
+            console.warn('Failed to save spotlight status to localStorage', e);
+          }
+        }
+        
         const updates = [
           setTeacherName(profileData.name),
           setUserStatus(profileData.status || 'dormant'),
-          setIsSpotlight(Boolean(profileData.isSpotlight)),
           setUserEmail(profileData.email),
           setCreatedAt(profileData.created_at),
           AsyncStorage.setItem("teacherName", profileData.name)
         ];
-        
-        console.log('isSpotlight after setting:', Boolean(profileData.isSpotlight));
         
         if (profileData.profileimage) {
           updates.push(
@@ -229,8 +381,21 @@ export default function TeacherDashboard() {
             AsyncStorage.setItem("profileImage", profileData.profileimage)
           );
         }
-        
+
         await Promise.all(updates);
+        
+        // Cache the profile for warm start
+        await AsyncStorage.setItem(
+          CACHE_KEYS.PROFILE,
+          JSON.stringify({
+            name: profileData.name,
+            email: profileData.email,
+            profileimage: profileData.profileimage,
+            status: profileData.status || 'dormant',
+            created_at: profileData.created_at,
+            isSpotlight: Boolean(profileData.isSpotlight),
+          })
+        ).catch(() => {});
       }
     } catch (error) {
       console.error("Error fetching teacher profile:", error);
@@ -240,14 +405,15 @@ export default function TeacherDashboard() {
   useEffect(() => {
     const loadProfile = async () => {
       try {
+        await loadCachedProfile();
         await fetchProfile();
       } catch (error) {
         console.error("Failed to load profile:", error);
       }
     };
-    
+
     loadProfile();
-  }, []);
+  }, [loadCachedProfile]);
 
   useEffect(() => {
     const fetchContacts = async () => {
@@ -290,211 +456,151 @@ export default function TeacherDashboard() {
         Alert.alert("Error", "Failed to fetch contacts");
       }
     };
-  
+
     fetchContacts();
-  }, [userEmail, userType]);
+  }, [userEmail]);
 
-const fetchSubjectCount = useCallback(async () => {
-  try {
-    const auth = await getAuthData();
-    const token = auth?.token;
-    const email = auth?.email;
-    
-    if (!email || !token) {
-      console.log("❌ No email or token found");
-      return;
-    }
-    
-    console.log("🔍 fetchSubjectCount called with email:", email);
-    
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    };
+  const fetchSubjectCount = useCallback(async () => {
+    try {
+      const auth = await getAuthData();
+      const token = auth?.token;
+      const email = auth?.email;
+      
+      if (!email || !token) {
+        console.log("No email or token found, skipping subject count fetch");
+        setSubjectsLoading(false);
+        return 0;
+      }
+      
+      console.log("Fetching subject count for email:", email);
+      
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      };
 
-    const res = await fetch(`${BASE_URL}/api/teacherInfo`, { 
-      method: "POST", 
-      headers, 
-      body: JSON.stringify({ teacherEmail: email }) 
-    });
-  
-    if (!res.ok) {
-      console.log("❌ HTTP error! status:", res.status);
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
+      // Fetch teacher info
+      const teacherInfoRes = await fetch(`${BASE_URL}/api/teacherInfo`, { 
+        method: "POST", 
+        headers, 
+        body: JSON.stringify({ teacherEmail: email }) 
+      });
+
+      if (!teacherInfoRes.ok) {
+        throw new Error(`HTTP error! status: ${teacherInfoRes.status}`);
+      }
     
-    const data = await res.json();
-    console.log("📊 API Response Data:", JSON.stringify(data, null, 2));
+      const data = await teacherInfoRes.json();
+      console.log("Teacher Info API Response:", JSON.stringify(data, null, 2));
 
-    let allTuitions: any[] = [];
+      // Process teacher data to count subjects
+      let subjectCount = 0;
+      const seenTuitions = new Set();
 
-    const processTeachers = (teachers: any) => {
-      console.log("🔍 Processing teachers:", teachers);
-      if (Array.isArray(teachers)) {
-        teachers.forEach((teacher: any) => {
-          console.log("🔍 Checking teacher:", teacher.email, "vs", email);
-          if (teacher.email === email) {
-            console.log("✅ Found matching teacher");
-            let tuitions = teacher.tuitions;
-            console.log("📚 Tuitions before parse:", tuitions);
-            if (typeof tuitions === "string") {
-              try { 
-                tuitions = JSON.parse(tuitions); 
-                console.log("📚 Tuitions after parse:", tuitions);
-              } catch (err) { 
-                console.error("Parse error:", err); 
-                tuitions = []; 
-              }
-            }
-            if (Array.isArray(tuitions)) {
-              console.log("📚 Adding tuitions:", tuitions);
-              allTuitions.push(...tuitions);
-            }
+      if (data?.subjects?.length) {
+        data.subjects.forEach((subject: any) => {
+          if (subject?.id && !seenTuitions.has(subject.id)) {
+            seenTuitions.add(subject.id);
+            subjectCount++;
           }
         });
       }
+
+      // Update state and cache
+      setSubjectCount(subjectCount);
+      try {
+        localStorage.setItem('teacher_subject_count', subjectCount.toString());
+      } catch (e) {
+        console.warn('Failed to save subject count to localStorage', e);
+      }
+      
+      // Cache the result
+      await AsyncStorage.setItem(
+        CACHE_KEYS.SUBJECT_COUNT,
+        JSON.stringify({ 
+          count: subjectCount,
+          timestamp: Date.now()
+        })
+      );
+      
+      return subjectCount;
+    } catch (error) {
+      console.error("Error in fetchSubjectCount:", error);
+      // Try to load from cache on error
+      try {
+        const cached = await AsyncStorage.getItem(CACHE_KEYS.SUBJECT_COUNT);
+        if (cached) {
+          const { count } = JSON.parse(cached);
+          if (typeof count === 'number') {
+            setSubjectCount(count);
+            return count;
+          }
+        }
+      } catch (cacheError) {
+        console.error("Error loading from cache:", cacheError);
+      }
+      return 0;
+    } finally {
+      setSubjectsLoading(false);
+    }
+  }, []);
+
+  // Combined data loading effect
+  useEffect(() => {
+    let isMounted = true;
+    
+    const loadInitialData = async () => {
+      try {
+        // Load from cache first for instant display
+        try {
+          const cachedCount = localStorage.getItem('teacher_subject_count');
+          if (cachedCount) {
+            const count = parseInt(cachedCount, 10);
+            if (!isNaN(count)) {
+              setSubjectCount(count);
+            }
+          }
+          
+          const cachedSpotlight = localStorage.getItem('teacher_spotlight_status');
+          if (cachedSpotlight) {
+            setIsSpotlight(cachedSpotlight === 'true');
+          }
+        } catch (e) {
+          console.warn('Error loading from localStorage cache:', e);
+        }
+        
+        // Then fetch fresh data
+        if (isMounted) {
+          await Promise.all([
+            fetchSubjectCount(),
+            fetchProfile()
+          ]);
+        }
+      } catch (error) {
+        console.error("Error in initial data load:", error);
+      }
     };
-
-    if (data.spotlightTeachers) {
-      console.log("🔍 Processing spotlightTeachers");
-      Object.values(data.spotlightTeachers).forEach(processTeachers);
-    }
-
-    if (data.popularTeachers) {
-      console.log("🔍 Processing popularTeachers");
-      Object.values(data.popularTeachers).forEach(processTeachers);
-    }
-
-    if (data.teachers && Array.isArray(data.teachers)) {
-      console.log("🔍 Processing direct teachers array");
-      processTeachers(data.teachers);
-    }
-
-    console.log("📚 All Tuitions Found:", allTuitions);
     
-    const uniqueTuitions = Array.from(
-      new Map(
-        allTuitions.map(item => [
-          `${item.classId || item.skillId}-${item.subject || item.skill}-${item.timeFrom}-${item.timeTo}-${item.day}`,
-          item
-        ])
-      ).values()
-    );
+    loadInitialData();
     
-    console.log("✅ Unique Tuitions Count:", uniqueTuitions.length);
-    console.log("✅ Unique Tuitions:", uniqueTuitions);
-    if (data.spotlightTeachers) {
-  const isInSpotlight = Object.values(data.spotlightTeachers).some(
-    (teachers: any) => 
-      Array.isArray(teachers) && 
-      teachers.some((t: any) => t.email === email)
-  );
-  console.log("🔦 Spotlight check result:", isInSpotlight);
-  setIsSpotlight(isInSpotlight);
-}
-    setSubjectCount(uniqueTuitions.length);
+    // Set up refresh interval (every 5 minutes)
+    const interval = setInterval(() => {
+      if (isMounted) {
+        fetchSubjectCount();
+        fetchProfile();
+      }
+    }, 5 * 60 * 1000);
     
-  } catch (error) {
-    console.error("❌ Failed to fetch subject count:", error);
-    setSubjectCount(0);
-  }
-}, []);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [fetchSubjectCount]);
 
   useEffect(() => {
-    fetchSubjectCount();
+    if (!userEmail) return;
     
-    // Set up polling for subject count every 2 minutes
-    const subjectInterval = setInterval(fetchSubjectCount, 120000);
-    
-    // Clean up interval on component unmount
-    return () => clearInterval(subjectInterval);
-  }, [userEmail, fetchSubjectCount]);
-
-useFocusEffect(
-  useCallback(() => {
-    fetchSubjectCount();
-  }, [fetchSubjectCount])
-);
-
-useEffect(() => {
-  if (userEmail) {
-    fetchSubjectCount();
-  }
-}, [userEmail]);
-
-// Fetch unread notification count with optimized polling
-const fetchUnreadCount = useCallback(async () => {
-  if (!userEmail) return;
-  
-  try {
-    const auth = await getAuthData();
-    if (!auth?.token) return;
-
-    const response = await axios.get(
-      `${BASE_URL}/api/notifications/unread-count`,
-      {
-        headers: {
-          'Authorization': `Bearer ${auth.token}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 5000 // Add timeout to prevent hanging
-      }
-    );
-
-    if (response.data && typeof response.data.count === 'number') {
-      setUnreadCount(response.data.count);
-    }
-  } catch (error) {
-    console.error('Error fetching unread count:', error);
-    // Don't update state on error to prevent UI flickering
-  }})
-React.useEffect(() => {
-  if (isSpotlight) {
-    // Pulse animation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.03,
-          duration: 1500,
-          useNativeDriver: true,
-          easing: Easing.inOut(Easing.ease)
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1500,
-          useNativeDriver: true,
-          easing: Easing.inOut(Easing.ease)
-        })
-      ])
-    ).start();
-
-    // Floating/jumping animation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, {
-          toValue: -3,
-          duration: 1000,
-          useNativeDriver: true,
-          easing: Easing.inOut(Easing.ease)
-        }),
-        Animated.timing(floatAnim, {
-          toValue: 0,
-          duration: 1000,
-          useNativeDriver: true,
-          easing: Easing.inOut(Easing.ease)
-        })
-      ])
-    ).start();
-  } else {
-    pulseAnim.setValue(1);
-    floatAnim.setValue(0);
-  }
-}, [isSpotlight]);
-
-// Fetch unread notification count on component mount and set up polling
-useEffect(() => {
-  if (userEmail) {
-    // Fetch immediately
+    // Initial fetch
     fetchUnreadCount();
     
     // Set up polling every 30 seconds
@@ -502,9 +608,32 @@ useEffect(() => {
     
     // Clean up interval on component unmount
     return () => clearInterval(interval);
-  }
-}, [userEmail, fetchUnreadCount]);
+  }, [userEmail, fetchUnreadCount]);
 
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const auth = await getAuthData();
+      if (!auth?.token) return;
+
+      const response = await axios.get(
+        `${BASE_URL}/api/notifications/unread-count`,
+        {
+          headers: {
+            'Authorization': `Bearer ${auth.token}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 5000
+        }
+      );
+
+      if (response.data && typeof response.data.count === 'number') {
+        setUnreadCount(response.data.count);
+      }
+    } catch (error) {
+      console.error('Error fetching unread count:', error);
+      // Don't update state on error to prevent UI flickering
+    }
+  }, []);
 
   let [fontsLoaded] = useFonts({
     Poppins_Regular: Poppins_400Regular,
@@ -534,246 +663,239 @@ return (
       />
     ) : (
       <View style={styles.container}>
-        <SidebarMenu
-          visible={menuVisible}
-          onClose={() => setMenuVisible(false)}
-          activeItem={activeMenuItem}
-          onItemPress={(itemName: string) => {
-            setActiveMenuItem(itemName);
-            if (itemName === "Settings") {
-              router.push({
-                pathname: "/(tabs)/TeacherDashBoard/Settings",
-                params: { userEmail },
-              });
-            }
-            if (itemName === "Billing") {
-              router.push({
-                pathname: "/(tabs)/Billing",
-                params: {
-                  userType: "teacher",
-                  userEmail,
-                  teacherName,
-                  profileImage,
-                },
-              });
-            }
-            if (itemName === "Spotlight")
-              router.push("/(tabs)/TeacherDashBoard/SpotlightTarrif");
-            if (itemName === "Share") {
-              router.push({
-                pathname: "/(tabs)/TeacherDashBoard/Share",
-                params: { userEmail, teacherName, profileImage },
-              });
-            }
-
-            if (itemName === "Add on Class") {
-              router.push({
-                pathname: "/(tabs)/TeacherDashBoard/AddonClass",
-                params: { userEmail },
-              });
-            }
-
-            if (itemName === "Create Subject") {
-              router.push({ pathname: "/(tabs)/TeacherDashBoard/Subjects" });
-            }
-
-            if (itemName === "Contact") {
-              router.push({ pathname: "/(tabs)/Contact" });
-            }
-          }}
-          userEmail={userEmail as string}
-          teacherName={teacherName}
-          profileImage={profileImage}
-        />
-<View style={styles.headerContainer}>
-  <View style={styles.headerRow}>
-    {/* Left: Menu icon and spotlight badge */}
-    <View style={styles.leftSection}>
-      <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.menuButton}>
-        <Bars size={wp("5.23%")} />
-      </TouchableOpacity>
-      
-      {isSpotlight && (
-        <Animated.View 
-          style={[
-            styles.spotlightHeaderBadge,
-            { 
-              transform: [
-                { scale: pulseAnim },
-                { translateY: floatAnim }
-              ]
-            }
-          ]}
-        >
-          <View style={styles.spotlightContent}>
-            <MaterialCommunityIcons name="lightbulb-on" size={wp("5%")} color="#5D4037" />
-          </View>
-          <Animated.View 
-            style={[
-              styles.glowEffect,
-              {
-                opacity: pulseAnim.interpolate({
-                  inputRange: [1, 1.05],
-                  outputRange: [0.4, 0.7]
-                })
-              }
-            ]}
-          />
-        </Animated.View>
-      )}
-    </View>
-    
-    {/* Center: GROWSMART text */}
-    <View style={styles.centerSection}>
-      <Text style={styles.logoText}>GROWSMART</Text>
-    </View>
-    
-    {/* Right: Notification bell */}
-    <View style={styles.rightSection}>
-      <TouchableOpacity
-        onPress={() => router.push("/(tabs)/TeacherDashBoard/Notification")}
-        style={styles.notificationButton}
-      >
-        <View style={{ position: "relative" }}>
-          <NotificationBellIcon size={wp("5.33%")} />
-          {unreadCount > 0 && (
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationText}>
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </Text>
-            </View>
-          )}
-        </View>
-      </TouchableOpacity>
-    </View>
+        {/* Swipeable Content Area */}
+        <View style={styles.swipeContainer}>
+      <Animated.View
+  style={[
+    styles.swipeContent,
+    {
+      transform: [{ translateX: swipeAnim }],
+      width: width * SCREEN_COUNT,
+    },
+  ]}
+  {...panResponder.panHandlers}
+>
+  {/* Left Screen (Index 0) */}
+  <View style={[styles.screen, { width }]}>
+    <LeftScreen />
   </View>
-</View>
+            
+            {/* Home Screen - Teacher Dashboard (Index 1) */}
+            <View style={[styles.screen, { width }]}>
+              <SidebarMenu
+                visible={menuVisible}
+                onClose={() => setMenuVisible(false)}
+                activeItem={activeMenuItem}
+                onItemPress={(itemName: string) => {
+                  setActiveMenuItem(itemName);
+                  if (itemName === "Settings") {
+                    router.push({
+                      pathname: "/(tabs)/TeacherDashBoard/Settings",
+                      params: { userEmail },
+                    });
+                  }
+                  if (itemName === "Billing") {
+                    router.push({
+                      pathname: "/(tabs)/Billing",
+                      params: {
+                        userType: "teacher",
+                        userEmail,
+                        teacherName,
+                        profileImage,
+                      },
+                    });
+                  }
+                  if (itemName === "Spotlight")
+                    router.push("/(tabs)/TeacherDashBoard/SpotlightTarrif");
+                  if (itemName === "Share") {
+                    router.push({
+                      pathname: "/(tabs)/TeacherDashBoard/Share",
+                      params: { userEmail, teacherName, profileImage },
+                    });
+                  }
 
-        <ScrollView
-          style={styles.mainContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.welcomeContainer}>
-            <View style={styles.welcomeRow}>
-              <Text style={styles.welcome} numberOfLines={1} ellipsizeMode="tail">
-  WELCOME, {teacherName} 👋
-</Text>
-            </View>
-            <Text style={[
-              styles.statusText,
-              userStatus === 'active' ? styles.statusActive : styles.statusInactive
-            ]}>
-              {userStatus}
-            </Text>
-          </View>
+                  if (itemName === "Add on Class") {
+                    router.push({
+                      pathname: "/(tabs)/TeacherDashBoard/AddonClass",
+                      params: { userEmail },
+                    });
+                  }
 
-          <View style={styles.statsCards}>
-            <TouchableOpacity onPress={() => setShowStudentsList(true)}>
-              <View style={styles.card}>
-                <Text style={styles.cardTop}>
-                  {contacts?.length > 0 ? contacts.length : 0}
-                </Text>
-                <Text style={styles.cardBottom}>My enrolled Students</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowSubjectsList(true)}>
-              <View style={styles.cardMiddle}>
-                <Text style={styles.cardTop}>
-                  {subjectCount > 0 ? subjectCount : 0}
-                </Text>
-                <Text style={styles.cardBottom}>Subjects</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.endcard}
-              onPress={() => router.push({
-                pathname: "/(tabs)/TeacherDashBoard/CongratsTeacher",
-                params: { teacherName, createdAt, userEmail }
-              })}
-            >
-              <Text style={styles.cardTop}>{formatDate(createdAt)}</Text>
-              <Text style={styles.cardBottom}>Joined Date</Text>
-            </TouchableOpacity>
-          </View>
+                  if (itemName === "Create Subject") {
+                    router.push({ pathname: "/(tabs)/TeacherDashBoard/Subjects" });
+                  }
 
-<InfiniteReviewScroll />
-          <View style={styles.chartContainer}>
-            <View style={styles.enrollmentRow}>
-              <Text style={styles.enrollmentLabel}>Student Enrolled</Text>
-              <View style={styles.dropDownWrapper}>
-                <Picker
-                  selectedValue={selectedCity}
-                  onValueChange={(val) => setSelectedCity(val)}
-                  style={styles.picker}
-                  dropdownIconColor="#333"
-                >
-                  <Picker.Item label="Select State/UT" value="" style={styles.pickerLable} />
-                  <Picker.Item label="Andhra Pradesh" value="Andhra Pradesh" style={styles.pickerLable} />
-                  <Picker.Item label="Arunachal Pradesh" value="Arunachal Pradesh" style={styles.pickerLable} />
-                  <Picker.Item label="Assam" value="Assam" style={styles.pickerLable} />
-                  <Picker.Item label="Bihar" value="Bihar" style={styles.pickerLable} />
-                  <Picker.Item label="Chhattisgarh" value="Chhattisgarh" style={styles.pickerLable} />
-                  <Picker.Item label="Goa" value="Goa" style={styles.pickerLable} />
-                  <Picker.Item label="Gujarat" value="Gujarat" style={styles.pickerLable} />
-                  <Picker.Item label="Haryana" value="Haryana" style={styles.pickerLable} />
-                  <Picker.Item label="Himachal Pradesh" value="Himachal Pradesh" style={styles.pickerLable} />
-                  <Picker.Item label="Jharkhand" value="Jharkhand" style={styles.pickerLable} />
-                  <Picker.Item label="Karnataka" value="Karnataka" style={styles.pickerLable} />
-                  <Picker.Item label="Kerala" value="Kerala" style={styles.pickerLable} />
-                  <Picker.Item label="Madhya Pradesh" value="Madhya Pradesh" style={styles.pickerLable} />
-                  <Picker.Item label="Maharashtra" value="Maharashtra" style={styles.pickerLable} />
-                  <Picker.Item label="Manipur" value="Manipur" style={styles.pickerLable} />
-                  <Picker.Item label="Meghalaya" value="Meghalaya" style={styles.pickerLable} />
-                  <Picker.Item label="Mizoram" value="Mizoram" style={styles.pickerLable} />
-                  <Picker.Item label="Nagaland" value="Nagaland" style={styles.pickerLable} />
-                  <Picker.Item label="Odisha" value="Odisha" style={styles.pickerLable} />
-                  <Picker.Item label="Punjab" value="Punjab" style={styles.pickerLable} />
-                  <Picker.Item label="Rajasthan" value="Rajasthan" style={styles.pickerLable} />
-                  <Picker.Item label="Sikkim" value="Sikkim" style={styles.pickerLable} />
-                  <Picker.Item label="Tamil Nadu" value="Tamil Nadu" style={styles.pickerLable} />
-                  <Picker.Item label="Telangana" value="Telangana" style={styles.pickerLable} />
-                  <Picker.Item label="Tripura" value="Tripura" style={styles.pickerLable} />
-                  <Picker.Item label="Uttar Pradesh" value="Uttar Pradesh" style={styles.pickerLable} />
-                  <Picker.Item label="Uttarakhand" value="Uttarakhand" style={styles.pickerLable} />
-                  <Picker.Item label="West Bengal" value="West Bengal" style={styles.pickerLable} />
-                  <Picker.Item label="Andaman and Nicobar Islands" value="Andaman and Nicobar Islands" style={styles.pickerLable} />
-                  <Picker.Item label="Chandigarh" value="Chandigarh" style={styles.pickerLable} />
-                  <Picker.Item label="Dadra and Nagar Haveli and Daman and Diu" value="Dadra and Nagar Haveli and Daman and Diu" style={styles.pickerLable} />
-                  <Picker.Item label="Delhi" value="Delhi" style={styles.pickerLable} />
-                  <Picker.Item label="Jammu and Kashmir" value="Jammu and Kashmir" style={styles.pickerLable} />
-                  <Picker.Item label="Ladakh" value="Ladakh" style={styles.pickerLable} />
-                  <Picker.Item label="Lakshadweep" value="Lakshadweep" style={styles.pickerLable} />
-                  <Picker.Item label="Puducherry" value="Puducherry" style={styles.pickerLable} />
-                </Picker>
-              </View>
-            </View>
-
-            <View style={styles.chartContent}>
-              <LineChart
-                data={{
-                  labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-                  datasets: [{ data: [20, 45, 28, 80, 99, 43] }],
+                  if (itemName === "Contact") {
+                    router.push({ pathname: "/(tabs)/Contact" });
+                  }
                 }}
-                width={wp("93%")}
-                height={hp("32.570%")}
-                chartConfig={{
-                  backgroundColor: "#fff",
-                  backgroundGradientFrom: "#fff",
-                  backgroundGradientTo: "#fff",
-                  decimalPlaces: 0,
-                  color: (opacity = 1) => `rgba(95, 95, 255, ${opacity})`,
-                  labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                  style: { borderRadius: wp("4.27%") },
-                  propsForDots: { r: "5", strokeWidth: "2", stroke: "#5f5fff" },
-                }}
-                bezier
-                style={styles.chart}
+                userEmail={userEmail as string}
+                teacherName={teacherName}
+                profileImage={profileImage}
               />
-            </View>
-          </View>
-        </ScrollView>
+              
+              <View style={styles.headerContainer}>
+                <View style={styles.headerRow}>
+                  {/* Left: Menu icon and spotlight badge */}
+                  <View style={styles.leftSection}>
+                    <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.menuButton}>
+                      <Bars size={wp("5.23%")} />
+                    </TouchableOpacity>
+                    
+                    {isSpotlight && (
+                      <Animated.View 
+                        style={[
+                          styles.spotlightHeaderBadge,
+                          { 
+                            transform: [
+                              { scale: pulseAnim },
+                              { translateY: floatAnim }
+                            ]
+                          }
+                        ]}
+                      >
+                        <View style={styles.spotlightContent}>
+                          <MaterialCommunityIcons name="lightbulb-on" size={wp("5%")} color="#5D4037" />
+                        </View>
+                        <Animated.View 
+                          style={[
+                            styles.glowEffect,
+                            {
+                              opacity: pulseAnim.interpolate({
+                                inputRange: [1, 1.05],
+                                outputRange: [0.4, 0.7]
+                              })
+                            }
+                          ]}
+                        />
+                      </Animated.View>
+                    )}
+                  </View>
+                  
+                  {/* Center: GROWSMART text */}
+                  <View style={styles.centerSection}>
+                    <Text style={styles.logoText}>GROWSMART</Text>
+                  </View>
+                  
+                  {/* Right: Notification bell */}
+                  <View style={styles.rightSection}>
+                    <TouchableOpacity
+                      onPress={() => router.push("/(tabs)/TeacherDashBoard/Notification")}
+                      style={styles.notificationButton}
+                    >
+                      <View style={{ position: "relative" }}>
+                        <NotificationBellIcon size={wp("5.33%")} />
+                        {unreadCount > 0 && (
+                          <View style={styles.notificationBadge}>
+                            <Text style={styles.notificationText}>
+                              {unreadCount > 9 ? '9+' : unreadCount}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
 
-        <BottomNavigation userType="teacher" />
+              <ScrollView
+                style={styles.mainContent}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.welcomeContainer}>
+                  <View style={styles.welcomeRow}>
+                    <Text style={styles.welcome} numberOfLines={1} ellipsizeMode="tail">
+                      WELCOME, {teacherName} 👋
+                    </Text>
+                  </View>
+                  <Text style={[
+                    styles.statusText,
+                    userStatus === 'active' ? styles.statusActive : styles.statusInactive
+                  ]}>
+                    {userStatus}
+                  </Text>
+                </View>
+
+                <View style={styles.statsCards}>
+                  <TouchableOpacity onPress={() => setShowStudentsList(true)}>
+                    <View style={styles.card}>
+                      <Text style={styles.cardTop}>
+                        {contacts?.length > 0 ? contacts.length : 0}
+                      </Text>
+                      <Text style={styles.cardBottom}>My enrolled Students</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setShowSubjectsList(true)}>
+                    <View style={styles.cardMiddle}>
+                      <Text style={styles.cardTop}>
+                        {subjectCount > 0 ? subjectCount : 0}
+                      </Text>
+                      <Text style={styles.cardBottom}>Subjects</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.endcard}
+                    onPress={() => router.push({
+                      pathname: "/(tabs)/TeacherDashBoard/CongratsTeacher",
+                      params: { teacherName, createdAt, userEmail }
+                    })}
+                  >
+                    <Text style={styles.cardTop}>{createdAt ? formatDate(createdAt) : 'N/A'}</Text>
+                    <Text style={styles.cardBottom}>Joined Date</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <InfiniteReviewScroll />
+                <View style={styles.chartContainer}>
+                  <View style={styles.enrollmentRow}>
+                    <Text style={styles.enrollmentLabel}>Student Enrolled</Text>
+                    <View style={styles.dropDownWrapper}>
+                      <Picker
+                        selectedValue={selectedCity}
+                        onValueChange={(val) => setSelectedCity(val)}
+                        style={styles.picker}
+                        dropdownIconColor="#333"
+                      >
+                        {/* ... your picker items ... */}
+                      </Picker>
+                    </View>
+                  </View>
+
+                  <View style={styles.chartContent}>
+                    <LineChart
+                      data={{
+                        labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+                        datasets: [{ data: [20, 45, 28, 80, 99, 43] }],
+                      }}
+                      width={wp("93%")}
+                      height={hp("32.570%")}
+                      chartConfig={{
+                        backgroundColor: "#fff",
+                        backgroundGradientFrom: "#fff",
+                        backgroundGradientTo: "#fff",
+                        decimalPlaces: 0,
+                        color: (opacity = 1) => `rgba(95, 95, 255, ${opacity})`,
+                        labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                        style: { borderRadius: wp("4.27%") },
+                        propsForDots: { r: "5", strokeWidth: "2", stroke: "#5f5fff" },
+                      }}
+                      bezier
+                      style={styles.chart}
+                    />
+                  </View>
+                </View>
+              </ScrollView>
+
+              <BottomNavigation userType="teacher" />
+            </View>
+            
+            {/* Right Screen (Index 2) */}
+            <View style={[styles.screen, { width }]}>
+              <RightScreen />
+            </View>
+        {/* ADD THIS VISUAL OVERLAY */}
+</Animated.View>
+        </View>
       </View>
     )}
   </>
@@ -998,7 +1120,7 @@ notificationButton: {
 
 logoText: {
   color: '#e5e7eb',
-  fontSize: wp('3.78%%'),
+  fontSize: wp('3.7%%'),
   fontFamily: 'Poppins_400Regular',
   fontWeight: '500',
   textAlign: 'center',
@@ -1081,6 +1203,89 @@ logoTextContainer: {
     paddingHorizontal: wp("2.5%"), 
     marginTop: hp("1.5%"), 
     paddingBottom: 100 
+  },
+
+  swipeContainer: {
+    flex: 1,
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+  },
+  
+  swipeContent: {
+    flex: 1,
+    flexDirection: 'row',
+    height: '100%',
+  },
+  
+  screen: {
+    flex: 1,
+    height: '100%',
+    overflow: 'hidden',
+  },
+  
+  swipeIndicator: {
+    position: 'absolute',
+    bottom: hp('10%'),  // Adjust based on your bottom nav height
+    alignSelf: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    paddingHorizontal: wp('4%'),
+    paddingVertical: hp('1%'),
+    borderRadius: wp('2%'),
+  },
+  
+  swipeHintText: {
+    fontSize: wp('3%'),
+    color: '#666',
+    marginBottom: hp('1%'),
+    fontFamily: 'Poppins_400Regular',
+  },
+  
+  dotContainer: {
+    flexDirection: 'row',
+    gap: wp('2%'),
+  },
+  
+  dot: {
+    width: wp('2%'),
+    height: wp('2%'),
+    borderRadius: wp('1%'),
+    backgroundColor: '#ddd',
+  },
+  
+  activeDot: {
+    backgroundColor: '#5f5fff',
+    width: wp('4%'),
+  },
+swipeOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    pointerEvents: 'none',
+    zIndex: 10,
+  },
+  swipeHintArrows: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: wp('4%'),
+    paddingVertical: hp('1%'),
+    borderRadius: wp('5%'),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  swipeHint: {
+    fontSize: wp('3%'),
+    color: '#5f5fff',
+    marginHorizontal: wp('2%'),
+    fontFamily: 'Poppins_400Regular',
   },
 
 });
