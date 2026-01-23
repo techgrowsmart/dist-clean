@@ -1,0 +1,1327 @@
+import BottomNavigation from "../../../app/(tabs)/BottomNavigation";
+import Bars from "../../../assets/svgIcons/Bars";
+import NotificationBellIcon from "../../../assets/svgIcons/NotificationBell";
+import { BASE_URL } from "../../../config";
+import { getAuthData } from "../../../utils/authStorage";
+import {
+  Poppins_400Regular,
+  Poppins_700Bold,
+  Poppins_600SemiBold,
+} from "@expo-google-fonts/poppins";
+import { useFonts } from 'expo-font';
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Picker } from "@react-native-picker/picker";
+import axios from "axios";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+
+import {
+  Alert,
+  Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  Image,
+} from "react-native";
+import { LineChart } from "react-native-chart-kit";
+import SidebarMenu from "./TeacherSidebar";
+const screenWidth = Dimensions.get("window").width;
+const { width, height } = Dimensions.get("window");
+import { Animated, PanResponder } from 'react-native';
+import LeftScreen from '../TeacherDashBoard/LeftScreen';  // Adjust path as needed
+import RightScreen from '../TeacherDashBoard/RightScreen';  // Adjust path as needed
+import * as Haptics from 'expo-haptics';
+
+const SCREEN_COUNT = 3;
+const CACHE_KEYS = {
+  PROFILE: "teacher_dashboard_profile_cache",
+  CONTACTS: "teacher_dashboard_contacts_cache",
+  SUBJECT_COUNT: "teacher_dashboard_subject_count_cache",
+};
+
+import {
+  widthPercentageToDP as wp,
+  heightPercentageToDP as hp,
+} from "react-native-responsive-screen";
+import { OpenSans_400Regular } from "@expo-google-fonts/open-sans";
+import StudentsList from "./StudentList";
+import SubjectsList from "./SubjectsList";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+
+interface Contact {
+  name: string;
+  profilePic: string;
+  lastMessage?: string;
+  lastMessageTime?: string;
+  email: string;
+}
+
+const InfiniteReviewScroll = () => {
+  const reviewData = [
+    {
+      id: 1,
+      title: "My Reviews",
+      rating: "⭐ ⭐ ⭐ ⭐",
+      content: "A positive teacher review typically highlights a teacher's positive qualities, effective teaching methods, and their impact on student learning"
+    },
+    {
+      id: 2, 
+      title: "My Reviews",
+      rating: "⭐ ⭐ ⭐ ⭐ ⭐",
+      content: "Excellent teaching methodology and great communication skills. Students showed remarkable improvement under this teacher's guidance."
+    },
+    {
+      id: 3,
+      title: "My Reviews", 
+      rating: "⭐ ⭐ ⭐ ⭐",
+      content: "Very patient and understanding teacher who creates a positive learning environment for all students."
+    }
+  ];
+
+  const scrollViewRef = React.useRef<ScrollView>(null);
+  const scrollX = React.useRef(0);
+  const scrollInterval = React.useRef<number | null>(null);
+  const [isPaused, setIsPaused] = React.useState(false);
+
+  const SCROLL_SPEED = 1.8; // You can change this value
+  
+  const SCROLL_INTERVAL = 36; // ~60fps for smooth animation
+
+  // Calculate total content width for seamless looping
+  const cardWidth = wp("80.8%");
+  const cardMargin = wp("2.13%");
+  const totalCardWidth = cardWidth + cardMargin;
+  const totalContentWidth = totalCardWidth * reviewData.length * 4; // 4 sets of data
+
+  // Auto-scroll animation with seamless looping
+  const startAutoScroll = () => {
+    if (scrollInterval.current) {
+      clearInterval(scrollInterval.current);
+    }
+    
+    scrollInterval.current = setInterval(() => {
+      if (!isPaused && scrollViewRef.current) {
+        scrollX.current += SCROLL_SPEED;
+        
+        // Reset scroll position when reaching the end for seamless loop
+        if (scrollX.current >= totalContentWidth) {
+          scrollX.current = 0;
+        }
+        
+        scrollViewRef.current.scrollTo({ x: scrollX.current, animated: false });
+      }
+    }, SCROLL_INTERVAL);
+  };
+
+  const stopAutoScroll = () => {
+    if (scrollInterval.current) {
+      clearInterval(scrollInterval.current);
+      scrollInterval.current = null;
+    }
+  };
+
+  useEffect(() => {
+    startAutoScroll();
+
+    return () => {
+      stopAutoScroll();
+    };
+  }, [isPaused]);
+
+  const handleTouchStart = () => {
+    setIsPaused(true);
+  };
+
+  const handleTouchEnd = () => {
+    setIsPaused(false);
+  };
+
+  return (
+    <View style={styles.marqueeContainer}>
+      <ScrollView
+        ref={scrollViewRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.marqueeContent}
+        scrollEventThrottle={16}
+        bounces={false}
+        scrollEnabled={false}
+      >
+        {/* Multiple duplicate sets for truly infinite looping */}
+        {[...reviewData, ...reviewData, ...reviewData, ...reviewData].map((review, index) => (
+          <TouchableOpacity
+            key={`review-${review.id}-${index}`}
+            style={styles.reviewCard}
+            onPressIn={handleTouchStart}
+            onPressOut={handleTouchEnd}
+            activeOpacity={1}
+          >
+            <Text style={styles.reviewText}>{review.title}</Text>
+            <Text style={styles.rating}>{review.rating}</Text>
+            <ScrollView style={styles.reviewContentScroll} showsVerticalScrollIndicator={false}>
+              <Text style={styles.reviewContent}>
+                {review.content}
+              </Text>
+            </ScrollView>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+};
+
+export default function TeacherDashboard() {
+  const router = useRouter();
+  // Removed unused params reference
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [activeMenuItem, setActiveMenuItem] = useState("Dashboard");
+  const [teacherName, setTeacherName] = useState("");
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [selectedCity, setSelectedCity] = useState("");
+  const [userType, setUserType] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  // Initialize states with cached values if available
+  const [isSpotlight, setIsSpotlight] = useState<boolean>(false);
+  const [subjectCount, setSubjectCount] = useState<number>(0);
+  const [cacheLoaded, setCacheLoaded] = useState(false);
+  const [showSubjectsList, setShowSubjectsList] = useState(false);
+  const [showStudentsList, setShowStudentsList] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [userStatus, setUserStatus] = useState('dormant'); // Will be updated from API
+  const [isDashboardLoading, setIsDashboardLoading] = useState(true);
+  const [subjectsLoading, setSubjectsLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [contactsLoading, setContactsLoading] = useState(true);
+  const [createdAt, setCreatedAt] = useState<string | null>(null);
+
+  const pulseAnim = React.useRef(new Animated.Value(1)).current;
+  const floatAnim = React.useRef(new Animated.Value(0)).current;
+  const rafRef = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
+
+  const swipeAnim = React.useRef(new Animated.Value(-width)).current;
+  const [currentScreenIndex, setCurrentScreenIndex] = useState(1);
+
+  React.useEffect(() => {
+    swipeAnim.setValue(-width);
+    setCurrentScreenIndex(1);
+  }, [swipeAnim, width]);
+
+  const panResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, { dx, dy }) => {
+        // Only take over when a clear, strong horizontal intent is detected.
+        // Prefer vertical scrolling in children.
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        return absDx > 28 && absDx > absDy * 3 && absDy < 6;
+      },
+
+      onPanResponderGrant: () => {
+        swipeAnim.stopAnimation();
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      },
+      onPanResponderMove: (_, { dx }) => {
+        const basePosition = -width * currentScreenIndex;
+        const minPosition = -width * (SCREEN_COUNT - 1);
+        const maxPosition = 0;
+        const nextPos = basePosition + dx;
+        const clamped = Math.max(minPosition, Math.min(maxPosition, nextPos));
+        swipeAnim.setValue(clamped);
+      },
+      onPanResponderRelease: (_, { dx, vx }) => {
+        // If movement/velocity are tiny, snap back to current screen
+        const minimalMove = width * 0.08;
+        if (Math.abs(dx) < minimalMove && Math.abs(vx) < 0.15) {
+          Animated.spring(swipeAnim, {
+            toValue: -width * currentScreenIndex,
+            useNativeDriver: true,
+            stiffness: 160,
+            damping: 20,
+            mass: 0.9,
+            velocity: vx * 0.35,
+            overshootClamping: true,
+          }).start();
+          return;
+        }
+
+        // Gentle bias to make returning to center easier from edges
+        const edgeReturnThreshold = width * 0.05;
+        let newIndex = currentScreenIndex;
+        if (currentScreenIndex === 0 && dx < -edgeReturnThreshold) {
+          newIndex = 1;
+        } else if (currentScreenIndex === SCREEN_COUNT - 1 && dx > edgeReturnThreshold) {
+          newIndex = SCREEN_COUNT - 2;
+        } else {
+          // Project intent using both distance and velocity for a premium, snappy feel
+          const basePosition = -width * currentScreenIndex;
+          const currentOffset = basePosition + dx;
+          const projection = currentOffset + vx * 160; // velocity influence
+          const projectedIndex = Math.round(-projection / width);
+          newIndex = Math.max(0, Math.min(SCREEN_COUNT - 1, projectedIndex));
+        }
+
+        if (newIndex !== currentScreenIndex) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+
+        Animated.spring(swipeAnim, {
+          toValue: -width * newIndex,
+          useNativeDriver: true,
+          stiffness: 160,
+          damping: 20,
+          mass: 0.9,
+          velocity: vx * 0.35,
+          overshootClamping: true,
+          restDisplacementThreshold: 0.2,
+          restSpeedThreshold: 0.2,
+        }).start(() => {
+          setCurrentScreenIndex(newIndex);
+        });
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(swipeAnim, {
+          toValue: -width * currentScreenIndex,
+          useNativeDriver: true,
+          stiffness: 140,
+          damping: 18,
+        }).start();
+      },
+    })
+  ).current;
+
+  const loadCachedProfile = useCallback(async () => {
+    try {
+      const cached = await AsyncStorage.getItem(CACHE_KEYS.PROFILE);
+      if (cached) {
+        const cachedProfile = JSON.parse(cached);
+        if (cachedProfile?.name) setTeacherName(cachedProfile.name);
+        if (cachedProfile?.email) setUserEmail(cachedProfile.email);
+        if (cachedProfile?.profileimage) setProfileImage(cachedProfile.profileimage);
+        if (cachedProfile?.status) setUserStatus(cachedProfile.status);
+        if (cachedProfile?.created_at) setCreatedAt(cachedProfile.created_at);
+        if (typeof cachedProfile.isSpotlight === "boolean") setIsSpotlight(cachedProfile.isSpotlight);
+      }
+    } catch (err) {
+      // Silent cached profile loading error
+    }
+  }, []);
+
+  console.log("user", userEmail);
+  const fetchProfile = async () => {
+    try {
+      const auth = await getAuthData();
+      if (!auth || !auth.email) {
+        router.replace("/");
+        return;
+      }
+      
+      const { email, token } = auth;
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      };
+      
+      const profileResponse = await axios.post(
+        `${BASE_URL}/api/userProfile`,
+        { email },
+        { 
+          headers,
+          timeout: 10000
+        }
+      );
+      
+      const profileData = profileResponse.data;
+      
+      if (profileData?.name) {
+        console.log('Profile Data:', JSON.stringify(profileData, null, 2));
+        console.log('isSpotlight from API:', profileData.isSpotlight);
+        
+        // Update isSpotlight immediately if available
+        if (profileData.isSpotlight !== undefined) {
+          const newSpotlightStatus = Boolean(profileData.isSpotlight);
+          setIsSpotlight(newSpotlightStatus);
+        }
+        
+        const updates = [
+          setTeacherName(profileData.name),
+          setUserStatus(profileData.status || 'dormant'),
+          setUserEmail(profileData.email),
+          setCreatedAt(profileData.created_at),
+          AsyncStorage.setItem("teacherName", profileData.name)
+        ];
+        
+        if (profileData.profileimage) {
+          updates.push(
+            setProfileImage(profileData.profileimage),
+            AsyncStorage.setItem("profileImage", profileData.profileimage)
+          );
+        }
+
+        await Promise.all(updates);
+        
+        // Cache the profile for warm start
+        await AsyncStorage.setItem(
+          CACHE_KEYS.PROFILE,
+          JSON.stringify({
+            name: profileData.name,
+            email: profileData.email,
+            profileimage: profileData.profileimage,
+            status: profileData.status || 'dormant',
+            created_at: profileData.created_at,
+            isSpotlight: Boolean(profileData.isSpotlight),
+          })
+        ).catch(() => {});
+      }
+    } catch (error) {
+      // Silent profile fetch error
+    }
+  };
+  useEffect(() => {
+    const loadProfile = async () => {
+
+      if (newIndex !== currentScreenIndex) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+
+      Animated.spring(swipeAnim, {
+        toValue: -width * newIndex,
+        useNativeDriver: true,
+        stiffness: 160,
+        damping: 20,
+        mass: 0.9,
+        velocity: vx * 0.35,
+        overshootClamping: true,
+        restDisplacementThreshold: 0.2,
+        restSpeedThreshold: 0.2,
+      }).start(() => {
+        setCurrentScreenIndex(newIndex);
+      });
+    },
+    onPanResponderTerminate: () => {
+      Animated.spring(swipeAnim, {
+        toValue: -width * currentScreenIndex,
+        useNativeDriver: true,
+        stiffness: 140,
+        damping: 18,
+      }).start();
+    },
+  })
+).current;
+
+const loadCachedProfile = useCallback(async () => {
+  try {
+    const cached = await AsyncStorage.getItem(CACHE_KEYS.PROFILE);
+    if (cached) {
+      const cachedProfile = JSON.parse(cached);
+      if (cachedProfile?.name) setTeacherName(cachedProfile.name);
+      if (cachedProfile?.email) setUserEmail(cachedProfile.email);
+      if (cachedProfile?.profileimage) setProfileImage(cachedProfile.profileimage);
+      if (cachedProfile?.status) setUserStatus(cachedProfile.status);
+      if (cachedProfile?.created_at) setCreatedAt(cachedProfile.created_at);
+      if (typeof cachedProfile.isSpotlight === "boolean") setIsSpotlight(cachedProfile.isSpotlight);
+    }
+  } catch (err) {
+    // Silent cached profile loading error
+  }
+}, []);
+
+console.log("user", userEmail);
+const fetchProfile = async () => {
+  try {
+    const auth = await getAuthData();
+    if (!auth || !auth.email) {
+      router.replace("/");
+      return;
+    }
+    
+    const { email, token } = auth;
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+    
+    const profileResponse = await axios.post(
+      `${BASE_URL}/api/userProfile`,
+      { email },
+      { 
+        headers,
+        timeout: 10000
+      }
+    );
+    
+    const profileData = profileResponse.data;
+    
+    if (profileData?.name) {
+      console.log('Profile Data:', JSON.stringify(profileData, null, 2));
+      console.log('isSpotlight from API:', profileData.isSpotlight);
+      
+      // Update isSpotlight immediately if available
+      if (profileData.isSpotlight !== undefined) {
+        const newSpotlightStatus = Boolean(profileData.isSpotlight);
+        setIsSpotlight(newSpotlightStatus);
+      }
+      
+      const updates = [
+        setTeacherName(profileData.name),
+        setUserStatus(profileData.status || 'dormant'),
+        setUserEmail(profileData.email),
+        setCreatedAt(profileData.created_at),
+        AsyncStorage.setItem("teacherName", profileData.name)
+      ];
+      
+      if (profileData.profileimage) {
+        updates.push(
+          setProfileImage(profileData.profileimage),
+          AsyncStorage.setItem("profileImage", profileData.profileimage)
+  useEffect(() => {
+    const fetchContacts = async () => {
+      if (!userEmail) return;
+  
+      try {
+        const auth = await getAuthData();
+        const token = auth?.token;
+        const type = auth?.role;
+  
+        const headers = {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        };
+  
+        console.log('type', userEmail, type);
+        const res = await axios.post(
+          `${BASE_URL}/api/contacts`,
+          { userEmail, type },
+          { headers }
+        );
+        
+        console.log("r", res.data);
+      
+        if (res.data.success) {
+          const data = res.data.contacts.map((contact: any) => ({
+            name: contact.teacherName || contact.studentName,
+            profilePic: contact.teacherProfilePic || contact.studentProfilePic || contact.profilePic || "",
+            email: contact.teacherEmail || contact.studentEmail,
+            lastMessage: contact.lastMessage,
+            lastMessageTime: contact.lastMessageTime,
+          }));
+  
+          setContacts(data);
+        } else {
+          Alert.alert("Failed", "Could not fetch contacts");
+        }
+      } catch (error) {
+        // Silent contacts fetch error
+      }
+    };
+
+    fetchContacts();
+  }, [userEmail]);
+
+  const fetchSubjectCount = useCallback(async () => {
+    try {
+      const auth = await getAuthData();
+      const token = auth?.token;
+      const email = auth?.email;
+      
+      if (!email || !token) {
+        console.log("No email or token found, skipping subject count fetch");
+        setSubjectsLoading(false);
+        return 0;
+      }
+      
+      console.log("Fetching subject count for email:", email);
+      
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      };
+
+      // Fetch teacher info
+      const teacherInfoRes = await fetch(`${BASE_URL}/api/teacherInfo`, { 
+        method: "POST", 
+        headers, 
+        body: JSON.stringify({ teacherEmail: email }) 
+      });
+
+      if (!teacherInfoRes.ok) {
+        throw new Error(`HTTP error! status: ${teacherInfoRes.status}`);
+      }
+    
+      const data = await teacherInfoRes.json();
+      console.log("Teacher Info API Response:", JSON.stringify(data, null, 2));
+
+      // Process teacher data to count subjects
+      let subjectCount = 0;
+      const seenTuitions = new Set();
+
+      if (data?.subjects?.length) {
+        data.subjects.forEach((subject: any) => {
+          if (subject?.id && !seenTuitions.has(subject.id)) {
+            seenTuitions.add(subject.id);
+            subjectCount++;
+          }
+        });
+      }
+
+      // Update state and cache
+      setSubjectCount(subjectCount);
+      
+      // Cache the result
+      await AsyncStorage.setItem(
+        CACHE_KEYS.SUBJECT_COUNT,
+        JSON.stringify({ 
+          count: subjectCount,
+          timestamp: Date.now()
+        })
+      );
+      
+      return subjectCount;
+    } catch (error) {
+      // Silent error handling to prevent crashes
+      // Don't reset to 0 on error - keep existing value
+      return subjectCount;
+    } finally {
+      setSubjectsLoading(false);
+    }
+  }, []);
+
+  // Combined data loading effect
+  useEffect(() => {
+    let isMounted = true;
+    
+    const loadInitialData = async () => {
+      if (!cacheLoaded) return; // Wait for cache to be loaded first
+      
+      try {
+        // Load from cache first for instant display
+        try {
+          const cachedSubjectCount = await AsyncStorage.getItem(CACHE_KEYS.SUBJECT_COUNT);
+          if (cachedSubjectCount) {
+            const { count } = JSON.parse(cachedSubjectCount);
+            if (typeof count === 'number') {
+              setSubjectCount(count);
+            }
+          }
+        } catch (e) {
+          // Silent cache loading error
+        }
+        
+        // Then fetch fresh data
+        if (isMounted) {
+          await Promise.all([
+            fetchSubjectCount(),
+            fetchProfile()
+          ]);
+        }
+      } catch (error) {
+        // Silent initial data load error
+      }
+    };
+    
+    loadInitialData();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [cacheLoaded, fetchSubjectCount]);
+
+  useEffect(() => {
+    if (!userEmail) return;
+    
+    // Initial fetch
+    fetchUnreadCount();
+    
+    // Set up polling every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+    
+    // Clean up interval on component unmount
+    return () => clearInterval(interval);
+  }, [userEmail, fetchUnreadCount]);
+
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const auth = await getAuthData();
+      if (!auth?.token) return;
+
+      const response = await axios.get(
+        `${BASE_URL}/api/notifications/unread-count`,
+        {
+          headers: {
+            'Authorization': `Bearer ${auth.token}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 5000
+        }
+      );
+
+      if (response.data && typeof response.data.count === 'number') {
+        setUnreadCount(prevCount => {
+          // Only update if the count actually changed to prevent unnecessary re-renders
+          return response.data.count !== prevCount ? response.data.count : prevCount;
+        });
+      }
+    } catch (error) {
+      // Silent unread count fetch error
+    }
+  }, []);
+
+  let [fontsLoaded] = useFonts({
+    Poppins_Regular: Poppins_400Regular,
+    Poppins_Bold: Poppins_700Bold,
+    Poppins_SemiBold: Poppins_600SemiBold,
+    OpenSans_400Regular,
+  });
+  const formatDate = (isoDate: string | null) => {
+    if (!isoDate) return "N/A";
+    const date = new Date(isoDate);
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  if (!fontsLoaded) return <Text>Loading...</Text>;
+
+return (
+  <>
+    {showSubjectsList ? (
+      <SubjectsList />
+    ) : showStudentsList ? (
+      <StudentsList 
+        students={contacts}
+        onBack={() => setShowStudentsList(false)}
+      />
+    ) : (
+      <View style={styles.container}>
+        {/* Swipeable Content Area */}
+        <View style={styles.swipeContainer}>
+      <Animated.View
+  style={[
+    styles.swipeContent,
+    {
+      transform: [{ translateX: swipeAnim }],
+      width: width * SCREEN_COUNT,
+    },
+  ]}
+  {...panResponder.panHandlers}
+>
+  {/* Left Screen (Index 0) */}
+  <View style={[styles.screen, { width }]}>
+    <LeftScreen />
+  </View>
+            
+            {/* Home Screen - Teacher Dashboard (Index 1) */}
+            <View style={[styles.screen, { width }]}>
+              <SidebarMenu
+                visible={menuVisible}
+                onClose={() => setMenuVisible(false)}
+                activeItem={activeMenuItem}
+                onItemPress={(itemName: string) => {
+                  setActiveMenuItem(itemName);
+                  if (itemName === "Settings") {
+                    router.push({
+                      pathname: "/(tabs)/TeacherDashBoard/Settings",
+                      params: { userEmail },
+                    });
+                  }
+                  if (itemName === "Billing") {
+                    router.push({
+                      pathname: "/(tabs)/Billing",
+                      params: {
+                        userType: "teacher",
+                        userEmail,
+                        teacherName,
+                        profileImage,
+                      },
+                    });
+                  }
+                  if (itemName === "Spotlight")
+                    router.push("/(tabs)/TeacherDashBoard/SpotlightTarrif");
+                  if (itemName === "Share") {
+                    router.push({
+                      pathname: "/(tabs)/TeacherDashBoard/Share",
+                      params: { userEmail, teacherName, profileImage },
+                    });
+                  }
+
+                  if (itemName === "Add on Class") {
+                    router.push({
+                      pathname: "/(tabs)/TeacherDashBoard/AddonClass",
+                      params: { userEmail },
+                    });
+                  }
+
+                  if (itemName === "Create Subject") {
+                    router.push({ pathname: "/(tabs)/TeacherDashBoard/Subjects" });
+                  }
+
+                  if (itemName === "Contact") {
+                    router.push({ pathname: "/(tabs)/Contact" });
+                  }
+                }}
+                userEmail={userEmail as string}
+                teacherName={teacherName}
+                profileImage={profileImage}
+              />
+              
+              <View style={styles.headerContainer}>
+                <View style={styles.headerRow}>
+                  {/* Left: Menu icon and spotlight badge */}
+                  <View style={styles.leftSection}>
+                    <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.menuButton}>
+                      <Bars size={wp("5.23%")} />
+                    </TouchableOpacity>
+                    
+                    {isSpotlight && (
+                      <Animated.View 
+                        style={[
+                          styles.spotlightHeaderBadge,
+                          { 
+                            transform: [
+                              { scale: pulseAnim },
+                              { translateY: floatAnim }
+                            ]
+                          }
+                        ]}
+                      >
+                        <View style={styles.spotlightContent}>
+                          <MaterialCommunityIcons name="lightbulb-on" size={wp("5%")} color="#5D4037" />
+                        </View>
+                        <Animated.View 
+                          style={[
+                            styles.glowEffect,
+                            {
+                              opacity: pulseAnim.interpolate({
+                                inputRange: [1, 1.05],
+                                outputRange: [0.4, 0.7]
+                              })
+                            }
+                          ]}
+                        />
+                      </Animated.View>
+                    )}
+                  </View>
+                  
+                  {/* Center: GROWSMART text */}
+                  <View style={styles.centerSection}>
+                    <Text style={styles.logoText}>GROWSMART</Text>
+                  </View>
+                  
+                  {/* Right: Notification bell */}
+                  <View style={styles.rightSection}>
+                    <TouchableOpacity
+                      onPress={() => router.push("/(tabs)/TeacherDashBoard/Notification")}
+                      style={styles.notificationButton}
+                    >
+                      <View style={{ position: "relative" }}>
+                        <NotificationBellIcon size={wp("5.33%")} />
+                        {unreadCount > 0 && (
+                          <View style={styles.notificationBadge}>
+                            <Text style={styles.notificationText}>
+                              {unreadCount > 9 ? '9+' : unreadCount}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+
+              <ScrollView
+                style={styles.mainContent}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.welcomeContainer}>
+                  <View style={styles.welcomeRow}>
+                    <Text style={styles.welcome} numberOfLines={1} ellipsizeMode="tail">
+                      WELCOME, {teacherName} 👋
+                    </Text>
+                  </View>
+                  <Text style={[
+                    styles.statusText,
+                    userStatus === 'active' ? styles.statusActive : styles.statusInactive
+                  ]}>
+                    {userStatus}
+                  </Text>
+                </View>
+
+                <View style={styles.statsCards}>
+                  <TouchableOpacity onPress={() => setShowStudentsList(true)}>
+                    <View style={styles.card}>
+                      <Text style={styles.cardTop}>
+                        {contacts?.length > 0 ? contacts.length : 0}
+                      </Text>
+                      <Text style={styles.cardBottom}>My enrolled Students</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setShowSubjectsList(true)}>
+                    <View style={styles.cardMiddle}>
+                      <Text style={styles.cardTop}>
+                        {subjectCount > 0 ? subjectCount : 0}
+                      </Text>
+                      <Text style={styles.cardBottom}>Subjects</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.endcard}
+                    onPress={() => router.push({
+                      pathname: "/(tabs)/TeacherDashBoard/CongratsTeacher",
+                      params: { teacherName, createdAt, userEmail }
+                    })}
+                  >
+                    <Text style={styles.cardTop}>{createdAt ? formatDate(createdAt) : 'N/A'}</Text>
+                    <Text style={styles.cardBottom}>Joined Date</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <InfiniteReviewScroll />
+                <View style={styles.chartContainer}>
+                  <View style={styles.enrollmentRow}>
+                    <Text style={styles.enrollmentLabel}>Student Enrolled</Text>
+                    <View style={styles.dropDownWrapper}>
+                      <Picker
+                        selectedValue={selectedCity}
+                        onValueChange={(val) => setSelectedCity(val)}
+                        style={styles.picker}
+                        dropdownIconColor="#333"
+                      >
+                        {/* ... your picker items ... */}
+                      </Picker>
+                    </View>
+                  </View>
+
+                  <View style={styles.chartContent}>
+                    <LineChart
+                      data={{
+                        labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+                        datasets: [{ data: [20, 45, 28, 80, 99, 43] }],
+                      }}
+                      width={wp("93%")}
+                      height={hp("32.570%")}
+                      chartConfig={{
+                        backgroundColor: "#fff",
+                        backgroundGradientFrom: "#fff",
+                        backgroundGradientTo: "#fff",
+                        decimalPlaces: 0,
+                        color: (opacity = 1) => `rgba(95, 95, 255, ${opacity})`,
+                        labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                        style: { borderRadius: wp("4.27%") },
+                        propsForDots: { r: "5", strokeWidth: "2", stroke: "#5f5fff" },
+                      }}
+                      bezier
+                      style={styles.chart}
+                    />
+                  </View>
+                </View>
+              </ScrollView>
+
+              <BottomNavigation userType="teacher" />
+            </View>
+            
+            {/* Right Screen (Index 2) */}
+            <View style={[styles.screen, { width }]}>
+              <RightScreen />
+            </View>
+        {/* ADD THIS VISUAL OVERLAY */}
+</Animated.View>
+        </View>
+      </View>
+    )}
+  </>
+);
+}
+const styles = StyleSheet.create({
+  marqueeContainer: {
+  height: hp("15.7%"),
+  marginBottom: hp("2%"),
+  overflow: 'hidden',
+},
+marqueeContent: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingRight: wp('10%'),
+},
+reviewCard: { 
+  backgroundColor: "#5f5fff", 
+  height: hp("15.7%"), 
+  width: wp("80.8%"), 
+  borderRadius: wp("2.66%"), 
+  paddingHorizontal: wp("3.4%"), 
+  paddingVertical: hp("1.5%"), 
+  marginLeft: wp("2.13%"), 
+  justifyContent: "space-between" 
+},
+reviewText: { color: "#fff", fontSize: wp("4.8%"), lineHeight: hp("3.23%"), fontWeight: "500" },
+rating: { color: "#fff", marginTop: hp("0.7%") },
+reviewContent: { color: "#fff", fontSize: wp("3.2%"), lineHeight: hp("2.2%"), fontWeight: "500" },
+reviewContentScroll: { flex: 1, maxHeight: hp("8%") },
+  container: { backgroundColor: "#FFF", flex: 1 },
+
+welcomeContainer: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: hp('1.5%'),
+  paddingHorizontal: wp('3.2%'),
+  width: '100%',
+  position: 'relative', // Add this
+},
+welcomeRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  flex: 1, // Add this to allow it to take available space
+},
+welcome: {
+  fontSize: wp('3.3%'),
+  lineHeight: hp('2.422%'),
+  textTransform: 'uppercase',
+  color: '#393939',
+  fontFamily: 'OpenSans_400Regular',
+  flex: 1,
+  paddingRight: wp('25%'), // Add this - creates space for status text
+},
+statusText: {
+  fontSize: wp('3.2%'),
+  fontFamily: 'OpenSans_400Regular',
+  textTransform: 'uppercase',
+  fontWeight: '600',
+  marginLeft: wp('2%'),
+  position: 'absolute', // Add this
+  right: wp('3.2%'), // Add this - position it at the right edge of container
+  top: '50%', // Add this - vertical center
+  transform: [{ translateY: -hp('1.5%') }], // Add this - adjust for exact centering
+},
+  statusActive: {
+    color: '#28a745', // Slightly darker green for better visibility
+  },
+  statusInactive: {
+    color: '#dc3545', // Slightly darker red for better visibility
+  },
+  statsCards: { flexDirection: "row", justifyContent: "space-between", marginBottom: hp("2.71%"), gap: wp("3.733%") },
+  card: { backgroundColor: "#f5763f", borderRadius: wp("4.27%"), width: wp("31.2%"), height: hp("11.3%"), padding: 10, justifyContent: "center", alignItems: "center", gap: hp("0.95%") },
+  cardMiddle: { backgroundColor: "#f5763f", borderRadius: wp("4.27%"), width: wp("21.6%"), height: hp("11.3%"), padding: 10, flexDirection: "column", justifyContent: "space-around", alignItems: "center" },
+  endcard: { backgroundColor: "#f5763f", borderRadius: wp("4.27%"), width: wp("33.86%"), height: hp("11.3%"), padding: 10, flexDirection: "column", justifyContent: "space-around", alignItems: "center" },
+  cardTop: { color: "#fff", fontSize: wp("4.27%"), fontWeight: "700", lineHeight: hp("2.826%") },
+  cardBottom: { color: "#fff", fontSize: wp("3.2%"), lineHeight: hp("2.15%"), fontWeight: "600", textAlign: "center" },
+  // reviewCardContainer: { flexDirection: "row", paddingBottom: 10, paddingHorizontal: 10 },
+  // reviewCard: { backgroundColor: "#5f5fff", height: hp("15.7%"), width: wp("80.8%"), borderRadius: wp("2.66%"), paddingHorizontal: wp("3.4%"), paddingVertical: hp("1.5%"), marginLeft: wp("2.13%"), justifyContent: "space-between" },
+  // reviewText: { color: "#fff", fontSize: wp("4.8%"), lineHeight: hp("3.23%"), fontWeight: "500" },
+  enrollmentRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%", marginTop: height * (19 / 743), marginBottom: 8 },
+  enrollmentLabel: { fontSize: wp("5.33%"), fontWeight: "500", color: "#07040e", fontFamily: "OpenSans_400Regular", lineHeight: hp("4.03%") },
+  chartContainer: { flexDirection: "column", alignItems: "center", justifyContent: "center", top: -hp("3%") },
+  dropDownWrapper: { borderWidth: wp("0.22%"), borderColor: "#ccc", borderRadius: wp("2.13%"), width: wp("40%"), backgroundColor: "transparent" },
+  picker: { height: hp("6.38%"), width: "100%", color: "#333", fontSize: wp("3.733%") },
+  pickerLable: { fontSize: wp("3.733%"), color: "fff" },
+  chart: { width: "100%", height: hp("32.570%"), borderRadius: wp("4.27%"), marginVertical: 8, alignSelf: "center" },
+  chartContent: { height: hp("32.570%") },
+  chartCont: { paddingBottom: 150 },
+  reviewCardContainer: { 
+  flexDirection: 'row', 
+  paddingBottom: 10, 
+  paddingHorizontal: 10,
+  paddingRight: wp('20%'), // Add extra padding for smooth looping
+  },
+//   leftHeaderSection: {
+//   flexDirection: 'row',
+//   alignItems: 'center',
+//   flex: 1,
+// },
+
+spotlightHeaderBadge: {
+  backgroundColor: '#FFF8E1',
+  borderRadius: wp('2%'),
+  paddingHorizontal: wp('3%'),
+  paddingVertical: hp('0.8%'),
+  marginLeft: wp('2.5%'),
+  borderWidth: 1.5,
+  borderColor: '#FFD54F',
+  shadowColor: '#FFD54F',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.3,
+  shadowRadius: 4,
+  elevation: 4,
+  overflow: 'hidden',
+  position: 'relative',
+  minHeight: hp('3.5%'),
+},
+
+spotlightContent: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  zIndex: 2,
+},
+
+starIcon: {
+  fontSize: wp('3.5%'),
+  marginRight: wp('1.5%'),
+  color: '#FFA000',
+},
+
+spotlightHeaderText: {
+  color: '#5D4037',
+  fontSize: wp('3.2%'),
+  fontWeight: '700',
+  fontFamily: 'Poppins_700Bold',
+  letterSpacing: 0.3,
+},
+
+glowEffect: {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: '#FFECB3',
+  borderRadius: wp('2%'),
+  zIndex: 1,
+},
+
+shineEffect: {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  transform: [{ skewX: '-20deg' }],
+  width: wp('10%'),
+},
+
+gradientOverlay: {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  borderRadius: wp('2%'),
+},
+  headerContainerContent: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "center",
+    height: hp("6%"), // Fixed height for header content
+    marginBottom: hp("1%"), // Space from bottom
+  },
+  
+ headerContainer: { 
+  backgroundColor: "#5f5fff", 
+  paddingHorizontal: wp("4.8%"), 
+  paddingTop: hp("4%"), // Keep same as Student.tsx
+  paddingBottom: hp("2%"), // Keep same as Student.tsx
+  borderBottomLeftRadius: wp("4.53%"), 
+  borderBottomRightRadius: wp("4.53%") 
+},
+headerRow: { 
+  flexDirection: "row", 
+  alignItems: "center", 
+  justifyContent: "space-between", 
+  width: "100%",
+  height: wp("10%"),
+},
+
+leftSection: {
+  flex: 1,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'flex-start',
+},
+
+centerSection: {
+  flex: 1,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+
+rightSection: {
+  flex: 1,
+  alignItems: 'flex-end',
+  justifyContent: 'center',
+},
+
+menuButton: {
+  padding: wp("1%"),
+},
+
+notificationButton: {
+  padding: wp("1%"),
+},
+
+logoText: {
+  color: '#e5e7eb',
+  fontSize: wp('3.7%%'),
+  fontFamily: 'Poppins_400Regular',
+  fontWeight: '500',
+  textAlign: 'center',
+},
+leftHeaderSection: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'flex-start',
+  flex: 1,
+},
+
+logoTextContainer: {
+  flex: 1,
+  alignItems: 'center',
+  justifyContent: 'center',
+  position: 'absolute',
+  left: 0,
+  right: 0,
+  top: 0,
+  bottom: 0,
+  zIndex: 1,
+},
+
+// logoText: {
+//   color: '#e5e7eb',
+//   fontSize: wp('4%'), // Slightly smaller than Student.tsx to fit in row
+//   fontFamily: 'Poppins_600SemiBold',
+//   fontWeight: '500',
+//   textAlign: 'center',
+//   letterSpacing: wp('0.2%'),
+//   lineHeight: wp('5%'),
+// },
+  
+  logoContainer: {
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: hp("1.5%"), // Reduced from 2%
+  },
+
+  // headerRow: { 
+  //   flexDirection: "row", 
+  //   alignItems: "center", 
+  //   justifyContent: "space-between", 
+  //   width: "100%",
+  //   marginTop: hp("0.5%"), // Reduced from 1%
+  // },
+  
+  // // Left section for menu icon and spotlight badge
+  // leftHeaderSection: {
+  //   flexDirection: 'row',
+  //   alignItems: 'center',
+  //   flex: 1,
+  // },
+  
+  // Notification badge - keep your existing style
+  notificationBadge: { 
+    position: "absolute", 
+    top: hp("-0.8%"), 
+    right: wp("-1.5%"), 
+    backgroundColor: "red", 
+    borderRadius: 50, 
+    minWidth: wp("4.5%"), 
+    height: wp("4.5%"), 
+    justifyContent: "center", 
+    alignItems: "center",
+    paddingHorizontal: 2,
+    zIndex: 1,
+  },
+  
+  notificationText: { 
+    color: "#ffffff", 
+    fontSize: wp("2.5%"), 
+    fontWeight: "700",
+    textAlign: 'center',
+    lineHeight: wp("4.5%")
+  },
+  
+  // Main content - adjust marginTop to match Student.tsx
+  mainContent: { 
+    paddingHorizontal: wp("2.5%"), 
+    marginTop: hp("1.5%"), 
+    paddingBottom: 100 
+  },
+
+  swipeContainer: {
+    flex: 1,
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+  },
+  
+  swipeContent: {
+    flex: 1,
+    flexDirection: 'row',
+    height: '100%',
+  },
+  
+  screen: {
+    flex: 1,
+    height: '100%',
+    overflow: 'hidden',
+  },
+  
+  swipeIndicator: {
+    position: 'absolute',
+    bottom: hp('10%'),  // Adjust based on your bottom nav height
+    alignSelf: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    paddingHorizontal: wp('4%'),
+    paddingVertical: hp('1%'),
+    borderRadius: wp('2%'),
+  },
+  
+  swipeHintText: {
+    fontSize: wp('3%'),
+    color: '#666',
+    marginBottom: hp('1%'),
+    fontFamily: 'Poppins_400Regular',
+  },
+  
+  dotContainer: {
+    flexDirection: 'row',
+    gap: wp('2%'),
+  },
+  
+  dot: {
+    width: wp('2%'),
+    height: wp('2%'),
+    borderRadius: wp('1%'),
+    backgroundColor: '#ddd',
+  },
+  
+  activeDot: {
+    backgroundColor: '#5f5fff',
+    width: wp('4%'),
+  },
+swipeOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    pointerEvents: 'none',
+    zIndex: 10,
+  },
+  swipeHintArrows: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: wp('4%'),
+    paddingVertical: hp('1%'),
+    borderRadius: wp('5%'),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  swipeHint: {
+    fontSize: wp('3%'),
+    color: '#5f5fff',
+    marginHorizontal: wp('2%'),
+    fontFamily: 'Poppins_400Regular',
+  },
+
+});

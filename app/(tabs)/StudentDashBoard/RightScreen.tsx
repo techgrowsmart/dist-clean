@@ -60,7 +60,7 @@ const RightScreen: React.FC = () => {
   if (!fontsLoaded) return null;
 
   return (
-    <ImageBackground source={require("../../../assets/images/TeacherLeftBackground.png")} style={styles.background} resizeMode="cover">
+    <ImageBackground source={require("../../../assets/images/teacherleftbackground.png")} style={styles.background} resizeMode="cover">
       <View style={styles.container}>
         <View style={styles.header}>
           <View>

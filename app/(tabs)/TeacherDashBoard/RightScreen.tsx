@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,14 @@ import {
   TouchableOpacity,
   Image,
   ImageBackground,
-  TextInput
+  TextInput,
+  Alert,
+  Modal,
+  ActivityIndicator
 } from 'react-native';
 import { useFonts } from 'expo-font';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 
 const { width, height } = Dimensions.get('window');
 
@@ -19,12 +23,12 @@ interface Post {
   id: string;
   author: string;
   role: string;
-  time: string;
   content: string;
   likes: number;
-  tag?: string;
-  avatar: any;
-  postImage?: any;
+  createdAt: string;
+  tags?: string[];
+  postImage?: string;
+  isLiked?: boolean;
 }
 
 const RightScreen: React.FC = () => {
@@ -35,37 +39,191 @@ const RightScreen: React.FC = () => {
     'Quicksand-Bold': require('@expo-google-fonts/quicksand').Quicksand_700Bold,
   });
 
-  const [posts] = useState<Post[]>([
-    {
-      id: '1',
-      author: 'Sarah Wilson',
-      role: 'History Tutor',
-      time: '2hago',
-      content: 'Just tried the" flipped classroom" method for 9th grade History. The engagement was unreal! 🎉',
-      likes: 14,
-      avatar: require('../../../assets/image/Person1.jpeg'),
-    },
-    {
-      id: '2',
-      author: 'David Chen',
-      role: 'SCIENCE',
-      time: '5 mins ago',
-      content: 'Does anyone have extra graph paper? My supply ran out mid- lab .     SOS !',
-      likes: 2,
-      tag: '#Supplies',
-      avatar: require('../../../assets/image/Person2.jpeg'),
-    },
-    {
-      id: '3',
-      author: 'Sarah Wilson',
-      role: 'Just now',
-      time: 'Just now',
-      content: 'I have a few pads in room 302! Sending student runner now 🏃',
-      likes: 0,
-      avatar: require('../../../assets/image/Person1.jpeg'),
-      postImage: require('../../../assets/image/class.jpeg'),
-    },
-  ]);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [newPostContent, setNewPostContent] = useState('');
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Mock user data - replace with actual user context
+  const currentUser = {
+    email: 'teacher@example.com',
+    name: 'Teacher',
+    role: 'teacher'
+  };
+
+  // API base URL - replace with your actual backend URL
+  const API_BASE_URL = 'http://localhost:5000/api';
+
+  // Fetch posts on component mount
+  useEffect(() => {
+    fetchPosts();
+  }, []);
+
+  const fetchPosts = async () => {
+    try {
+      setRefreshing(true);
+      // Mock implementation for now - replace with actual API call
+      // const response = await fetch(`${API_BASE_URL}/posts/all`, {
+      //   headers: {
+      //     'Authorization': `Bearer ${await getToken()}`
+      //   }
+      // });
+      // const data = await response.json();
+      // if (data.success) {
+      //   setPosts(data.data);
+      // }
+      
+      // Temporary mock data
+      setPosts([
+        {
+          id: '1',
+          author: 'Sarah Wilson',
+          role: 'History Tutor',
+          content: 'Just tried the "flipped classroom" method for 9th grade History. The engagement was unreal! 🎉',
+          likes: 14,
+          createdAt: '2h ago',
+          isLiked: false
+        },
+        {
+          id: '2',
+          author: 'David Chen',
+          role: 'SCIENCE',
+          content: 'Does anyone have extra graph paper? My supply ran out mid-lab. SOS!',
+          likes: 2,
+          createdAt: '5 mins ago',
+          tags: ['Supplies'],
+          isLiked: false
+        }
+      ]);
+    } catch (error) {
+      console.error('Error fetching posts:', error);
+      Alert.alert('Error', 'Failed to fetch posts');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!result.granted) {
+        Alert.alert('Permission needed', 'Please grant camera roll permissions to select an image');
+        return;
+      }
+
+      const pickerResult = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1,
+      });
+
+      if (!pickerResult.canceled && pickerResult.assets[0]) {
+        setSelectedImage(pickerResult.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const createPost = async () => {
+    if (!newPostContent.trim()) {
+      Alert.alert('Error', 'Please enter some content for your post');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Mock implementation for now - replace with actual API call
+      // const formData = new FormData();
+      // formData.append('content', newPostContent);
+      // if (selectedImage) {
+      //   formData.append('postImage', {
+      //     uri: selectedImage,
+      //     type: 'image/jpeg',
+      //     name: 'post-image.jpg'
+      //   } as any);
+      // }
+
+      // const response = await fetch(`${API_BASE_URL}/posts/create`, {
+      //   method: 'POST',
+      //   headers: {
+      //     'Authorization': `Bearer ${await getToken()}`,
+      //     'Content-Type': 'multipart/form-data'
+      //   },
+      //   body: formData
+      // });
+
+      // const data = await response.json();
+      // if (data.success) {
+      //   setNewPostContent('');
+      //   setSelectedImage(null);
+      //   fetchPosts();
+      //   Alert.alert('Success', 'Post created successfully');
+      // } else {
+      //   Alert.alert('Error', data.message || 'Failed to create post');
+      // }
+
+      // Temporary mock implementation
+      const newPost: Post = {
+        id: Date.now().toString(),
+        author: currentUser.name,
+        role: 'Teacher',
+        content: newPostContent,
+        likes: 0,
+        createdAt: 'Just now',
+        isLiked: false
+      };
+      
+      setPosts([newPost, ...posts]);
+      setNewPostContent('');
+      setSelectedImage(null);
+      Alert.alert('Success', 'Post created successfully');
+      
+    } catch (error) {
+      console.error('Error creating post:', error);
+      Alert.alert('Error', 'Failed to create post');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLike = async (postId: string) => {
+    try {
+      // Mock implementation - replace with actual API call
+      // const response = await fetch(`${API_BASE_URL}/posts/${postId}/like`, {
+      //   method: 'POST',
+      //   headers: {
+      //     'Authorization': `Bearer ${await getToken()}`
+      //   }
+      // });
+      
+      // if (response.ok) {
+      //   setPosts(posts.map(post => 
+      //     post.id === postId 
+      //       ? { ...post, likes: post.isLiked ? post.likes - 1 : post.likes + 1, isLiked: !post.isLiked }
+      //       : post
+      //   ));
+      // }
+
+      // Temporary mock implementation
+      setPosts(posts.map(post => 
+        post.id === postId 
+          ? { ...post, likes: post.isLiked ? post.likes - 1 : post.likes + 1, isLiked: !post.isLiked }
+          : post
+      ));
+    } catch (error) {
+      console.error('Error liking post:', error);
+    }
+  };
+
+  const formatTimeAgo = (createdAt: string) => {
+    // Simple time formatting - enhance as needed
+    return createdAt;
+  };
 
   if (!fontsLoaded) {
     return null;
@@ -73,7 +231,7 @@ const RightScreen: React.FC = () => {
 
   return (
     <ImageBackground
-      source={require("../../../assets/images/TeacherLeftBackground.png")}
+      source={require("../../../assets/images/teacherleftbackground.png")}
       style={styles.background}
       resizeMode="cover"
     >
@@ -104,11 +262,41 @@ const RightScreen: React.FC = () => {
               style={styles.input}
               placeholder="Share your thoughts ..."
               placeholderTextColor="#CCCCCC"
+              value={newPostContent}
+              onChangeText={setNewPostContent}
+              multiline
+              maxLength={500}
             />
-            <TouchableOpacity style={styles.imageButton}>
+            <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
               <MaterialCommunityIcons name="image" size={24} color="#6366F1" />
             </TouchableOpacity>
+            {newPostContent.trim() && (
+              <TouchableOpacity 
+                style={[styles.postButton, loading && styles.postButtonDisabled]} 
+                onPress={createPost}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.postButtonText}>Post</Text>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
+
+          {/* Selected Image Preview */}
+          {selectedImage && (
+            <View style={styles.imagePreviewContainer}>
+              <Image source={{ uri: selectedImage }} style={styles.imagePreview} />
+              <TouchableOpacity 
+                style={styles.removeImageButton} 
+                onPress={() => setSelectedImage(null)}
+              >
+                <Ionicons name="close-circle" size={24} color="#EF4444" />
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Posts Feed */}
           <ScrollView
@@ -121,12 +309,15 @@ const RightScreen: React.FC = () => {
             {posts.map((post) => (
               <View key={post.id} style={styles.postCard}>
                 <View style={styles.postHeader}>
-                  <Image source={post.avatar} style={styles.avatar} />
+                  <Image 
+                    source={require('../../../assets/image/Person1.jpeg')} 
+                    style={styles.avatar} 
+                  />
                   <View style={styles.postInfo}>
                     <Text style={styles.authorName}>{post.author}</Text>
                     <View style={styles.roleContainer}>
                       <Text style={styles.roleText}>{post.role}</Text>
-                      <Text style={styles.timeText}> • {post.time}</Text>
+                      <Text style={styles.timeText}> • {formatTimeAgo(post.createdAt)}</Text>
                     </View>
                   </View>
                   <TouchableOpacity>
@@ -136,17 +327,28 @@ const RightScreen: React.FC = () => {
 
                 <Text style={styles.postContent}>{post.content}</Text>
 
-                {post.tag && (
-                  <Text style={styles.hashtag}>{post.tag}</Text>
+                {post.tags && post.tags.length > 0 && (
+                  <View style={styles.tagsContainer}>
+                    {post.tags.map((tag, index) => (
+                      <Text key={index} style={styles.hashtag}>#{tag}</Text>
+                    ))}
+                  </View>
                 )}
 
                 {post.postImage && (
-                  <Image source={post.postImage} style={styles.postImage} />
+                  <Image source={{ uri: post.postImage }} style={styles.postImage} />
                 )}
 
                 <View style={styles.postActions}>
-                  <TouchableOpacity style={styles.actionButton}>
-                    <Ionicons name="heart-outline" size={20} color="#999" />
+                  <TouchableOpacity 
+                    style={styles.actionButton} 
+                    onPress={() => handleLike(post.id)}
+                  >
+                    <Ionicons 
+                      name={post.isLiked ? "heart" : "heart-outline"} 
+                      size={20} 
+                      color={post.isLiked ? "#EF4444" : "#999"} 
+                    />
                     <Text style={styles.actionText}>{post.likes}</Text>
                   </TouchableOpacity>
 
@@ -158,7 +360,7 @@ const RightScreen: React.FC = () => {
                   <TouchableOpacity style={styles.actionButton}>
                     <Ionicons name="share-outline" size={20} color="#999" />
                     <Text style={styles.actionText}>Share</Text>
-                </TouchableOpacity>
+                  </TouchableOpacity>
                 </View>
               </View>
             ))}
@@ -377,6 +579,43 @@ const styles = StyleSheet.create({
     fontFamily: 'Quicksand-SemiBold',
     color: '#5f5fff',
     marginRight: 6,
+  },
+  postButton: {
+    backgroundColor: '#6366F1',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginLeft: 8,
+  },
+  postButtonDisabled: {
+    backgroundColor: '#A5B4FC',
+  },
+  postButtonText: {
+    color: '#FFFFFF',
+    fontSize: width * 0.035,
+    fontFamily: 'Quicksand-Bold',
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    marginBottom: height * 0.02,
+  },
+  imagePreview: {
+    width: '100%',
+    height: height * 0.2,
+    borderRadius: 16,
+    resizeMode: 'cover',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 12,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 12,
   },
 });
 

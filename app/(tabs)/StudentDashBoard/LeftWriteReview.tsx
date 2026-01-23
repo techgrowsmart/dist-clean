@@ -65,7 +65,7 @@ const WriteReviewScreen: React.FC = () => {
   };
 
   return (
-    <ImageBackground source={require('../../../assets/images/TeacherLeftBackground.png')} style={styles.background} resizeMode="cover">
+    <ImageBackground source={require('../../../assets/images/teacherleftbackground.png')} style={styles.background} resizeMode="cover">
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.container}>
           <View style={styles.headerContainer}>

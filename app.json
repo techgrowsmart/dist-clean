@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "gogrowsmart",
-    "slug": "growsmart",
-    "version": "2.0.2",
+    "name": "GROWSMART™",
+    "slug": "client",
+    "version": "2.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/growsmart-icon.png",
     "scheme": "client",
@@ -14,13 +14,14 @@
       "jsEngine": "jsc"
     },
     "android": {
+      "appName": "GROWSMART™",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/growsmart-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.gogrowsmart.app",
-      "versionCode": 6,
+      "versionCode": 7,
       "plugins": [
         "expo-notifications"
       ]
@@ -35,13 +36,14 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/growsmart-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-font"
+      "expo-font",
+      "./app.plugin.js"
     ],
     "experiments": {
       "typedRoutes": true
