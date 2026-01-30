@@ -184,24 +184,10 @@ export default function TeacherDashboard() {
   const [selectedCity, setSelectedCity] = useState("");
   const [userType, setUserType] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  // Initialize states with cached values if available
-  const [isSpotlight, setIsSpotlight] = useState<boolean>(() => {
-    try {
-      const cached = localStorage.getItem('teacher_spotlight_status');
-      return cached ? JSON.parse(cached) : false;
-    } catch (e) {
-      return false;
-    }
-  });
   
-  const [subjectCount, setSubjectCount] = useState<number>(() => {
-    try {
-      const cached = localStorage.getItem('teacher_subject_count');
-      return cached ? parseInt(cached, 10) : 0;
-    } catch (e) {
-      return 0;
-    }
-  });
+  // Initialize states with proper default values
+  const [isSpotlight, setIsSpotlight] = useState<boolean>(false);
+  const [subjectCount, setSubjectCount] = useState<number>(0);
   const [showSubjectsList, setShowSubjectsList] = useState(false);
   const [showStudentsList, setShowStudentsList] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -211,6 +197,7 @@ export default function TeacherDashboard() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [contactsLoading, setContactsLoading] = useState(true);
   const [createdAt, setCreatedAt] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(true);
 
   const pulseAnim = React.useRef(new Animated.Value(1)).current;
   const floatAnim = React.useRef(new Animated.Value(0)).current;
@@ -220,10 +207,60 @@ export default function TeacherDashboard() {
   const swipeAnim = React.useRef(new Animated.Value(-width)).current;
   const [currentScreenIndex, setCurrentScreenIndex] = useState(1);
 
+  // Load initial cached data on component mount
+  useEffect(() => {
+    setIsMounted(true);
+    
+    // Load cached data
+    const loadCachedData = async () => {
+      try {
+        // Load spotlight status
+        const cachedSpotlight = localStorage.getItem('teacher_spotlight_status');
+        if (cachedSpotlight) {
+          setIsSpotlight(cachedSpotlight === 'true');
+        }
+        
+        // Load subject count
+        const cachedCount = localStorage.getItem('teacher_subject_count');
+        if (cachedCount) {
+          const count = parseInt(cachedCount, 10);
+          if (!isNaN(count)) {
+            setSubjectCount(count);
+          }
+        }
+        
+        // Load profile from AsyncStorage
+        const cachedProfile = await AsyncStorage.getItem(CACHE_KEYS.PROFILE);
+        if (cachedProfile) {
+          const profile = JSON.parse(cachedProfile);
+          if (profile?.name) setTeacherName(profile.name);
+          if (profile?.email) setUserEmail(profile.email);
+          if (profile?.profileimage) setProfileImage(profile.profileimage);
+          if (profile?.status) setUserStatus(profile.status);
+          if (profile?.created_at) setCreatedAt(profile.created_at);
+          if (typeof profile.isSpotlight === "boolean") {
+            setIsSpotlight(profile.isSpotlight);
+          }
+        }
+      } catch (error) {
+        console.warn("Error loading cached data:", error);
+      }
+    };
+    
+    loadCachedData();
+    
+    return () => {
+      setIsMounted(false);
+      isMountedRef.current = false;
+    };
+  }, []);
+
   React.useEffect(() => {
+    if (!isMounted) return;
+    
     swipeAnim.setValue(-width);
     setCurrentScreenIndex(1);
-  }, [swipeAnim, width]);
+  }, [swipeAnim, width, isMounted]);
 
   const panResponder = React.useRef(
     PanResponder.create({
@@ -309,26 +346,12 @@ export default function TeacherDashboard() {
     })
   ).current;
 
-  const loadCachedProfile = useCallback(async () => {
+  // Fetch profile data
+  const fetchProfile = useCallback(async () => {
+    if (!isMounted) return;
+    
     try {
-      const cached = await AsyncStorage.getItem(CACHE_KEYS.PROFILE);
-      if (cached) {
-        const cachedProfile = JSON.parse(cached);
-        if (cachedProfile?.name) setTeacherName(cachedProfile.name);
-        if (cachedProfile?.email) setUserEmail(cachedProfile.email);
-        if (cachedProfile?.profileimage) setProfileImage(cachedProfile.profileimage);
-        if (cachedProfile?.status) setUserStatus(cachedProfile.status);
-        if (cachedProfile?.created_at) setCreatedAt(cachedProfile.created_at);
-        if (typeof cachedProfile.isSpotlight === "boolean") setIsSpotlight(cachedProfile.isSpotlight);
-      }
-    } catch (err) {
-      console.warn("Failed to load cached profile", err);
-    }
-  }, []);
-
-  console.log("user", userEmail);
-  const fetchProfile = async () => {
-    try {
+      setProfileLoading(true);
       const auth = await getAuthData();
       if (!auth || !auth.email) {
         router.replace("/");
@@ -352,9 +375,20 @@ export default function TeacherDashboard() {
       
       const profileData = profileResponse.data;
       
-      if (profileData?.name) {
+      if (profileData?.name && isMounted) {
         console.log('Profile Data:', JSON.stringify(profileData, null, 2));
         console.log('isSpotlight from API:', profileData.isSpotlight);
+        
+        // Update all profile states at once
+        setTeacherName(profileData.name || '');
+        setUserStatus(profileData.status || 'dormant');
+        setUserEmail(profileData.email || email);
+        setCreatedAt(profileData.created_at || null);
+        
+        if (profileData.profileimage) {
+          setProfileImage(profileData.profileimage);
+          await AsyncStorage.setItem("profileImage", profileData.profileimage);
+        }
         
         // Update isSpotlight immediately if available
         if (profileData.isSpotlight !== undefined) {
@@ -367,109 +401,108 @@ export default function TeacherDashboard() {
           }
         }
         
-        const updates = [
-          setTeacherName(profileData.name),
-          setUserStatus(profileData.status || 'dormant'),
-          setUserEmail(profileData.email),
-          setCreatedAt(profileData.created_at),
-          AsyncStorage.setItem("teacherName", profileData.name)
-        ];
-        
-        if (profileData.profileimage) {
-          updates.push(
-            setProfileImage(profileData.profileimage),
-            AsyncStorage.setItem("profileImage", profileData.profileimage)
-          );
-        }
-
-        await Promise.all(updates);
-        
         // Cache the profile for warm start
-        await AsyncStorage.setItem(
-          CACHE_KEYS.PROFILE,
-          JSON.stringify({
-            name: profileData.name,
-            email: profileData.email,
-            profileimage: profileData.profileimage,
-            status: profileData.status || 'dormant',
-            created_at: profileData.created_at,
-            isSpotlight: Boolean(profileData.isSpotlight),
-          })
-        ).catch(() => {});
+        const profileCache = {
+          name: profileData.name,
+          email: profileData.email || email,
+          profileimage: profileData.profileimage,
+          status: profileData.status || 'dormant',
+          created_at: profileData.created_at,
+          isSpotlight: Boolean(profileData.isSpotlight),
+        };
+        
+        await AsyncStorage.setItem("teacherName", profileData.name);
+        await AsyncStorage.setItem(CACHE_KEYS.PROFILE, JSON.stringify(profileCache));
       }
     } catch (error) {
       console.error("Error fetching teacher profile:", error);
-      // Don't show error to user, just log it
+    } finally {
+      if (isMounted) {
+        setProfileLoading(false);
+      }
     }
-  };
-  useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        await loadCachedProfile();
-        await fetchProfile();
-      } catch (error) {
-        console.error("Failed to load profile:", error);
-      }
-    };
+  }, [isMounted, router]);
 
-    loadProfile();
-  }, [loadCachedProfile]);
-
-  useEffect(() => {
-    const fetchContacts = async () => {
-      if (!userEmail) return;
+  // Fetch contacts
+  const fetchContacts = useCallback(async () => {
+    if (!userEmail || !isMounted) return;
   
-      try {
-        const auth = await getAuthData();
-        const token = auth?.token;
-        const type = auth?.role;
-  
-        const headers = {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        };
-  
-        console.log('type', userEmail, type);
-        const res = await axios.post(
-          `${BASE_URL}/api/contacts`,
-          { userEmail, type },
-          { headers }
-        );
-        
-        console.log("r", res.data);
-      
-        if (res.data.success) {
-          const data = res.data.contacts.map((contact: any) => ({
-            name: contact.teacherName || contact.studentName,
-            profilePic: contact.teacherProfilePic || contact.studentProfilePic || contact.profilePic || "",
-            email: contact.teacherEmail || contact.studentEmail,
-            lastMessage: contact.lastMessage,
-            lastMessageTime: contact.lastMessageTime,
-          }));
-  
-          setContacts(data);
-        } else {
-          Alert.alert("Failed", "Could not fetch contacts");
-        }
-      } catch (error) {
-        console.error("Error fetching contacts:", error);
-        Alert.alert("Error", "Failed to fetch contacts");
-      }
-    };
-
-    fetchContacts();
-  }, [userEmail]);
-
-  const fetchSubjectCount = useCallback(async () => {
     try {
+      setContactsLoading(true);
+      const auth = await getAuthData();
+      const token = auth?.token;
+      const type = auth?.role;
+
+      if (!token || !type) return;
+
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      };
+
+      console.log('Fetching contacts for:', userEmail, type);
+      const res = await axios.post(
+        `${BASE_URL}/api/contacts`,
+        { userEmail, type },
+        { headers, timeout: 10000 }
+      );
+      
+      console.log("Contacts API Response:", res.data);
+    
+      if (res.data.success && isMounted) {
+        const data = res.data.contacts.map((contact: any) => ({
+          name: contact.teacherName || contact.studentName,
+          profilePic: contact.teacherProfilePic || contact.studentProfilePic || contact.profilePic || "",
+          email: contact.teacherEmail || contact.studentEmail,
+          lastMessage: contact.lastMessage,
+          lastMessageTime: contact.lastMessageTime,
+        }));
+
+        setContacts(data);
+        
+        // Cache contacts
+        await AsyncStorage.setItem(
+          CACHE_KEYS.CONTACTS,
+          JSON.stringify({
+            contacts: data,
+            timestamp: Date.now()
+          })
+        );
+      }
+    } catch (error) {
+      console.error("Error fetching contacts:", error);
+      // Try to load from cache
+      try {
+        const cached = await AsyncStorage.getItem(CACHE_KEYS.CONTACTS);
+        if (cached) {
+          const { contacts: cachedContacts } = JSON.parse(cached);
+          if (isMounted && cachedContacts?.length) {
+            setContacts(cachedContacts);
+          }
+        }
+      } catch (cacheError) {
+        console.error("Error loading contacts from cache:", cacheError);
+      }
+    } finally {
+      if (isMounted) {
+        setContactsLoading(false);
+      }
+    }
+  }, [userEmail, isMounted]);
+
+  // Fetch subject count
+  const fetchSubjectCount = useCallback(async () => {
+    if (!isMounted) return;
+    
+    try {
+      setSubjectsLoading(true);
       const auth = await getAuthData();
       const token = auth?.token;
       const email = auth?.email;
       
       if (!email || !token) {
         console.log("No email or token found, skipping subject count fetch");
-        setSubjectsLoading(false);
-        return 0;
+        return;
       }
       
       console.log("Fetching subject count for email:", email);
@@ -507,23 +540,23 @@ export default function TeacherDashboard() {
       }
 
       // Update state and cache
-      setSubjectCount(subjectCount);
-      try {
-        localStorage.setItem('teacher_subject_count', subjectCount.toString());
-      } catch (e) {
-        console.warn('Failed to save subject count to localStorage', e);
+      if (isMounted) {
+        setSubjectCount(subjectCount);
+        try {
+          localStorage.setItem('teacher_subject_count', subjectCount.toString());
+        } catch (e) {
+          console.warn('Failed to save subject count to localStorage', e);
+        }
+        
+        // Cache the result
+        await AsyncStorage.setItem(
+          CACHE_KEYS.SUBJECT_COUNT,
+          JSON.stringify({ 
+            count: subjectCount,
+            timestamp: Date.now()
+          })
+        );
       }
-      
-      // Cache the result
-      await AsyncStorage.setItem(
-        CACHE_KEYS.SUBJECT_COUNT,
-        JSON.stringify({ 
-          count: subjectCount,
-          timestamp: Date.now()
-        })
-      );
-      
-      return subjectCount;
     } catch (error) {
       console.error("Error in fetchSubjectCount:", error);
       // Try to load from cache on error
@@ -531,86 +564,24 @@ export default function TeacherDashboard() {
         const cached = await AsyncStorage.getItem(CACHE_KEYS.SUBJECT_COUNT);
         if (cached) {
           const { count } = JSON.parse(cached);
-          if (typeof count === 'number') {
+          if (isMounted && typeof count === 'number') {
             setSubjectCount(count);
-            return count;
           }
         }
       } catch (cacheError) {
         console.error("Error loading from cache:", cacheError);
       }
-      return 0;
     } finally {
-      setSubjectsLoading(false);
-    }
-  }, []);
-
-  // Combined data loading effect
-  useEffect(() => {
-    let isMounted = true;
-    
-    const loadInitialData = async () => {
-      try {
-        // Load from cache first for instant display
-        try {
-          const cachedCount = localStorage.getItem('teacher_subject_count');
-          if (cachedCount) {
-            const count = parseInt(cachedCount, 10);
-            if (!isNaN(count)) {
-              setSubjectCount(count);
-            }
-          }
-          
-          const cachedSpotlight = localStorage.getItem('teacher_spotlight_status');
-          if (cachedSpotlight) {
-            setIsSpotlight(cachedSpotlight === 'true');
-          }
-        } catch (e) {
-          console.warn('Error loading from localStorage cache:', e);
-        }
-        
-        // Then fetch fresh data
-        if (isMounted) {
-          await Promise.all([
-            fetchSubjectCount(),
-            fetchProfile()
-          ]);
-        }
-      } catch (error) {
-        console.error("Error in initial data load:", error);
-      }
-    };
-    
-    loadInitialData();
-    
-    // Set up refresh interval (every 5 minutes)
-    const interval = setInterval(() => {
       if (isMounted) {
-        fetchSubjectCount();
-        fetchProfile();
+        setSubjectsLoading(false);
       }
-    }, 5 * 60 * 1000);
-    
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, [fetchSubjectCount]);
+    }
+  }, [isMounted]);
 
-  useEffect(() => {
-    if (!userEmail) return;
-    
-    // Initial fetch
-    fetchUnreadCount();
-    
-    // Set up polling every 30 seconds
-    const interval = setInterval(fetchUnreadCount, 30000);
-    
-    // Clean up interval on component unmount
-    return () => clearInterval(interval);
-  }, [userEmail, fetchUnreadCount]);
-
+  // Fetch unread notification count
   const fetchUnreadCount = useCallback(async () => {
+    if (!isMounted) return;
+    
     try {
       const auth = await getAuthData();
       if (!auth?.token) return;
@@ -626,14 +597,74 @@ export default function TeacherDashboard() {
         }
       );
 
-      if (response.data && typeof response.data.count === 'number') {
+      if (response.data && typeof response.data.count === 'number' && isMounted) {
         setUnreadCount(response.data.count);
       }
     } catch (error) {
       console.error('Error fetching unread count:', error);
       // Don't update state on error to prevent UI flickering
     }
-  }, []);
+  }, [isMounted]);
+
+  // Main data loading effect
+  useEffect(() => {
+    if (!isMounted) return;
+    
+    let mounted = true;
+    
+    const loadAllData = async () => {
+      try {
+        setIsDashboardLoading(true);
+        
+        // Fetch profile first to get userEmail
+        await fetchProfile();
+        
+        // Then fetch other data in parallel
+        await Promise.all([
+          fetchSubjectCount(),
+          fetchUnreadCount(),
+        ]);
+        
+      } catch (error) {
+        console.error("Error in initial data load:", error);
+      } finally {
+        if (mounted) {
+          setIsDashboardLoading(false);
+        }
+      }
+    };
+    
+    loadAllData();
+    
+    // Set up refresh interval (every 5 minutes)
+    const refreshInterval = setInterval(() => {
+      if (mounted) {
+        fetchSubjectCount();
+        fetchUnreadCount();
+        fetchProfile();
+      }
+    }, 5 * 60 * 1000);
+    
+    // Set up unread count polling (every 30 seconds)
+    const unreadInterval = setInterval(() => {
+      if (mounted) {
+        fetchUnreadCount();
+      }
+    }, 30000);
+    
+    return () => {
+      mounted = false;
+      clearInterval(refreshInterval);
+      clearInterval(unreadInterval);
+    };
+  }, [fetchProfile, fetchSubjectCount, fetchUnreadCount, isMounted]);
+
+  // Fetch contacts when userEmail is available
+  useEffect(() => {
+    if (userEmail && isMounted) {
+      fetchContacts();
+    }
+  }, [userEmail, fetchContacts, isMounted]);
 
   let [fontsLoaded] = useFonts({
     Poppins_Regular: Poppins_400Regular,
@@ -641,266 +672,279 @@ export default function TeacherDashboard() {
     Poppins_SemiBold: Poppins_600SemiBold,
     OpenSans_400Regular,
   });
+
   const formatDate = (isoDate: string | null) => {
     if (!isoDate) return "N/A";
-    const date = new Date(isoDate);
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
+    try {
+      const date = new Date(isoDate);
+      if (isNaN(date.getTime())) return "N/A";
+      const day = String(date.getDate()).padStart(2, "0");
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return "N/A";
+    }
   };
 
-  if (!fontsLoaded) return <Text>Loading...</Text>;
+  if (!fontsLoaded || (isDashboardLoading && subjectCount === 0)) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text>Loading Dashboard...</Text>
+      </View>
+    );
+  }
 
-return (
-  <>
-    {showSubjectsList ? (
-      <SubjectsList />
-    ) : showStudentsList ? (
-      <StudentsList 
-        students={contacts}
-        onBack={() => setShowStudentsList(false)}
-      />
-    ) : (
-      <View style={styles.container}>
-        {/* Swipeable Content Area */}
-        <View style={styles.swipeContainer}>
-      <Animated.View
-  style={[
-    styles.swipeContent,
-    {
-      transform: [{ translateX: swipeAnim }],
-      width: width * SCREEN_COUNT,
-    },
-  ]}
-  {...panResponder.panHandlers}
->
-  {/* Left Screen (Index 0) */}
-  <View style={[styles.screen, { width }]}>
-    <LeftScreen />
-  </View>
-            
-            {/* Home Screen - Teacher Dashboard (Index 1) */}
-            <View style={[styles.screen, { width }]}>
-              <SidebarMenu
-                visible={menuVisible}
-                onClose={() => setMenuVisible(false)}
-                activeItem={activeMenuItem}
-                onItemPress={(itemName: string) => {
-                  setActiveMenuItem(itemName);
-                  if (itemName === "Settings") {
-                    router.push({
-                      pathname: "/(tabs)/TeacherDashBoard/Settings",
-                      params: { userEmail },
-                    });
-                  }
-                  if (itemName === "Billing") {
-                    router.push({
-                      pathname: "/(tabs)/Billing",
-                      params: {
-                        userType: "teacher",
-                        userEmail,
-                        teacherName,
-                        profileImage,
-                      },
-                    });
-                  }
-                  if (itemName === "Spotlight")
-                    router.push("/(tabs)/TeacherDashBoard/SpotlightTarrif");
-                  if (itemName === "Share") {
-                    router.push({
-                      pathname: "/(tabs)/TeacherDashBoard/Share",
-                      params: { userEmail, teacherName, profileImage },
-                    });
-                  }
-
-                  if (itemName === "Add on Class") {
-                    router.push({
-                      pathname: "/(tabs)/TeacherDashBoard/AddonClass",
-                      params: { userEmail },
-                    });
-                  }
-
-                  if (itemName === "Create Subject") {
-                    router.push({ pathname: "/(tabs)/TeacherDashBoard/Subjects" });
-                  }
-
-                  if (itemName === "Contact") {
-                    router.push({ pathname: "/(tabs)/Contact" });
-                  }
-                }}
-                userEmail={userEmail as string}
-                teacherName={teacherName}
-                profileImage={profileImage}
-              />
+  // Rest of your JSX remains the same...
+  return (
+    <>
+      {showSubjectsList ? (
+        <SubjectsList />
+      ) : showStudentsList ? (
+        <StudentsList 
+          students={contacts}
+          onBack={() => setShowStudentsList(false)}
+        />
+      ) : (
+        <View style={styles.container}>
+          {/* Swipeable Content Area */}
+          <View style={styles.swipeContainer}>
+            <Animated.View
+              style={[
+                styles.swipeContent,
+                {
+                  transform: [{ translateX: swipeAnim }],
+                  width: width * SCREEN_COUNT,
+                },
+              ]}
+              {...panResponder.panHandlers}
+            >
+              {/* Left Screen (Index 0) */}
+              <View style={[styles.screen, { width }]}>
+                <LeftScreen />
+              </View>
               
-              <View style={styles.headerContainer}>
-                <View style={styles.headerRow}>
-                  {/* Left: Menu icon and spotlight badge */}
-                  <View style={styles.leftSection}>
-                    <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.menuButton}>
-                      <Bars size={wp("5.23%")} />
-                    </TouchableOpacity>
-                    
-                    {isSpotlight && (
-                      <Animated.View 
-                        style={[
-                          styles.spotlightHeaderBadge,
-                          { 
-                            transform: [
-                              { scale: pulseAnim },
-                              { translateY: floatAnim }
-                            ]
-                          }
-                        ]}
-                      >
-                        <View style={styles.spotlightContent}>
-                          <MaterialCommunityIcons name="lightbulb-on" size={wp("5%")} color="#5D4037" />
-                        </View>
+              {/* Home Screen - Teacher Dashboard (Index 1) */}
+              <View style={[styles.screen, { width }]}>
+                <SidebarMenu
+                  visible={menuVisible}
+                  onClose={() => setMenuVisible(false)}
+                  activeItem={activeMenuItem}
+                  onItemPress={(itemName: string) => {
+                    setActiveMenuItem(itemName);
+                    if (itemName === "Settings") {
+                      router.push({
+                        pathname: "/(tabs)/TeacherDashBoard/Settings",
+                        params: { userEmail },
+                      });
+                    }
+                    if (itemName === "Billing") {
+                      router.push({
+                        pathname: "/(tabs)/Billing",
+                        params: {
+                          userType: "teacher",
+                          userEmail,
+                          teacherName,
+                          profileImage,
+                        },
+                      });
+                    }
+                    if (itemName === "Spotlight")
+                      router.push("/(tabs)/TeacherDashBoard/SpotlightTarrif");
+                    if (itemName === "Share") {
+                      router.push({
+                        pathname: "/(tabs)/TeacherDashBoard/Share",
+                        params: { userEmail, teacherName, profileImage },
+                      });
+                    }
+
+                    if (itemName === "Add on Class") {
+                      router.push({
+                        pathname: "/(tabs)/TeacherDashBoard/AddonClass",
+                        params: { userEmail },
+                      });
+                    }
+
+                    if (itemName === "Create Subject") {
+                      router.push({ pathname: "/(tabs)/TeacherDashBoard/Subjects" });
+                    }
+
+                    if (itemName === "Contact") {
+                      router.push({ pathname: "/(tabs)/Contact" });
+                    }
+                  }}
+                  userEmail={userEmail as string}
+                  teacherName={teacherName}
+                  profileImage={profileImage}
+                />
+                
+                <View style={styles.headerContainer}>
+                  <View style={styles.headerRow}>
+                    {/* Left: Menu icon and spotlight badge */}
+                    <View style={styles.leftSection}>
+                      <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.menuButton}>
+                        <Bars size={wp("5.23%")} />
+                      </TouchableOpacity>
+                      
+                      {isSpotlight && (
                         <Animated.View 
                           style={[
-                            styles.glowEffect,
-                            {
-                              opacity: pulseAnim.interpolate({
-                                inputRange: [1, 1.05],
-                                outputRange: [0.4, 0.7]
-                              })
+                            styles.spotlightHeaderBadge,
+                            { 
+                              transform: [
+                                { scale: pulseAnim },
+                                { translateY: floatAnim }
+                              ]
                             }
                           ]}
-                        />
-                      </Animated.View>
-                    )}
-                  </View>
-                  
-                  {/* Center: GROWSMART text */}
-                  <View style={styles.centerSection}>
-                    <Text style={styles.logoText}>GROWSMART</Text>
-                  </View>
-                  
-                  {/* Right: Notification bell */}
-                  <View style={styles.rightSection}>
-                    <TouchableOpacity
-                      onPress={() => router.push("/(tabs)/TeacherDashBoard/Notification")}
-                      style={styles.notificationButton}
-                    >
-                      <View style={{ position: "relative" }}>
-                        <NotificationBellIcon size={wp("5.33%")} />
-                        {unreadCount > 0 && (
-                          <View style={styles.notificationBadge}>
-                            <Text style={styles.notificationText}>
-                              {unreadCount > 9 ? '9+' : unreadCount}
-                            </Text>
+                        >
+                          <View style={styles.spotlightContent}>
+                            <MaterialCommunityIcons name="lightbulb-on" size={wp("5%")} color="#5D4037" />
                           </View>
-                        )}
-                      </View>
-                    </TouchableOpacity>
+                          <Animated.View 
+                            style={[
+                              styles.glowEffect,
+                              {
+                                opacity: pulseAnim.interpolate({
+                                  inputRange: [1, 1.05],
+                                  outputRange: [0.4, 0.7]
+                                })
+                              }
+                            ]}
+                          />
+                        </Animated.View>
+                      )}
+                    </View>
+                    
+                    {/* Center: GROWSMART text */}
+                    <View style={styles.centerSection}>
+                      <Text style={styles.logoText}>GROWSMART</Text>
+                    </View>
+                    
+                    {/* Right: Notification bell */}
+                    <View style={styles.rightSection}>
+                      <TouchableOpacity
+                        onPress={() => router.push("/(tabs)/TeacherDashBoard/Notification")}
+                        style={styles.notificationButton}
+                      >
+                        <View style={{ position: "relative" }}>
+                          <NotificationBellIcon size={wp("5.33%")} />
+                          {unreadCount > 0 && (
+                            <View style={styles.notificationBadge}>
+                              <Text style={styles.notificationText}>
+                                {unreadCount > 9 ? '9+' : unreadCount}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
-              </View>
 
-              <ScrollView
-                style={styles.mainContent}
-                showsVerticalScrollIndicator={false}
-              >
-                <View style={styles.welcomeContainer}>
-                  <View style={styles.welcomeRow}>
-                    <Text style={styles.welcome} numberOfLines={1} ellipsizeMode="tail">
-                      WELCOME, {teacherName} 👋
+                <ScrollView
+                  style={styles.mainContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <View style={styles.welcomeContainer}>
+                    <View style={styles.welcomeRow}>
+                      <Text style={styles.welcome} numberOfLines={1} ellipsizeMode="tail">
+                        WELCOME, {teacherName} 👋
+                      </Text>
+                    </View>
+                    <Text style={[
+                      styles.statusText,
+                      userStatus === 'active' ? styles.statusActive : styles.statusInactive
+                    ]}>
+                      {userStatus}
                     </Text>
                   </View>
-                  <Text style={[
-                    styles.statusText,
-                    userStatus === 'active' ? styles.statusActive : styles.statusInactive
-                  ]}>
-                    {userStatus}
-                  </Text>
-                </View>
 
-                <View style={styles.statsCards}>
-                  <TouchableOpacity onPress={() => setShowStudentsList(true)}>
-                    <View style={styles.card}>
-                      <Text style={styles.cardTop}>
-                        {contacts?.length > 0 ? contacts.length : 0}
-                      </Text>
-                      <Text style={styles.cardBottom}>My enrolled Students</Text>
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setShowSubjectsList(true)}>
-                    <View style={styles.cardMiddle}>
-                      <Text style={styles.cardTop}>
-                        {subjectCount > 0 ? subjectCount : 0}
-                      </Text>
-                      <Text style={styles.cardBottom}>Subjects</Text>
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.endcard}
-                    onPress={() => router.push({
-                      pathname: "/(tabs)/TeacherDashBoard/CongratsTeacher",
-                      params: { teacherName, createdAt, userEmail }
-                    })}
-                  >
-                    <Text style={styles.cardTop}>{createdAt ? formatDate(createdAt) : 'N/A'}</Text>
-                    <Text style={styles.cardBottom}>Joined Date</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <InfiniteReviewScroll />
-                <View style={styles.chartContainer}>
-                  <View style={styles.enrollmentRow}>
-                    <Text style={styles.enrollmentLabel}>Student Enrolled</Text>
-                    <View style={styles.dropDownWrapper}>
-                      <Picker
-                        selectedValue={selectedCity}
-                        onValueChange={(val) => setSelectedCity(val)}
-                        style={styles.picker}
-                        dropdownIconColor="#333"
-                      >
-                        {/* ... your picker items ... */}
-                      </Picker>
-                    </View>
+                  <View style={styles.statsCards}>
+                    <TouchableOpacity onPress={() => setShowStudentsList(true)}>
+                      <View style={styles.card}>
+                        <Text style={styles.cardTop}>
+                          {contacts?.length > 0 ? contacts.length : 0}
+                        </Text>
+                        <Text style={styles.cardBottom}>My enrolled Students</Text>
+                      </View>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setShowSubjectsList(true)}>
+                      <View style={styles.cardMiddle}>
+                        <Text style={styles.cardTop}>
+                          {subjectCount > 0 ? subjectCount : 0}
+                        </Text>
+                        <Text style={styles.cardBottom}>Subjects</Text>
+                      </View>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.endcard}
+                      onPress={() => router.push({
+                        pathname: "/(tabs)/TeacherDashBoard/CongratsTeacher",
+                        params: { teacherName, createdAt, userEmail }
+                      })}
+                    >
+                      <Text style={styles.cardTop}>{createdAt ? formatDate(createdAt) : 'N/A'}</Text>
+                      <Text style={styles.cardBottom}>Joined Date</Text>
+                    </TouchableOpacity>
                   </View>
 
-                  <View style={styles.chartContent}>
-                    <LineChart
-                      data={{
-                        labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-                        datasets: [{ data: [20, 45, 28, 80, 99, 43] }],
-                      }}
-                      width={wp("93%")}
-                      height={hp("32.570%")}
-                      chartConfig={{
-                        backgroundColor: "#fff",
-                        backgroundGradientFrom: "#fff",
-                        backgroundGradientTo: "#fff",
-                        decimalPlaces: 0,
-                        color: (opacity = 1) => `rgba(95, 95, 255, ${opacity})`,
-                        labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                        style: { borderRadius: wp("4.27%") },
-                        propsForDots: { r: "5", strokeWidth: "2", stroke: "#5f5fff" },
-                      }}
-                      bezier
-                      style={styles.chart}
-                    />
-                  </View>
-                </View>
-              </ScrollView>
+                  <InfiniteReviewScroll />
+                  <View style={styles.chartContainer}>
+                    <View style={styles.enrollmentRow}>
+                      <Text style={styles.enrollmentLabel}>Student Enrolled</Text>
+                      <View style={styles.dropDownWrapper}>
+                        <Picker
+                          selectedValue={selectedCity}
+                          onValueChange={(val) => setSelectedCity(val)}
+                          style={styles.picker}
+                          dropdownIconColor="#333"
+                        >
+                          {/* ... your picker items ... */}
+                        </Picker>
+                      </View>
+                    </View>
 
-              <BottomNavigation userType="teacher" />
-            </View>
-            
-            {/* Right Screen (Index 2) */}
-            <View style={[styles.screen, { width }]}>
-              <RightScreen />
-            </View>
-        {/* ADD THIS VISUAL OVERLAY */}
-</Animated.View>
+                    <View style={styles.chartContent}>
+                      <LineChart
+                        data={{
+                          labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+                          datasets: [{ data: [20, 45, 28, 80, 99, 43] }],
+                        }}
+                        width={wp("93%")}
+                        height={hp("32.570%")}
+                        chartConfig={{
+                          backgroundColor: "#fff",
+                          backgroundGradientFrom: "#fff",
+                          backgroundGradientTo: "#fff",
+                          decimalPlaces: 0,
+                          color: (opacity = 1) => `rgba(95, 95, 255, ${opacity})`,
+                          labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                          style: { borderRadius: wp("4.27%") },
+                          propsForDots: { r: "5", strokeWidth: "2", stroke: "#5f5fff" },
+                        }}
+                        bezier
+                        style={styles.chart}
+                      />
+                    </View>
+                  </View>
+                </ScrollView>
+
+                <BottomNavigation userType="teacher" />
+              </View>
+              
+              {/* Right Screen (Index 2) */}
+              <View style={[styles.screen, { width }]}>
+                <RightScreen />
+              </View>
+            </Animated.View>
+          </View>
         </View>
-      </View>
-    )}
-  </>
-);
+      )}
+    </>
+  );
 }
+
 const styles = StyleSheet.create({
   marqueeContainer: {
   height: hp("15.7%"),

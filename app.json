@@ -2,7 +2,7 @@
   "expo": {
     "name": "GROWSMART™",
     "slug": "client",
-    "version": "2.0.3",
+    "version": "2.0.4",
     "orientation": "portrait",
     "icon": "./assets/images/growsmart-icon.png",
     "scheme": "client",
@@ -21,7 +21,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.gogrowsmart.app",
-      "versionCode": 7,
+      "versionCode": 8,
       "plugins": [
         "expo-notifications"
       ]
