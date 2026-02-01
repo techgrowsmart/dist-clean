@@ -244,12 +244,6 @@ const RightScreen: React.FC = () => {
               <Text style={styles.headerTitle}>GrowThoughts</Text>
               <Text style={styles.headerSubtitle}>Explore updates& discussions</Text>
             </View>
-            <View style={styles.notificationContainer}>
-              <Ionicons name="notifications" size={24} color="#FFFFFF" />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationText}>2</Text>
-              </View>
-            </View>
           </View>
 
           {/* Input Area */}

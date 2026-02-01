@@ -35,10 +35,11 @@ import Sidebar from "./Sidebar";
 import axios from "axios";
 import { getFavoriteTeachers } from '../../../services/favoriteTeachers' 
 import { AntDesign } from '@expo/vector-icons';
+import { favoritesEvents, FAVORITES_CHANGED_EVENT } from '../../../utils/favoritesEvents';
 
 const ITEMS_PER_PAGE = 6;
 
-const Favourite = ({ onBack }) => {
+const Favourite = ({ onBack, onFavoritesChange }) => {
   const router = useRouter();
   const [currentPage, setCurrentPage] = useState(1);
   const [allFavourites, setAllFavourites] = useState([]);
@@ -206,6 +207,14 @@ const Favourite = ({ onBack }) => {
         // API call to remove from favorites
         const { removeFavoriteTeacher } = await import('../../../services/favoriteTeachers');
         await removeFavoriteTeacher(teacherEmail);
+        
+        // Emit favorites change event
+        favoritesEvents.emit(FAVORITES_CHANGED_EVENT);
+        
+        // Notify parent component of favorites change
+        if (onFavoritesChange) {
+            onFavoritesChange();
+        }
         
     } catch (error) {
         console.error('Error removing favorite:', error);

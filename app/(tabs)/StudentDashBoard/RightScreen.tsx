@@ -64,7 +64,7 @@ const RightScreen: React.FC = () => {
       <View style={styles.container}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.headerTitle}>GrowThoughts</Text>
+            <Text style={styles.headerTitle}>ts</Text>
             <Text style={styles.headerSubtitle}>Explore updates& discussions</Text>
           </View>
           <View style={styles.notificationContainer}>

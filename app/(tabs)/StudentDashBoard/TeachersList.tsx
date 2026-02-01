@@ -20,6 +20,7 @@ import {
 } from "react-native-responsive-screen";
 import { AntDesign } from "@expo/vector-icons";
 import { addFavoriteTeacher, removeFavoriteTeacher, checkFavoriteStatus } from '../../../services/favoriteTeachers';
+import { favoritesEvents, FAVORITES_CHANGED_EVENT } from '../../../utils/favoritesEvents';
 
 const ITEMS_PER_PAGE = 6;
 const { width } = Dimensions.get("window");
@@ -65,11 +66,13 @@ export default function TeachersList({
   selectedClass,
   selectedSubject,
   onBack,
+  onFavoritesChange,
 }: {
   boardName: string;
   selectedClass: string;
   selectedSubject: string;
   onBack: () => void;
+  onFavoritesChange?: () => void;
 }) {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
@@ -242,6 +245,14 @@ const handleLikePress = async (teacherEmail: string) => {
             await removeFavoriteTeacher(teacherEmail);
         } else {
             await addFavoriteTeacher(teacherEmail);
+        }
+        
+        // Emit favorites change event
+        favoritesEvents.emit(FAVORITES_CHANGED_EVENT);
+        
+        // Notify parent component of favorites change
+        if (onFavoritesChange) {
+            onFavoritesChange();
         }
     } catch (error) {
         console.error('Error toggling favorite:', error);

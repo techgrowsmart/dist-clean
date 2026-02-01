@@ -158,7 +158,11 @@ const LeftScreen: React.FC = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <ImageBackground 
+      source={require('../../../assets/images/teacherleftbackground.png')} 
+      style={styles.container}
+      resizeMode="cover"
+    >
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollViewContent} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#5B7FFF']} tintColor="#5B7FFF" />}>
         
         {/* Header */}
@@ -257,20 +261,20 @@ const LeftScreen: React.FC = () => {
           )}
         </View>
       </ScrollView>
-    </View>
+    </ImageBackground>
   );
 };
 
 export default LeftScreen;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#5B7FFF' },
+  container: { flex: 1 },
   scrollView: { flex: 1 },
   scrollViewContent: { paddingBottom: 30 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#5B7FFF' },
-  header: { paddingTop: 50, paddingBottom: 20, alignItems: 'center', backgroundColor: '#5B7FFF' },
+  header: { paddingTop: 50, paddingBottom: 20, alignItems: 'center' },
   headerTitle: { fontSize: 20, fontFamily: 'OpenSans-SemiBold', color: '#fff', letterSpacing: 0.5 },
-  profileSection: { alignItems: 'center', paddingBottom: 25, backgroundColor: '#5B7FFF' },
+  profileSection: { alignItems: 'center', paddingBottom: 25 },
   profileImageContainer: { width: 110, height: 110, borderRadius: 55, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginBottom: 15, borderWidth: 4, borderColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 5, elevation: 5 },
   profileImage: { width: '100%', height: '100%', borderRadius: 55 },
   teacherName: { fontSize: 22, fontFamily: 'OpenSans-Bold', color: '#fff', marginBottom: 5, textAlign: 'center', letterSpacing: 0.3 },
@@ -292,7 +296,7 @@ const styles = StyleSheet.create({
   ratingBarFill: { height: '100%', backgroundColor: '#5B7FFF', borderRadius: 10 },
   ratingPercentage: { width: 45, textAlign: 'right', fontSize: 13, fontFamily: 'Quicksand-Medium', color: '#999', marginLeft: 15 },
   feedbackHeader: { paddingHorizontal: 20, paddingBottom: 15 },
-  feedbackTitle: { fontSize: 16, fontFamily: 'Quicksand-Bold', color: '#fff', letterSpacing: 0.3 },
+  feedbackTitle: { fontSize: 16, fontFamily: 'Quicksand-Bold', color: '#333', letterSpacing: 0.3 },
   reviewsSection: { paddingHorizontal: 20 },
   reviewCard: { backgroundColor: '#fff', borderRadius: 20, padding: 20, marginBottom: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: '#F0F0F0' },
   reviewHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 0 },
@@ -307,6 +311,6 @@ const styles = StyleSheet.create({
   reviewText: { fontSize: 13, fontFamily: 'Quicksand-Regular', color: '#555', lineHeight: 20 },
   reviewContent: { marginTop: 12, paddingTop: 0 },
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50, paddingHorizontal: 30 },
-  emptyStateText: { fontSize: 16, color: '#fff', textAlign: 'center', marginTop: 10, fontFamily: 'Quicksand-SemiBold' },
-  emptyStateSubtext: { fontSize: 14, color: '#E8EFFF', textAlign: 'center', marginTop: 8, fontFamily: 'Quicksand-Regular', lineHeight: 20 },
+  emptyStateText: { fontSize: 16, color: '#333', textAlign: 'center', marginTop: 10, fontFamily: 'Quicksand-SemiBold' },
+  emptyStateSubtext: { fontSize: 14, color: '#666', textAlign: 'center', marginTop: 8, fontFamily: 'Quicksand-Regular', lineHeight: 20 },
 });

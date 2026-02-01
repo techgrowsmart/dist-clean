@@ -3,18 +3,21 @@ import { router, usePathname } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Entypo, } from '@expo/vector-icons';
+import { Entypo, AntDesign } from '@expo/vector-icons';
 
 import ChatIcon from "../../assets/svgIcons/ChatIcon";
 import HomeIcon from "../../assets/svgIcons/Home";
 import PersonIcon from "../../assets/svgIcons/Person";
+import { getFavoriteTeachers } from '../../services/favoriteTeachers';
+import { favoritesEvents, FAVORITES_CHANGED_EVENT } from '../../utils/favoritesEvents';
 
 const { width } = Dimensions.get("window");
 
 const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => {
   const currentPath = usePathname();
   const [pressedIndex, setPressedIndex] = useState<number | null>(null);
-  const [hasFavorites, setHasFavorites] = useState(false);
+  const [favoritesCount, setFavoritesCount] = useState(0);
+  const [isLoadingFavorites, setIsLoadingFavorites] = useState(true);
 
   useEffect(() => {
     if (Platform.OS === "android") {
@@ -22,28 +25,49 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
     }
   }, []);
 
-  // Check if user is on Favourite page and has favorites
+  // Fetch actual favorites count
   useEffect(() => {
-    const checkFavorites = async () => {
+    const fetchFavoritesCount = async () => {
       try {
-        // Check if we're on the Favourite page
-        const isOnFavouritePage = currentPath.includes("Favourite") || 
-                                 currentPath.includes("favourite") || 
-                                 currentPath.includes("Favorites") ||
-                                 currentPath.includes("favorites");
-        
-        if (isOnFavouritePage) {
-          setHasFavorites(true); // Assume has favorites if on the page
-        } else {
-          setHasFavorites(false);
-        }
+        setIsLoadingFavorites(true);
+        const favorites = await getFavoriteTeachers();
+        setFavoritesCount(Array.isArray(favorites) ? favorites.length : 0);
       } catch (error) {
-        console.error("Error checking favorites:", error);
+        console.error("Error fetching favorites count:", error);
+        setFavoritesCount(0);
+      } finally {
+        setIsLoadingFavorites(false);
       }
     };
 
-    checkFavorites();
-  }, [currentPath]);
+    fetchFavoritesCount();
+  }, [currentPath]); // Refetch when path changes to catch updates
+
+  // Listen for favorites changes
+  useEffect(() => {
+    const handleFavoritesChange = () => {
+      fetchFavoritesCount();
+    };
+
+    favoritesEvents.on(FAVORITES_CHANGED_EVENT, handleFavoritesChange);
+
+    return () => {
+      favoritesEvents.off(FAVORITES_CHANGED_EVENT, handleFavoritesChange);
+    };
+  }, []);
+
+  const fetchFavoritesCount = async () => {
+    try {
+      setIsLoadingFavorites(true);
+      const favorites = await getFavoriteTeachers();
+      setFavoritesCount(Array.isArray(favorites) ? favorites.length : 0);
+    } catch (error) {
+      console.error("Error fetching favorites count:", error);
+      setFavoritesCount(0);
+    } finally {
+      setIsLoadingFavorites(false);
+    }
+  };
 
   const isTabActive = (tabPath: string) => {
     // For Messages/Connect tab - match any messages/chat related paths
@@ -68,8 +92,22 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
     return isTabActive(tabPath) ? "#ffffff" : "#82878F";
   };
 
+  const getStarIcon = () => {
+    const isActive = isTabActive("Favourite");
+    const hasFavorites = favoritesCount > 0;
+    
+    if (isActive) {
+      return "star"; // Filled star when tab is active
+    } else if (hasFavorites) {
+      return "star"; // Filled star when has favorites
+    } else {
+      return "star-outlined"; // Outlined star when no favorites
+    }
+  };
+
   const getStarStyle = () => {
     const isActive = isTabActive("Favourite");
+    const hasFavorites = favoritesCount > 0;
     
     if (isActive) {
       return "#ffffff"; // White when tab is active
@@ -93,7 +131,7 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
       },
       { 
         name: "Favourite", 
-        icon: <Entypo name="star" size={36} color={getStarStyle()} />,
+        icon: <AntDesign name={favoritesCount > 0 ? "star" : "staro"} size={36} color={getStarStyle()} />,
         path: "/StudentDashBoard/Favourite",
         exactPath: "/StudentDashBoard/Favourite"
       },
@@ -177,7 +215,7 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
                 { width: iconContainerSize, height: iconContainerSize, borderRadius: iconContainerSize / 2 }
               ]}>
                 {isFavouriteTab ? (
-                    <Entypo name="star" size={32} color={getStarStyle()} />
+                    <AntDesign name={favoritesCount > 0 ? "star" : "staro"} size={32} color={getStarStyle()} />
                 ) : React.isValidElement(tab.icon) 
                   ? React.cloneElement(tab.icon as React.ReactElement<any>, {
                       color: isActive ? '#ffffff' : '#82878F'
