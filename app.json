@@ -2,7 +2,7 @@
   "expo": {
     "name": "GROWSMART",
     "slug": "client",
-    "version": "2.0.6",
+    "version": "2.0.7",
     "orientation": "portrait",
     "icon": "./assets/images/growsmart-icon.png",
     "scheme": "client",
@@ -15,13 +15,14 @@
     },
     "android": {
       "appName": "GROWSMART",
+      "label": "GROWSMART",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/growsmart-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.growsmart.app",
-      "versionCode": 10,
+      "versionCode": 11,
       "plugins": [
         "expo-notifications"
       ]

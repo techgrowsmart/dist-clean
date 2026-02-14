@@ -1,4 +1,5 @@
 package com.growsmart.app
+// CI/CD Test: Updated package name to com.growsmart.app
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
