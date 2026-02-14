@@ -95,7 +95,7 @@ const SidebarMenu = ({
                 const isActive = activeItem === item.name;
                 return (
                   <TouchableOpacity
-                    key={index}
+                    key={`${rowIndex}-${index}`}
                     onPress={() => handleItemPress(item.name)}
                     style={[styles.card, isActive && styles.activeCard]}
                   >

@@ -1,7 +1,9 @@
 // API service for posts/thoughts functionality
 // This file handles all API calls to the backend
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'https://growsmartserver.gogrowsmart.com/api';
+
+console.log('🔗 API_BASE_URL:', API_BASE_URL);
 
 // Get auth token - replace with your actual auth implementation
 const getAuthToken = async (): Promise<string> => {
@@ -10,11 +12,13 @@ const getAuthToken = async (): Promise<string> => {
   return 'your-auth-token-here';
 };
 
-// Generic API request helper
+// Generic API request helper with fetch for direct connection
 const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
   try {
     const token = await getAuthToken();
     const url = `${API_BASE_URL}${endpoint}`;
+    
+    console.log('🌐 Making API request to:', url);
     
     const defaultOptions: RequestInit = {
       headers: {
@@ -24,7 +28,13 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
       },
     };
 
-    const response = await fetch(url, { ...defaultOptions, ...options });
+    const response = await fetch(url, { 
+      ...defaultOptions, 
+      ...options,
+      // Force direct connection, bypassing any potential proxy
+      cache: 'no-cache',
+      mode: 'cors'
+    });
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));

@@ -19,10 +19,12 @@
     },
     "production": {
       "android": {
+        "buildType": "apk"
+      }
+    },
+    "production-aab": {
+      "android": {
         "buildType": "app-bundle"
-      },
-      "ios": {
-        "simulator": false
       }
     }
   }

@@ -17,7 +17,7 @@ import DownloadIcon from "../../assets/svgIcons/Downlode";
 
 const { width, height } = Dimensions.get("window");
 
-const invoices = ["Invoice_1.pdf", "Invoice_2.pdf", "Invoice_3.pdf"," Invoice_4.pdf", "Invoice_5.pdf", "Invoice_6.pdf", "Invoice_7.pdf", "Invoice_8.pdf", "Invoice_9.pdf", "Invoice_10.pdf"];
+const invoices = [0];
 
 const Billing = () => {
   const [userType, setUserType] = useState<"student" | "teacher" | null>(null);

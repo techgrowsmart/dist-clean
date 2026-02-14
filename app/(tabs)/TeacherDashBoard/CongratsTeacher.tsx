@@ -27,9 +27,13 @@ export default function CongratsTeacher() {
       setTeacherName(params.teacherName as string);
     }
     if (params.createdAt) {
+      console.log('🔍 CongratsTeacher - createdAt param:', params.createdAt);
       const joinDate = new Date(params.createdAt as string);
+      console.log('📅 CongratsTeacher - parsed joinDate:', joinDate);
       setDateOfJoining(formatDate(joinDate));
-      setDaysSinceJoining(calculateDaysSince(joinDate));
+      const days = calculateDaysSince(joinDate);
+      console.log('📊 CongratsTeacher - calculated days:', days);
+      setDaysSinceJoining(days);
     }
   }, [params]);
 

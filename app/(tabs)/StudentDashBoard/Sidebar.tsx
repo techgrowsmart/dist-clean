@@ -1,12 +1,6 @@
 import { useRouter } from "expo-router";
 import React from "react";
-import {
-  Image,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
-} from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View, Linking } from "react-native";
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import BillIcon from "../../../assets/svgIcons/Bill";
 import ContactPhoneIcon from "../../../assets/svgIcons/ContactPhone";
@@ -18,17 +12,16 @@ import SubscriptionIcon from "../../../assets/svgIcons/SubscriptionIcon";
 import Terms from "../../../assets/svgIcons/Terms";
 import TutorCap from "../../../assets/svgIcons/TutorCap";
 import { clearAllStorage } from "../../../utils/authStorage";
-import { Linking } from "react-native";
 
 const menuItems = [
   { name: "My Tuitions", icon: TutorCap },
   { name: "Share", icon: ShareIcon },
-  { name: "Faq", icon: FaqIcon },
-  { name: "Billing", icon: BillIcon },
   { name: "Subscription", icon: SubscriptionIcon },
-  { name: "Contact Us", icon: ContactPhoneIcon },
+  { name: "Billing", icon: BillIcon },
+  { name: "Faq", icon: FaqIcon },
   { name: "Terms & Conditions", icon: Terms },
   { name: "Privacy Policy", icon: PrivacyAndPolicy },
+  { name: "Contact Us", icon: ContactPhoneIcon },
 ];
 
 type SidebarProps = {
@@ -41,33 +34,20 @@ type SidebarProps = {
   profileImage: string | null;
 };
 
-const Sidebar = ({
-  visible,
-  onClose,
-  activeItem,
-  onItemPress,
-  userEmail,
-  studentName,
-  profileImage,
-}: SidebarProps) => {
+const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, studentName, profileImage }: SidebarProps) => {
   const router = useRouter();
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);
 
   if (!visible) return null;
 
-  const handleLogout = () => {
-    setShowLogoutModal(true);
-  };
+  const handleLogout = () => setShowLogoutModal(true);
 
   const handleItemPress = (itemName: string) => {
     if (itemName === "Terms & Conditions") {
-      // Open terms and conditions in browser
       Linking.openURL("https://gogrowsmart.com/terms-and-conditions");
     } else if (itemName === "Privacy Policy") {
-      // Open privacy policy in browser
       Linking.openURL("https://gogrowsmart.com/privacy-policy");
     } else {
-      // Handle other menu items normally
       onItemPress(itemName);
     }
   };
@@ -84,89 +64,91 @@ const Sidebar = ({
     }
   };
 
-  const rows = [];
-  for (let i = 0; i < menuItems.length; i += 2) {
-    rows.push(menuItems.slice(i, i + 2));
-  }
-
   return (
-    <TouchableOpacity activeOpacity={1} onPress={onClose} style={styles.overlay}>
-      <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.sidebar}>
-        {/* Menu Items */}
-        <View style={styles.menuContainer}>
-          {rows.map((row, rowIndex) => (
-            <View key={rowIndex} style={styles.row}>
-              {row.map((item, index) => {
-                const IconComponent = item.icon;
-                const isActive = activeItem === item.name;
-                return (
-                  <TouchableOpacity
-                    key={index}
-                    onPress={() => handleItemPress(item.name)}
-                    style={[styles.card, isActive && styles.activeCard]}
-                  >
-                    <IconComponent size={wp('5%')} color="#FFF" />
-                    <Text 
-                      style={[styles.cardText, isActive && styles.activeCardText]}
-                      numberOfLines={2}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.8}
-                    >
-                      {item.name}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-              {row.length === 1 && <View style={styles.cardPlaceholder} />}
-            </View>
-          ))}
-        </View>
-
-        {/* Profile Section */}
-        <View style={styles.profileContainer}>
+    <TouchableOpacity activeOpacity={1} onPress={onClose} style={{ position: "absolute", top: hp('5%'), left: 0, right: 0, bottom: hp('10%'), zIndex: 99, justifyContent: "flex-start" }}>
+      <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ width: wp('35%'), height: hp('85%'), backgroundColor: "#3131b0", paddingHorizontal: wp('3%'), paddingTop: hp('2%'), paddingBottom: hp('2%'), zIndex: 100, justifyContent: "space-between" }}>
+        
+        {/* Profile Section at Top */}
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: hp('2%') }}>
           {profileImage ? (
-            <Image source={{ uri: profileImage }} style={styles.profileImage} />
+            <Image source={{ uri: profileImage }} style={{ width: wp('12%'), height: wp('12%'), borderRadius: wp('6%'), borderWidth: 1, borderColor: "#FFF" }} />
           ) : (
-            <View style={styles.placeholderImage}>
-              <Text style={styles.initialText}>
+            <View style={{ width: wp('12%'), height: wp('12%'), borderRadius: wp('6%'), borderWidth: 1, borderColor: "#FFF", backgroundColor: "#9CA3AF", alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ fontSize: wp('4.5%'), color: "#FFF", fontWeight: "600", fontFamily: "Poppins" }}>
                 {studentName ? studentName[0]?.toUpperCase() : "?"}
               </Text>
             </View>
           )}
-          <View style={styles.profileDetails}>
-            <Text style={styles.helloText}>Hello</Text>
-            <Text 
-              style={styles.teacherName} 
-              numberOfLines={1} 
-              ellipsizeMode="tail"
-              adjustsFontSizeToFit
-              minimumFontScale={0.8}
-            >
-              {studentName}
-            </Text>
-          </View>
         </View>
 
-        {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <LogoutIcon size={wp('5%')} color="#FFF" />
-          <Text style={styles.logoutText}>Log Out</Text>
+        {/* Menu Items - Vertical Column with Icons on Top, Text Below */}
+        <View style={{ flex: 1, justifyContent: "flex-start" }}>
+          {menuItems.map((item, index) => {
+            const IconComponent = item.icon;
+            const isActive = activeItem === item.name;
+            return (
+              <TouchableOpacity
+                key={index}
+                onPress={() => handleItemPress(item.name)}
+                style={{
+                  backgroundColor: isActive ? "#FF7B42" : "#5f5fff",
+                  paddingVertical: hp('1.5%'),
+                  borderRadius: wp('1.5%'),
+                  marginBottom: hp('1.2%'),
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexDirection: "column",
+                  height: hp('7%')
+                }}
+              >
+                <View style={{ marginBottom: hp('0.3%') }}>
+                  <IconComponent size={wp('4%')} color="#FFF" />
+                </View>
+                <Text style={{
+                  fontSize: wp('2.5%'),
+                  color: "#FFF",
+                  fontFamily: "Poppins",
+                  fontWeight: isActive ? "600" : "400",
+                  textAlign: "center",
+                }}>
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Raise a Complaint Text */}
+        <Text style={{ fontSize: wp('3%'), color: "#FFF", fontFamily: "Poppins", fontWeight: "400", marginBottom: hp('1%'), marginTop: hp('0.5%') }}>
+          Raise a Complaint
+        </Text>
+
+        {/* Logout Button at Bottom */}
+        <TouchableOpacity style={{ flexDirection: "row", alignItems: "center", paddingVertical: hp('1%') }} onPress={handleLogout}>
+          <LogoutIcon size={wp('4%')} color="#FFF" />
+          <Text style={{ fontSize: wp('3.2%'), color: "#FFF", fontWeight: "600", marginLeft: wp('1.2%'), fontFamily: "Poppins" }}>
+            Log Out
+          </Text>
         </TouchableOpacity>
       </TouchableOpacity>
 
       {/* Logout Modal */}
       {showLogoutModal && (
-        <View style={styles.fullscreenModal}>
-          <TouchableOpacity style={styles.closeIcon} onPress={() => setShowLogoutModal(false)}>
-            <Text style={styles.closeIconText}>×</Text>
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#FFF", justifyContent: "center", alignItems: "center", zIndex: 1000, paddingHorizontal: wp('8%') }}>
+          <TouchableOpacity style={{ position: "absolute", top: hp('6%'), right: wp('6%'), zIndex: 1001, backgroundColor: "#F3F4F6", width: wp('8%'), height: wp('8%'), borderRadius: wp('4%'), justifyContent: "center", alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 }} onPress={() => setShowLogoutModal(false)}>
+            <Text style={{ fontSize: wp('4%'), fontWeight: "600", color: "#6B7280", fontFamily: "Poppins" }}>×</Text>
           </TouchableOpacity>
-          <Text style={styles.fullscreenTitle}>Are you sure you want to sign out?</Text>
-          <Text style={styles.fullscreenSubtext}>
+          <Text style={{ color: "#111827", fontSize: wp('5%'), fontWeight: "700", textAlign: "center", fontFamily: "Poppins", marginBottom: hp('2%') }}>
+            Are you sure you want to sign out?
+          </Text>
+          <Text style={{ color: "#6B7280", fontSize: wp('3.2%'), textAlign: "center", marginBottom: hp('4%'), paddingHorizontal: wp('4%'), lineHeight: hp('2.8%'), fontFamily: "Poppins", fontWeight: "400" }}>
             You will need to log back in to access your personalized learning dashboard and live classes.
           </Text>
-          <View style={styles.fullscreenButtonContainer}>
-            <TouchableOpacity style={[styles.fullscreenButton, styles.fullscreenLogout]} onPress={confirmLogout}>
-              <Text style={styles.fullscreenButtonText}>Confirm Log Out</Text>
+          <View style={{ width: "100%", alignItems: "center" }}>
+            <TouchableOpacity style={{ width: wp('70%'), paddingVertical: hp('1.8%'), borderRadius: wp('2%'), backgroundColor: "#EF4444", justifyContent: "center", alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 }} onPress={confirmLogout}>
+              <Text style={{ color: "#FFF", fontSize: wp('3.5%'), fontWeight: "600", fontFamily: "Poppins" }}>
+                Confirm Log Out
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -174,207 +156,5 @@ const Sidebar = ({
     </TouchableOpacity>
   );
 };
-
-const CARD_GAP = wp('2%');
-const CARD_MARGIN = CARD_GAP / 2;
-
-const styles = StyleSheet.create({
-  overlay: { 
-    position: "absolute", 
-    top: hp('5%'), 
-    left: 0, 
-    right: 0, 
-    bottom: 0, 
-    zIndex: 99, 
-    justifyContent: "flex-start" 
-  },
-  sidebar: { 
-    width: wp('50%'), 
-    minHeight: hp('60%'),
-    maxHeight: hp('90%'), // Add max height
-    backgroundColor: "#3131b0", 
-    padding: CARD_GAP,
-    paddingBottom: hp('2%'), // Add bottom padding
-    zIndex: 100, 
-    justifyContent: "space-between"
-  },
-  menuContainer: { 
-    flex: 1, 
-    justifyContent: "flex-start",
-    marginBottom: hp('1%') // Add margin to separate from logout button
-  },
-  row: { 
-    flexDirection: "row", 
-    marginBottom: CARD_GAP,
-    minHeight: hp('8%') // Ensure minimum height for rows
-  },
-  card: { 
-    flex: 1, 
-    backgroundColor: "#5f5fff", 
-    paddingVertical: hp('1.5%'), // Reduced padding
-    alignItems: "center", 
-    justifyContent: "center", 
-    marginHorizontal: CARD_MARGIN,
-    minHeight: hp('7%'), // Minimum height for cards
-    borderRadius: wp('1%') // Added borderRadius for better appearance
-  },
-  activeCard: { backgroundColor: "#FF7B42" },
-  cardText: { 
-    fontSize: wp('2.8%'), // Slightly increased font size
-    color: "#FFF", 
-    marginTop: hp('0.5%'), 
-    textAlign: "center", 
-    fontFamily: "Poppins", 
-    fontWeight: "400", 
-    lineHeight: hp('1.8%'), // Increased line height
-    includeFontPadding: false, // Remove extra font padding
-    textAlignVertical: "center" // Better vertical alignment
-  },
-  activeCardText: { color: "#FFF", fontWeight: "600", fontFamily: "Poppins" },
-  cardPlaceholder: { flex: 1, marginHorizontal: CARD_MARGIN },
-  profileContainer: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    marginBottom: hp('1%'), 
-    marginTop: hp('1%'),
-    minHeight: hp('8%') // Ensure profile section has minimum height
-  },
-  profileImage: { 
-    width: wp('16%'), 
-    height: wp('16%'), 
-    borderRadius: wp('16%'), 
-    borderWidth: 1, 
-    borderColor: "#FFF" 
-  },
-  placeholderImage: { 
-    width: wp('12%'), 
-    height: wp('12%'), 
-    borderRadius: wp('6%'), 
-    borderWidth: 1, 
-    borderColor: "#FFF", 
-    backgroundColor: "#9CA3AF", 
-    alignItems: "center", 
-    justifyContent: "center" 
-  },
-  initialText: { 
-    fontSize: wp('4%'), 
-    color: "#FFF", 
-    fontWeight: "600", 
-    fontFamily: "Poppins" 
-  },
-  profileDetails: { 
-    marginLeft: wp('3%'), 
-    flex: 1,
-    justifyContent: "center"
-  },
-  helloText: { 
-    fontSize: wp('5.2%'), 
-    color: "#FFF", 
-    fontFamily: "Poppins", 
-    fontWeight: "400",
-  },
-  teacherName: { 
-    fontSize: wp('5%'), 
-    color: "#FFF", 
-    fontWeight: "600", 
-    fontFamily: "Poppins",
-    includeFontPadding: false,
-    textAlignVertical: "center"
-  },
-  logoutButton: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    paddingVertical: hp('1%'),
-    minHeight: hp('6%'), // Increased minimum height
-    borderRadius: wp('1%'), // Match other elements
-    paddingHorizontal: wp('3%'), // Add horizontal padding
-    marginTop: 'auto' // Push to bottom
-  },
-  logoutText: { 
-    fontSize: wp('3.8%'), 
-    color: "#FFF", 
-    fontWeight: "600", 
-    marginLeft: wp('2%'), 
-    fontFamily: "Poppins",
-    includeFontPadding: false
-  },
-  fullscreenModal: { 
-    position: "absolute", 
-    top: 0, 
-    left: 0, 
-    right: 0, 
-    bottom: 0, 
-    backgroundColor: "#FFF", 
-    justifyContent: "center", 
-    alignItems: "center", 
-    zIndex: 1000, 
-    paddingHorizontal: wp('8%') 
-  },
-  fullscreenTitle: { 
-    color: "#111827", 
-    fontSize: wp('5%'), 
-    fontWeight: "700", 
-    textAlign: "center", 
-    fontFamily: "Poppins", 
-    marginBottom: hp('2%') 
-  },
-  fullscreenSubtext: { 
-    color: "#6B7280", 
-    fontSize: wp('3.2%'), 
-    textAlign: "center", 
-    marginBottom: hp('4%'), 
-    paddingHorizontal: wp('4%'), 
-    lineHeight: hp('2.8%'), 
-    fontFamily: "Poppins", 
-    fontWeight: "400" 
-  },
-  fullscreenButtonContainer: { 
-    width: "100%", 
-    alignItems: "center" 
-  },
-  fullscreenButton: { 
-    width: wp('70%'), 
-    paddingVertical: hp('1.8%'), 
-    borderRadius: wp('2%'), 
-    backgroundColor: "#4F46E5", 
-    justifyContent: "center", 
-    alignItems: "center", 
-    shadowColor: "#000", 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.1, 
-    shadowRadius: 8, 
-    elevation: 4 
-  },
-  fullscreenLogout: { backgroundColor: "#EF4444" },
-  fullscreenButtonText: { 
-    color: "#FFF", 
-    fontSize: wp('3.5%'), 
-    fontWeight: "600", 
-    fontFamily: "Poppins" 
-  },
-  closeIcon: { 
-    position: "absolute", 
-    top: hp('6%'), 
-    right: wp('6%'), 
-    zIndex: 1001, 
-    backgroundColor: "#F3F4F6", 
-    width: wp('8%'), 
-    height: wp('8%'), 
-    borderRadius: wp('4%'), 
-    justifyContent: "center", 
-    alignItems: "center", 
-    shadowColor: "#000", 
-    shadowOffset: { width: 0, height: 2 }, 
-    shadowOpacity: 0.1, 
-    shadowRadius: 4, 
-    elevation: 2 
-  },
-  closeIconText: { 
-    fontSize: wp('4%'), 
-    fontWeight: "600", 
-    color: "#6B7280", 
-    fontFamily: "Poppins" 
-  },
-});
 
 export default Sidebar;

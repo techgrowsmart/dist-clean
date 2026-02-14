@@ -107,6 +107,7 @@ export default function LoginOtp() {
           role: data.role || "student",
           email: email as string,
           token: data.token,
+          name: data.name || "",
         });
 
         if (data.role === "teacher") {
@@ -179,7 +180,9 @@ export default function LoginOtp() {
             {otp.map((digit, index) => (
               <View key={index} style={styles.otpInputWrapper}>
                 <TextInput
-                  ref={(ref) => (inputRefs.current[index] = ref)}
+                  ref={(ref) => {
+                    inputRefs.current[index] = ref;
+                  }}
                   style={[styles.otpInput, digit ? styles.otpInputFilled : styles.otpInputEmpty]}
                   value={digit}
                   onChangeText={(text) => handleChange(text, index)}

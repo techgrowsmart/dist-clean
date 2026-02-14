@@ -6,6 +6,7 @@ export interface AuthData {
     email: string;
     token: string;
     name?: string;
+    profileImage?: string;
 }
 
 export const storeAuthData = async (authData: Partial<AuthData>) => {
@@ -25,6 +26,10 @@ export const storeAuthData = async (authData: Partial<AuthData>) => {
         if (authData.name) {
             await AsyncStorage.setItem("user_name", authData.name);
         }
+
+        if (authData.profileImage) {
+            await AsyncStorage.setItem("user_profile_image", authData.profileImage);
+        }
         await AsyncStorage.setItem("is_logged_in", "true");
 
         console.log("Auth data stored successfully");
@@ -40,9 +45,10 @@ export const getAuthData = async (): Promise<AuthData | null> => {
         const token = await AsyncStorage.getItem("user_token");
         const isLoggedIn = await AsyncStorage.getItem("is_logged_in");
         const name = await AsyncStorage.getItem("user_name");
+        const profileImage = await AsyncStorage.getItem("user_profile_image");
 
         if (isLoggedIn === "true" && role && token) {
-            return { role, email: email || "", token, name: name || "" };
+            return { role, email: email || "", token, name: name || "", profileImage: profileImage || undefined };
         }
 
         return null;

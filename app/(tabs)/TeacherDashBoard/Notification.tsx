@@ -57,7 +57,7 @@ const TeacherNotification = () => {
                     'Authorization': `Bearer ${currentToken}`,
                     'Content-Type': 'application/json'
                 },
-                timeout: 15000
+                timeout: 5000 // Reduced from 15s to 5s
             });
             
             console.log(`✅ Notifications fetched successfully: ${response.data.length} items`);
@@ -95,9 +95,11 @@ const TeacherNotification = () => {
     useFocusEffect(
         React.useCallback(() => {
             fetchNotifications();
-            const interval = setInterval(fetchNotifications, 60000);
-            return () => clearInterval(interval);
-        }, [])
+            // Removed excessive polling - only fetch on focus
+            return () => {
+                // Cleanup if needed
+            };
+        }, [fetchNotifications])
     );
 
     const formatTime = (dateString: string | Date) => {

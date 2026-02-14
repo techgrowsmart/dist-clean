@@ -5,7 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
-import React = require('react');
+import React from 'react';
 import { useColorScheme } from '../hooks/useColorScheme';
 import axios from "axios";
 import { Platform } from 'react-native';

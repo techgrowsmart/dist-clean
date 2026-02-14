@@ -8,8 +8,9 @@ import { Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold, useFonts } fr
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Dimensions, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Animated, PanResponder, StyleProp, ViewStyle } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Dimensions, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Animated, PanResponder } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import RazorpayCheckout from "react-native-razorpay";
 import AllBoardsPage from "./AllBoardsPage";
 import ClassSelection from "./ClassSelection";
@@ -61,86 +62,96 @@ interface Teacher {
   qualification?: string;
 }
 
-const SWIPE_THRESHOLD = 120;
-const SWIPE_OUT_DURATION = 250;
+const SWIPE_THRESHOLD = 0.2;
+const VELOCITY_THRESHOLD = 0.5;
 const SCREEN_COUNT = 3;
 
 export default function Home() {
   const router = useRouter();
   const { email } = useLocalSearchParams();
-  
-  // Swipe animation values
-  const position = useRef(new Animated.Value(0)).current;
+  const { width } = Dimensions.get('window');
   const [currentScreenIndex, setCurrentScreenIndex] = useState(1);
   const swipeAnim = useRef(new Animated.Value(0)).current;
-  const { width } = Dimensions.get('window');
-  
-  const panResponder = useRef(
+  const [isSwiping, setIsSwiping] = useState(false);
+  const swipeStartX = useRef(0);
+  const isSwipeLocked = useRef(false);
+
+const panResponder = useRef(
   PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: (_, gestureState) => {
-      const { dx, dy } = gestureState;
-      return Math.abs(dx) > Math.abs(dy) * 2 && Math.abs(dx) > 5;
+    onStartShouldSetPanResponder: () => false,
+
+    onMoveShouldSetPanResponder: (_, { dx, dy }) => {
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+      return absDx > 18 && absDx > absDy * 1.6;
     },
+
     onPanResponderGrant: () => {
+      if (isSwipeLocked.current) return;
+      setIsSwiping(true);
       swipeAnim.stopAnimation();
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     },
-    onPanResponderMove: (_, gestureState) => {
-      const { dx } = gestureState;
-      const newPosition = -width * currentScreenIndex + dx;
-      
-      // Clamp the movement
-      const minPosition = -width * (SCREEN_COUNT - 1);
-      const maxPosition = 0;
-      const clampedPosition = Math.max(minPosition, Math.min(maxPosition, newPosition));
-      
-      swipeAnim.setValue(clampedPosition);
+
+    onPanResponderMove: (_, { dx }) => {
+      if (isSwipeLocked.current) return;
+
+      // ✅ curved drag resistance (feels more native)
+      const curvedDx = dx * 0.85;
+
+      let newPosition = -width * currentScreenIndex + curvedDx;
+
+      const min = -width * (SCREEN_COUNT - 1);
+      const max = 0;
+
+      // ✅ stronger edge resistance
+      if (currentScreenIndex === 0 && dx > 0) newPosition *= 0.4;
+      if (currentScreenIndex === SCREEN_COUNT - 1 && dx < 0) newPosition *= 0.4;
+
+      swipeAnim.setValue(Math.max(min, Math.min(max, newPosition)));
     },
-    onPanResponderRelease: (_, gestureState) => {
-      const { dx, vx } = gestureState;
-      const swipeThreshold = width * 0.2;
-      const velocityThreshold = 0.5;
-      
+
+    onPanResponderRelease: (_, { dx }) => {
+      if (isSwipeLocked.current) return;
+
+      setIsSwiping(false);
+
+      // ✅ slightly easier threshold for better UX
+      const threshold = width * 0.26;
+
       let newIndex = currentScreenIndex;
-      
-      const isSwipeLeft = dx < -swipeThreshold || (dx < 0 && vx < -velocityThreshold);
-      const isSwipeRight = dx > swipeThreshold || (dx > 0 && vx > velocityThreshold);
-      
-      if (isSwipeLeft) {
-        newIndex = Math.min(SCREEN_COUNT - 1, currentScreenIndex + 1);
-      } else if (isSwipeRight) {
-        newIndex = Math.max(0, currentScreenIndex - 1);
-      }
-      
+
+      if (dx < -threshold) newIndex++;
+      else if (dx > threshold) newIndex--;
+
+      newIndex = Math.max(0, Math.min(SCREEN_COUNT - 1, newIndex));
+
+      // ✅ lock during snap animation
+      isSwipeLocked.current = true;
+
       Animated.spring(swipeAnim, {
         toValue: -width * newIndex,
         useNativeDriver: true,
-        friction: 8,
-        tension: 50,
+        tension: 95,
+        friction: 12,
         overshootClamping: true,
-      }).start();
-      
+      }).start(() => {
+        isSwipeLocked.current = false;
+      });
+
+      if (newIndex !== currentScreenIndex) {
+        Haptics.selectionAsync();
+      }
+
       setCurrentScreenIndex(newIndex);
-    },
-    onPanResponderTerminate: () => {
-      Animated.spring(swipeAnim, {
-        toValue: -width * currentScreenIndex,
-        useNativeDriver: true,
-        friction: 8,
-        tension: 50,
-      }).start();
     },
   })
 ).current;
 
-  const animateTransition = (toValue: number) => {
-    Animated.spring(position, {
-      toValue,
-      useNativeDriver: true,
-      tension: 50,
-      friction: 10,
-    }).start();
-  };
+  useEffect(() => {
+    swipeAnim.setValue(-width);
+    setCurrentScreenIndex(1);
+  }, []);
 
   const { height } = Dimensions.get('window');
   
@@ -197,25 +208,130 @@ export default function Home() {
   ];
 
   useEffect(() => {
-    // Set initial position to show home screen (index 1)
-    swipeAnim.setValue(-width);
-    setCurrentScreenIndex(1);
-  }, [swipeAnim, width]);
-
-  useEffect(() => {
     if (isSearching && searchQuery.trim() !== "") {
       const randomIndex = Math.floor(Math.random() * aiTexts.length);
       setSelectedAiTextIndex(randomIndex);
     }
   }, [isSearching, searchQuery]);
 
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const auth = await getAuthData();
+      if (!auth?.token) {
+        console.log("❌ [fetchUnreadCount] No auth token available");
+        return;
+      }
+
+      console.log("🔔 [fetchUnreadCount] Fetching unread count...");
+      const response = await axios.get(
+        `${BASE_URL}/api/notifications/unread-count`,
+        {
+          headers: {
+            'Authorization': `Bearer ${auth.token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      console.log("📊 [fetchUnreadCount] Response:", response.data);
+      if (response.data && typeof response.data.count === 'number') {
+        setUnreadCount(response.data.count);
+        console.log("✅ [fetchUnreadCount] Unread count set to:", response.data.count);
+      } else {
+        console.log("⚠️ [fetchUnreadCount] Invalid response format:", response.data);
+      }
+    } catch (error: any) {
+      console.error("❌ [fetchUnreadCount] Error fetching unread count:", error);
+      if (error.response) {
+        console.error("Response status:", error.response.status);
+        console.error("Response data:", error.response.data);
+      }
+    }
+  }, []);
+
   useEffect(() => {
-    if (studentName) {
+    console.log("🔔 [useEffect] Checking storedUserEmail:", storedUserEmail);
+    if (storedUserEmail) {
+      console.log("🔔 [useEffect] Starting fetchUnreadCount and interval");
       fetchUnreadCount();
       const interval = setInterval(fetchUnreadCount, 30000);
-      return () => clearInterval(interval);
+      return () => {
+        console.log("🔔 [useEffect] Cleaning up interval");
+        clearInterval(interval);
+      };
+    } else {
+      console.log("🔔 [useEffect] No storedUserEmail, skipping fetch");
     }
-  }, [studentName, fetchUnreadCount]);
+  }, [storedUserEmail, fetchUnreadCount]);
+
+  const fetchProfileAndBalance = async () => {
+    try {
+      const auth = await getAuthData();
+      if (!auth || !auth.email) {
+        Alert.alert("Session Expired", "Please log in again.");
+        return;
+      }
+
+      const { email } = auth;
+      
+      if (email === "student1@example.com") {
+        console.log('🔓 [fetchProfileAndBalance] Using student1 bypass - accessing REAL data');
+      }
+
+      const headers = {
+        Authorization: `Bearer ${auth.token}`,
+        "Content-Type": "application/json",
+      };
+
+      const profileResponse = await axios.post(
+        `${BASE_URL}/api/userProfile`,
+        { email },
+        { headers }
+      );
+
+      const profileData = profileResponse.data;
+    
+      setStudent({
+        name: profileData.name || "",
+        profileImage: profileData.profileimage || null,
+      });
+
+      setStudentName(profileData.name || "");
+      setProfileImage(profileData.profileimage || null);
+
+      await AsyncStorage.multiSet([
+        ["studentName", profileData.name || ""],
+        ["profileImage", profileData.profileimage || ""],
+      ]);
+   
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        console.log('🔒 [fetchProfileAndBalance] Authentication failed - using fallback');
+      } else {
+        console.log('🌐 [fetchProfileAndBalance] Network error - using fallback');
+      }
+      
+      console.log("🔄 Using fallback student data");
+      const cachedName = await AsyncStorage.getItem("studentName");
+      const cachedImage = await AsyncStorage.getItem("profileImage");
+      
+      if (cachedName) {
+        setStudent({
+          name: cachedName,
+          profileImage: cachedImage || null,
+        });
+        setStudentName(cachedName);
+        setProfileImage(cachedImage || null);
+      } else {
+        setStudent({
+          name: "Student",
+          profileImage: null,
+        });
+        setStudentName("Student");
+        setProfileImage(null);
+      }
+    }
+  };
 
   const [selectedBoard, setSelectedBoard] = useState<{
     boardId: string;
@@ -246,228 +362,254 @@ export default function Home() {
     return () => blinkAnimation.stop();
   }, []);
 
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      console.log('🔍 [fetchUnreadCount] Fetching unread count...');
-      const auth = await getAuthData();
-      if (!auth?.token) {
-        console.log('🔑 [fetchUnreadCount] No auth token found');
-        return;
-      }
-      
-      if (auth.email === "student1@example.com") {
-        console.log('🔓 [fetchUnreadCount] Using student1 bypass - accessing REAL data');
-      }
-      
-      const response = await axios.get(`${BASE_URL}/api/notifications/unread-count`, {
-        headers: { 'Authorization': `Bearer ${auth.token}`, 'Content-Type': 'application/json' },
-      });
-      console.log('📊 [fetchUnreadCount] Response:', response.data);
-      if (response.data && typeof response.data.count === 'number') {
-        console.log(`✅ [fetchUnreadCount] Setting unread count to: ${response.data.count}`);
-        setUnreadCount(response.data.count);
-      } else {
-        console.log('⚠️ [fetchUnreadCount] Invalid response format:', response.data);
-      }
-    } catch (error: any) {
-      // Handle 403 authentication errors gracefully
-      if (error.response?.status === 403) {
-        console.log('🔒 [fetchUnreadCount] Authentication failed - using fallback');
-      } else {
-        console.log('🌐 [fetchUnreadCount] Network error - using fallback');
-      }
-      
-      // Always use fallback for development/testing
-      console.log('🔄 Using fallback unread count');
-      setUnreadCount(0);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (studentName) {
-      fetchUnreadCount();
-      const interval = setInterval(fetchUnreadCount, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [studentName, fetchUnreadCount]);
-
-useEffect(() => {
-  if (studentName) {
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000);
-    return () => clearInterval(interval);
-  }
-}, [studentName, fetchUnreadCount]);
-
-const fetchProfileAndBalance = async () => {
-  try {
-    const auth = await getAuthData();
-    if (!auth || !auth.email) {
-      Alert.alert("Session Expired", "Please log in again.");
-      return;
-    }
-
-    const { email } = auth;
-    
-    // Handle bypass for student1@example.com - allow real data access
-    if (email === "student1@example.com") {
-      console.log('🔓 [fetchProfileAndBalance] Using student1 bypass - accessing REAL data');
-      // Continue to real API call with real JWT token - no mock data
-    }
-
-    const headers = {
-      Authorization: `Bearer ${auth.token}`,
-      "Content-Type": "application/json",
-    };
-
-    const profileResponse = await axios.post(
-      `${BASE_URL}/api/userProfile`,
-      { email },
-      {
-        headers,
-      }
-    );
-
-    const profileData = profileResponse.data;
-  
-    setStudent({
-      name: profileData.name || "",
-      profileImage: profileData.profileimage || null,
-    });
-
-    setStudentName(profileData.name || "");
-    setProfileImage(profileData.profileimage || null);
-
-    await AsyncStorage.multiSet([
-      ["studentName", profileData.name || ""],
-      ["profileImage", profileData.profileimage || ""],
-    ]);
- 
-  } catch (error: any) {
-    // Handle 403 authentication errors gracefully
-    if (error.response?.status === 403) {
-      console.log('🔒 [fetchProfileAndBalance] Authentication failed - using fallback');
-    } else {
-      console.log('🌐 [fetchProfileAndBalance] Network error - using fallback');
-    }
-    
-    // Fallback to cached data for development
-    console.log("🔄 Using fallback student data");
-    const cachedName = await AsyncStorage.getItem("studentName");
-    const cachedImage = await AsyncStorage.getItem("profileImage");
-    
-    if (cachedName) {
-      setStudent({
-        name: cachedName,
-        profileImage: cachedImage || null,
-      });
-      setStudentName(cachedName);
-      setProfileImage(cachedImage || null);
-    } else {
-      // Final fallback to default data
-      setStudent({
-        name: "Student",
-        profileImage: null,
-      });
-      setStudentName("Student");
-      setProfileImage(null);
-    }
-  }
-};
-
-useEffect(() => {
-  const debounceTimer = setTimeout(() => {
-    if (searchQuery.trim() !== "") {
-      setIsSearching(true);
-      setPage(1);
-      setHasMoreData(true);
-      fetchTeachers(false);
-    } else {
-      // When search query becomes empty, exit search mode immediately
-      setIsSearching(false);
-      setShowAiText(false);
-      setPage(1);
-      setHasMoreData(true);
-      
-      // Reset teachers to show all teachers instead of empty search results
-      fetchTeachers(false);
-    }
-  }, 300); // Reduced debounce time for faster search
-  
-  return () => clearTimeout(debounceTimer);
-}, [searchQuery]);
-
-  useEffect(() => {
-    if (showAllPopular) {
-      fetchTeachers(page > 1);
-    }
-  }, [page]);
-
   useEffect(() => {
     fetchProfileAndBalance();
   }, []);
 
   useEffect(() => {
-    
     const loadUserEmail = async () => {
       try {
         const storedRole = await AsyncStorage.getItem("user_role");
         const storedEmail = await AsyncStorage.getItem("userEmail");
+        console.log("🔔 [loadUserEmail] Retrieved from AsyncStorage:", { storedRole, storedEmail });
+        
         if (storedEmail) {
           setStoredUserEmail(storedEmail);
-          
           if (storedRole) {
             setUserRole(storedRole);
           }
+          console.log("✅ [loadUserEmail] User data loaded successfully");
         } else {
-          console.log("No user email found in AsyncStorage");
+          console.log("⚠️ [loadUserEmail] No user email found in AsyncStorage");
+          const auth = await getAuthData();
+          if (auth?.email) {
+            console.log("🔄 [loadUserEmail] Using auth data fallback:", auth.email);
+            setStoredUserEmail(auth.email);
+            if (auth.role) {
+              setUserRole(auth.role);
+            }
+          }
         }
       } catch (error) {
-        console.error("Error loading user email:", error);
+        console.error("❌ [loadUserEmail] Error loading user email:", error);
       }
     };
     loadUserEmail();
   }, []);
 
-  useEffect(() => {
-    if (showAllPopular) {
-      fetchTeachers(page > 1);
-    }
-  }, [page]);
+  const fetchTeachers = useCallback(
+    async (isLoadMore = false) => {
+      if (loadingMore || !hasMoreData) return;
 
+      try {
+        setLoadingMore(true);
 
-const fetchTeachers = useCallback(
-  async (isLoadMore = false) => {
-    if (loadingMore || !hasMoreData) return;
+        const body: any = {
+          count: 10,
+          page,
+        };
+        
+        if (searchQuery.trim() !== "") {
+          body.search = searchQuery.trim();
+        }
+        
+        if (selectedClass) body.className = selectedClass;
+        if (selectedSubject) body.subject = selectedSubject;
+        if (selectedBoard?.boardName) body.board = selectedBoard.boardName;
 
-    try {
-      setLoadingMore(true);
+        const auth = await getAuthData();
+        if (!auth || !auth.token) {
+          Alert.alert("Session Expired", "Please log in again.");
+          return;
+        }
 
-      const body: any = {
-        count: 10,
-        page,
-      };
-      
-      // 🚨 CRITICAL: Always send search query to backend
-      if (searchQuery.trim() !== "") {
-        body.search = searchQuery.trim();
+        if (auth.email === "student1@example.com") {
+          console.log('🔓 [fetchTeachers] Using student1 bypass - but accessing REAL data');
+        }
+
+        const headers = {
+          Authorization: `Bearer ${auth.token}`,
+          "Content-Type": "application/json",
+        };
+
+        const response = await axios.post(
+          `${BASE_URL}/api/teachers`,
+          body,
+          { headers }
+        );
+
+        console.log("📊 TEACHERS API RESPONSE with search:", { 
+          searchQuery, 
+          responseData: response.data 
+        });
+
+        const spotlightObj = response.data.spotlightTeachers || {};
+        const popularObj = response.data.popularTeachers || {};
+
+        const cleanTeacher = (teacher: any): Teacher => {
+          let tuitions = [];
+          let qualifications = [];
+
+          try {
+            tuitions = teacher?.tuitions ? JSON.parse(teacher.tuitions) : [];
+          } catch (err) {
+            console.warn("❌ Failed to parse tuitions for", teacher.email, err);
+          }
+
+          try {
+            qualifications = teacher?.qualifications
+              ? JSON.parse(teacher.qualifications)
+              : [];
+          } catch (err) {
+            console.warn(
+              "❌ Failed to parse qualifications for",
+              teacher.email,
+              err
+            );
+          }
+
+          return {
+            _id: teacher._id || teacher.email,
+            profilePic:
+              typeof teacher.profilePic === "string"
+                ? teacher.profilePic.replace(/"/g, "").trim()
+                : require("../../../assets/images/Profile.png"),
+            name: teacher.name || "Unknown",
+            email: teacher.email || "Unknown",
+            isPopular: !!teacher.isspotlight,
+            tutions: tuitions,
+            qualifications: qualifications,
+            language: teacher.language || "",
+            qualification: "",
+          };
+        };
+
+        const cleanedSubjectSpotlight = (spotlightObj["Subject teacher"] || []).map(cleanTeacher);
+        const cleanedSkillSpotlight = (spotlightObj["Skill teacher"] || []).map(cleanTeacher);
+        const cleanedSubjectPopular = (popularObj["Subject teacher"] || []).map(cleanTeacher);
+        const cleanedSkillPopular = (popularObj["Skill teacher"] || []).map(cleanTeacher);
+
+        const filterByName = (teachers: Teacher[]) => {
+          if (searchQuery.trim() === "") return teachers;
+          
+          const query = searchQuery.toLowerCase().trim();
+          return teachers.filter(teacher => 
+            teacher.name.toLowerCase().includes(query)
+          );
+        };
+
+        const filteredSubjectSpotlight = filterByName(cleanedSubjectSpotlight);
+        const filteredSkillSpotlight = filterByName(cleanedSkillSpotlight);
+        const filteredSubjectPopular = filterByName(cleanedSubjectPopular);
+        const filteredSkillPopular = filterByName(cleanedSkillPopular);
+
+        const seenEmails = new Set();
+        const uniqueSubjectSpotlight: Teacher[] = [];
+        const uniqueSkillSpotlight: Teacher[] = [];
+        const uniqueSubjectPopular: Teacher[] = [];
+        const uniqueSkillPopular: Teacher[] = [];
+
+        for (const teacher of filteredSubjectSpotlight) {
+          if (!seenEmails.has(teacher.email)) {
+            seenEmails.add(teacher.email);
+            uniqueSubjectSpotlight.push(teacher);
+          }
+        }
+
+        for (const teacher of filteredSkillSpotlight) {
+          if (!seenEmails.has(teacher.email)) {
+            seenEmails.add(teacher.email);
+            uniqueSkillSpotlight.push(teacher);
+          }
+        }
+
+        for (const teacher of filteredSubjectPopular) {
+          if (!seenEmails.has(teacher.email)) {
+            seenEmails.add(teacher.email);
+            uniqueSubjectPopular.push(teacher);
+          }
+        }
+
+        for (const teacher of filteredSkillPopular) {
+          if (!seenEmails.has(teacher.email)) {
+            seenEmails.add(teacher.email);
+            uniqueSkillPopular.push(teacher);
+          }
+        }
+
+        const totalFetched = 
+          uniqueSubjectSpotlight.length + 
+          uniqueSkillSpotlight.length + 
+          uniqueSubjectPopular.length + 
+          uniqueSkillPopular.length;
+          
+        if (totalFetched < 10) {
+          setHasMoreData(false);
+        }
+
+        if (isLoadMore) {
+          setAllSpotlightSubjectTeachers((prev) => [
+            ...prev,
+            ...uniqueSubjectSpotlight,
+          ]);
+          setAllSpotlightSkillTeachers((prev) => [...prev, ...uniqueSkillSpotlight]);
+          setAllPopularSubjectTeachers((prev) => [...prev, ...uniqueSubjectPopular]);
+          setAllPopularSkillTeachers((prev) => [...prev, ...uniqueSkillPopular]);
+        } else {
+          setAllSpotlightSubjectTeachers(uniqueSubjectSpotlight);
+          setAllSpotlightSkillTeachers(uniqueSkillSpotlight);
+          setAllPopularSubjectTeachers(uniqueSubjectPopular);
+          setAllPopularSkillTeachers(uniqueSkillPopular);
+        }
+      } catch (error: any) {
+        if (error.response?.status === 403) {
+          console.log('🔒 [fetchTeachers] Authentication failed - using fallback');
+        } else {
+          console.log('🌐 [fetchTeachers] Network error - using fallback');
+        }
+        
+        console.log("🔄 Using fallback teacher data");
+        const mockTeachers: Teacher[] = [
+          {
+            _id: "1",
+            name: "Dr. Sarah Johnson",
+            email: "sarah.j@example.com",
+            profilePic: null,
+            isPopular: true,
+            tutions: [{ subject: "Mathematics", grade: "10" }],
+            qualifications: ["PhD in Mathematics"],
+            language: "English"
+          },
+          {
+            _id: "2", 
+            name: "Prof. Michael Chen",
+            email: "michael.c@example.com",
+            profilePic: null,
+            isPopular: true,
+            tutions: [{ subject: "Physics", grade: "12" }],
+            qualifications: ["MSc in Physics"],
+            language: "English"
+          }
+        ];
+        
+        setAllSpotlightSubjectTeachers(mockTeachers.slice(0, 1));
+        setAllSpotlightSkillTeachers(mockTeachers.slice(0, 1));
+        setAllPopularSubjectTeachers(mockTeachers);
+        setAllPopularSkillTeachers(mockTeachers.slice(0, 1));
+        setHasMoreData(false);
+      } finally {
+        setLoadingMore(false);
       }
-      
-      // 🚨 CRITICAL: Also send filters if they exist
-      if (selectedClass) body.className = selectedClass;
-      if (selectedSubject) body.subject = selectedSubject;
-      if (selectedBoard?.boardName) body.board = selectedBoard.boardName;
+    },
+    [page, selectedClass, selectedSubject, searchQuery, loadingMore, hasMoreData, selectedBoard]
+  );
 
+  const fetchInitialTeachers = useCallback(async () => {
+    try {
       const auth = await getAuthData();
-      if (!auth || !auth.token) {
+      if (!auth?.token) {
         Alert.alert("Session Expired", "Please log in again.");
         return;
-      }
-
-      // Handle bypass for student1@example.com - allow anyone to access
-      if (auth.email === "student1@example.com") {
-        console.log('🔓 [fetchTeachers] Using student1 bypass - but accessing REAL data');
-        // Continue to real API call - no mock data
       }
 
       const headers = {
@@ -477,14 +619,11 @@ const fetchTeachers = useCallback(
 
       const response = await axios.post(
         `${BASE_URL}/api/teachers`,
-        body,
+        { count: 10, page: 1 },
         { headers }
       );
 
-      console.log("📊 TEACHERS API RESPONSE with search:", { 
-        searchQuery, 
-        responseData: response.data 
-      });
+      console.log("📊 INITIAL TEACHERS API RESPONSE (after clearing search):", response.data);
 
       const spotlightObj = response.data.spotlightTeachers || {};
       const popularObj = response.data.popularTeachers || {};
@@ -512,6 +651,7 @@ const fetchTeachers = useCallback(
         }
 
         return {
+          _id: teacher._id || teacher.email,
           profilePic:
             typeof teacher.profilePic === "string"
               ? teacher.profilePic.replace(/"/g, "").trim()
@@ -526,215 +666,23 @@ const fetchTeachers = useCallback(
         };
       };
 
-      // Clean all teachers first
-      const cleanedSubjectSpotlight = (spotlightObj["Subject teacher"] || []).map(cleanTeacher);
-      const cleanedSkillSpotlight = (spotlightObj["Skill teacher"] || []).map(cleanTeacher);
-      const cleanedSubjectPopular = (popularObj["Subject teacher"] || []).map(cleanTeacher);
-      const cleanedSkillPopular = (popularObj["Skill teacher"] || []).map(cleanTeacher);
+      setAllSpotlightSubjectTeachers((spotlightObj["Subject teacher"] || []).map(cleanTeacher).slice(0, 50));
+      setAllSpotlightSkillTeachers((spotlightObj["Skill teacher"] || []).map(cleanTeacher).slice(0, 4));
+      setAllPopularSubjectTeachers((popularObj["Subject teacher"] || []).map(cleanTeacher));
+      setAllPopularSkillTeachers((popularObj["Skill teacher"] || []).map(cleanTeacher));
 
-      // Apply additional client-side filtering for safety
-      const filterByName = (teachers: Teacher[]) => {
-        if (searchQuery.trim() === "") return teachers;
-        
-        const query = searchQuery.toLowerCase().trim();
-        return teachers.filter(teacher => 
-          teacher.name.toLowerCase().includes(query)
-        );
-      };
-
-      const filteredSubjectSpotlight = filterByName(cleanedSubjectSpotlight);
-      const filteredSkillSpotlight = filterByName(cleanedSkillSpotlight);
-      const filteredSubjectPopular = filterByName(cleanedSubjectPopular);
-      const filteredSkillPopular = filterByName(cleanedSkillPopular);
-
-      // Deduplicate by email
-      const seenEmails = new Set();
-      const uniqueSubjectSpotlight: Teacher[] = [];
-      const uniqueSkillSpotlight: Teacher[] = [];
-      const uniqueSubjectPopular: Teacher[] = [];
-      const uniqueSkillPopular: Teacher[] = [];
-
-      // Process subject spotlight teachers
-      for (const teacher of filteredSubjectSpotlight) {
-        if (!seenEmails.has(teacher.email)) {
-          seenEmails.add(teacher.email);
-          uniqueSubjectSpotlight.push(teacher);
-        }
-      }
-
-      // Process skill spotlight teachers
-      for (const teacher of filteredSkillSpotlight) {
-        if (!seenEmails.has(teacher.email)) {
-          seenEmails.add(teacher.email);
-          uniqueSkillSpotlight.push(teacher);
-        }
-      }
-
-      // Process subject popular teachers
-      for (const teacher of filteredSubjectPopular) {
-        if (!seenEmails.has(teacher.email)) {
-          seenEmails.add(teacher.email);
-          uniqueSubjectPopular.push(teacher);
-        }
-      }
-
-      // Process skill popular teachers
-      for (const teacher of filteredSkillPopular) {
-        if (!seenEmails.has(teacher.email)) {
-          seenEmails.add(teacher.email);
-          uniqueSkillPopular.push(teacher);
-        }
-      }
-
-      const totalFetched = 
-        uniqueSubjectSpotlight.length + 
-        uniqueSkillSpotlight.length + 
-        uniqueSubjectPopular.length + 
-        uniqueSkillPopular.length;
-        
-      if (totalFetched < 10) {
-        setHasMoreData(false);
-      }
-
-      if (isLoadMore) {
-        setAllSpotlightSubjectTeachers((prev) => [
-          ...prev,
-          ...uniqueSubjectSpotlight,
-        ]);
-        setAllSpotlightSkillTeachers((prev) => [...prev, ...uniqueSkillSpotlight]);
-        setAllPopularSubjectTeachers((prev) => [...prev, ...uniqueSubjectPopular]);
-        setAllPopularSkillTeachers((prev) => [...prev, ...uniqueSkillPopular]);
-      } else {
-        setAllSpotlightSubjectTeachers(uniqueSubjectSpotlight);
-        setAllSpotlightSkillTeachers(uniqueSkillSpotlight);
-        setAllPopularSubjectTeachers(uniqueSubjectPopular);
-        setAllPopularSkillTeachers(uniqueSkillPopular);
-      }
-    } catch (error: any) {
-      // Handle 403 authentication errors gracefully
-      if (error.response?.status === 403) {
-        console.log('🔒 [fetchTeachers] Authentication failed - using fallback');
-      } else {
-        console.log('🌐 [fetchTeachers] Network error - using fallback');
-      }
-      
-      // Fallback to mock teachers for development
-      console.log("🔄 Using fallback teacher data");
-      const mockTeachers: Teacher[] = [
-        {
-          _id: "1",
-          name: "Dr. Sarah Johnson",
-          email: "sarah.j@example.com",
-          profilePic: null,
-          isPopular: true,
-          tutions: [{ subject: "Mathematics", grade: "10" }],
-          qualifications: ["PhD in Mathematics"],
-          language: "English"
-        },
-        {
-          _id: "2", 
-          name: "Prof. Michael Chen",
-          email: "michael.c@example.com",
-          profilePic: null,
-          isPopular: true,
-          tutions: [{ subject: "Physics", grade: "12" }],
-          qualifications: ["MSc in Physics"],
-          language: "English"
-        }
-      ];
-      
-      setAllSpotlightSubjectTeachers(mockTeachers.slice(0, 1));
-      setAllSpotlightSkillTeachers(mockTeachers.slice(0, 1));
-      setAllPopularSubjectTeachers(mockTeachers);
-      setAllPopularSkillTeachers(mockTeachers.slice(0, 1));
-      setHasMoreData(false);
-    } finally {
-      setLoadingMore(false);
+    } catch (error) {
+      console.error("❌ Error fetching initial teachers:", error);
+      Alert.alert("Error", "Failed to load teachers.");
     }
-  },
-  [page, selectedClass, selectedSubject, searchQuery, loadingMore, hasMoreData]
-);
-
-const fetchInitialTeachers = useCallback(async () => {
-  try {
-    const auth = await getAuthData();
-    if (!auth?.token) {
-      Alert.alert("Session Expired", "Please log in again.");
-      return;
-    }
-
-    const headers = {
-      Authorization: `Bearer ${auth.token}`,
-      "Content-Type": "application/json",
-    };
-
-    const response = await axios.post(
-      `${BASE_URL}/api/teachers`,
-      { count: 10, page: 1 },
-      { headers }
-    );
-
-    console.log("📊 INITIAL TEACHERS API RESPONSE (after clearing search):", response.data);
-
-    const spotlightObj = response.data.spotlightTeachers || {};
-    const popularObj = response.data.popularTeachers || {};
-
-    const cleanTeacher = (teacher: any): Teacher => {
-      let tuitions = [];
-      let qualifications = [];
-
-      try {
-        tuitions = teacher?.tuitions ? JSON.parse(teacher.tuitions) : [];
-      } catch (err) {
-        console.warn("❌ Failed to parse tuitions for", teacher.email, err);
-      }
-
-      try {
-        qualifications = teacher?.qualifications
-          ? JSON.parse(teacher.qualifications)
-          : [];
-      } catch (err) {
-        console.warn(
-          "❌ Failed to parse qualifications for",
-          teacher.email,
-          err
-        );
-      }
-
-      return {
-        profilePic:
-          typeof teacher.profilePic === "string"
-            ? teacher.profilePic.replace(/"/g, "").trim()
-            : require("../../../assets/images/Profile.png"),
-        name: teacher.name || "Unknown",
-        email: teacher.email || "Unknown",
-        isPopular: !!teacher.isspotlight,
-        tutions: tuitions,
-        qualifications: qualifications,
-        language: teacher.language || "",
-        qualification: "",
-      };
-    };
-
-    // Update all teacher lists with initial data (limited for homepage)
-    setAllSpotlightSubjectTeachers((spotlightObj["Subject teacher"] || []).map(cleanTeacher).slice(0, 50));
-    setAllSpotlightSkillTeachers((spotlightObj["Skill teacher"] || []).map(cleanTeacher).slice(0, 4));
-    setAllPopularSubjectTeachers((popularObj["Subject teacher"] || []).map(cleanTeacher));
-    setAllPopularSkillTeachers((popularObj["Skill teacher"] || []).map(cleanTeacher));
-
-  } catch (error) {
-    console.error("❌ Error fetching initial teachers:", error);
-    Alert.alert("Error", "Failed to load teachers.");
-  }
-}, []);
+  }, []);
 
   useEffect(() => {
     fetchTeachers(true);
   }, []);
 
+  if (!fontsLoaded) return <Text style={{fontFamily: 'Poppins_400Regular', fontSize: 16, textAlign: 'center', marginTop: 50}}>Loading...</Text>;
 
-
-  if (!fontsLoaded) return <Text>Loading...</Text>;
   const renderContent = () => {
     switch (currentSection) {
       case "spotlight":
@@ -744,8 +692,7 @@ const fetchInitialTeachers = useCallback(async () => {
           <AllBoardsPage
             onBack={() => setCurrentSection("home")}
             onBoardSelect={(boardName: string, boardId: string) => {
-             
-              setSelectedBoard({ boardName, boardId });
+              setSelectedBoard({ boardName, boardId } as any);
               setCurrentSection("classSelection");
             }}
           />
@@ -760,13 +707,12 @@ const fetchInitialTeachers = useCallback(async () => {
               classId: string;
               className: string;
             }) => {
-             
               setSelectedBoard((prev) => ({
                 ...prev!,
                 selectedClass,
                 className: selectedClass.className,
                 classId: selectedClass.classId,
-                subjectsPerClass: selectedBoard?.subjectsPerClass || [],
+                subjectsPerClass: prev?.subjectsPerClass || [],
               }));
               setCurrentSection("subjectSelection");
             }}
@@ -785,7 +731,6 @@ const fetchInitialTeachers = useCallback(async () => {
             }}
             onBack={() => setCurrentSection("classSelection")}
             onSubjectSelect={(selectedSubject) => {
-           
               setSelectedBoard((prev) => ({
                 ...prev!,
                 selectedSubject,
@@ -794,10 +739,7 @@ const fetchInitialTeachers = useCallback(async () => {
             }}
           />
         );
-
       case "teachers":
-  
-
         return (
           <TeachersList
             boardName={selectedBoard?.boardName || ""}
@@ -810,17 +752,14 @@ const fetchInitialTeachers = useCallback(async () => {
             onBack={() => setCurrentSection("subjectSelection")}
           />
         );
-
       case "myTeachers":
         return <MyTeacher onBack={() => setCurrentSection("home")} />;
-
       case "skill":
         return (
           <AllSkills
             category="Skill teacher"
             onBack={() => setCurrentSection("home")}
             onSkillSelect={(selectedSkill: string) => {
-            
               setSelectedBoard((prev) => ({
                 ...prev!,
                 selectedSkill,
@@ -829,7 +768,6 @@ const fetchInitialTeachers = useCallback(async () => {
             }}
           />
         );
-
       case "skillTeachers":
         return (
           <SkillTeachers
@@ -839,7 +777,6 @@ const fetchInitialTeachers = useCallback(async () => {
             allPopularSkillTeachers={allPopularSkillTeachers}
           />
         );
-
       case "skillspotlight":
         return (
           <SpotLightSkillteachers onBack={() => setCurrentSection("home")} />
@@ -850,573 +787,520 @@ const fetchInitialTeachers = useCallback(async () => {
     }
   };
   
-const MarqueeTeacherList = ({ teachers, isSkill = false, reverseDirection = false }: { teachers: Teacher[], isSkill?: boolean, reverseDirection?: boolean }) => {
-  const router = useRouter();
-  const scrollViewRef = useRef<ScrollView>(null);
-  const scrollInterval = useRef<NodeJS.Timeout | null>(null);
-  const [isPaused, setIsPaused] = useState(false);
+  const MarqueeTeacherList = ({ teachers, isSkill = false, reverseDirection = false }: { teachers: Teacher[], isSkill?: boolean, reverseDirection?: boolean }) => {
+    const router = useRouter();
+    const scrollViewRef = useRef<ScrollView>(null);
+    const scrollInterval = useRef<NodeJS.Timeout | null>(null);
+    const [isPaused, setIsPaused] = useState(false);
 
-  const SCROLL_SPEED = 1.8;
-  const SCROLL_INTERVAL = 36;
+    const SCROLL_SPEED = 1.8;
+    const SCROLL_INTERVAL = 36;
 
-  // Calculate dimensions for seamless looping
-  const cardWidth = wp("29.33%");
-  const cardMargin = wp("2.66%");
-  const totalCardWidth = cardWidth + cardMargin;
-  const totalContentWidth = totalCardWidth * teachers.length * 3; // 3 sets of data for smooth looping
+    const cardWidth = wp("28%");
+    const cardMargin = wp("1.6%");
+    const totalCardWidth = cardWidth + cardMargin;
+    const totalContentWidth = totalCardWidth * teachers.length * 3;
 
-  // Initialize scrollX after totalContentWidth is calculated
-  const scrollX = useRef(reverseDirection ? totalContentWidth : 0);
+    const scrollX = useRef(reverseDirection ? totalContentWidth : 0);
 
- 
-
-  // Auto-scroll animation with seamless looping - UPDATED FOR REVERSE DIRECTION
-  const startAutoScroll = () => {
-    if (scrollInterval.current) {
-      clearInterval(scrollInterval.current);
-    }
-    
-    scrollInterval.current = setInterval(() => {
-      if (!isPaused && scrollViewRef.current && teachers.length > 0) {
-        if (reverseDirection) {
-          // Reverse direction: scroll from right to left
-          scrollX.current -= SCROLL_SPEED;
-          
-          // Reset scroll position when reaching the start for seamless loop
-          if (scrollX.current <= 0) {
-            scrollX.current = totalContentWidth;
-          }
-        } else {
-          // Normal direction: scroll from left to right
-          scrollX.current += SCROLL_SPEED;
-          
-          // Reset scroll position when reaching the end for seamless loop
-          if (scrollX.current >= totalContentWidth) {
-            scrollX.current = 0;
-          }
-        }
-        
-        scrollViewRef.current.scrollTo({ x: scrollX.current, animated: false });
+    const startAutoScroll = () => {
+      if (scrollInterval.current) {
+        clearInterval(scrollInterval.current);
       }
-    }, SCROLL_INTERVAL);
-  };
-
-  const stopAutoScroll = () => {
-    if (scrollInterval.current) {
-      clearInterval(scrollInterval.current);
-      scrollInterval.current = null;
-    }
-  };
-
-  useEffect(() => {
-    if (teachers.length > 0) {
-      startAutoScroll();
-    }
-
-    return () => {
-      stopAutoScroll();
+      
+      scrollInterval.current = setInterval(() => {
+        if (!isPaused && scrollViewRef.current && teachers.length > 0) {
+          if (reverseDirection) {
+            scrollX.current -= SCROLL_SPEED;
+            if (scrollX.current <= 0) {
+              scrollX.current = totalContentWidth;
+            }
+          } else {
+            scrollX.current += SCROLL_SPEED;
+            if (scrollX.current >= totalContentWidth) {
+              scrollX.current = 0;
+            }
+          }
+          
+          scrollViewRef.current.scrollTo({ x: scrollX.current, animated: false });
+        }
+      }, SCROLL_INTERVAL);
     };
-  }, [isPaused, teachers.length]);
 
+    const stopAutoScroll = () => {
+      if (scrollInterval.current) {
+        clearInterval(scrollInterval.current);
+        scrollInterval.current = null;
+      }
+    };
 
-  const handleTouchStart = () => {
-    setIsPaused(true);
-  };
+    useEffect(() => {
+      if (teachers.length > 0) {
+        startAutoScroll();
+      }
+      return () => {
+        stopAutoScroll();
+      };
+    }, [isPaused, teachers.length]);
 
-  const handleTouchEnd = () => {
-    setIsPaused(false);
-  };
+    const handleTouchStart = () => {
+      setIsPaused(true);
+    };
 
-  // If no teachers or very few, just display normally
-  if (teachers.length <= 3) {
+    const handleTouchEnd = () => {
+      setIsPaused(false);
+    };
+
+    if (teachers.length <= 3) {
+      return (
+        <View style={styles.teachersRow}>
+          {teachers.map((item, index) => (
+            <TouchableOpacity
+              key={`${item.email}-${index}`}
+              style={styles.teacherCard}
+              onPress={() => {
+                router.push({
+                  pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
+                  params: {
+                    name: item.name,
+                    email: item.email,
+                    language: item.language,
+                    profilePic: item.profilePic,
+                    ...(isSkill && { profilepic: item.profilePic }),
+                  },
+                });
+              }}
+              activeOpacity={0.7}
+            >
+              <Image
+                source={item.profilePic ? { uri: item.profilePic } : require("../../../assets/images/Profile.png")}
+                style={styles.teacherImage}
+                resizeMode="cover"
+              />
+              <Text style={styles.teacherName} numberOfLines={1}>{item.name}</Text>
+              {!isSkill && (
+                <Text style={styles.teacherSub} numberOfLines={1}>
+                  {item.tutions?.[0]?.subject || "Basic Subject"}
+                </Text>
+              )}
+              {isSkill && (
+                <Text style={styles.teacherSub} numberOfLines={1}>Skill Teacher</Text>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      );
+    }
+
     return (
-      <View style={styles.teachersRow}>
-        {teachers.map((item, index) => (
-          <TouchableOpacity
-            key={`${item.email}-${index}`}
-            style={styles.teacherCard}
-            onPress={() => {
-              router.push({
-                pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
-                params: {
-                  name: item.name,
-                  email: item.email,
-                  language: item.language,
-                  profilePic: item.profilePic,
-                  ...(isSkill && { profilepic: item.profilePic }),
-                },
-              });
-            }}
-            activeOpacity={0.7}
-          >
-            <Image
-              source={item.profilePic ? { uri: item.profilePic } : require("../../../assets/images/Profile.png")}
-              style={styles.teacherImage}
-              resizeMode="cover"
-            />
-            <Text style={styles.teacherName} numberOfLines={1}>{item.name}</Text>
-            {!isSkill && (
-              <Text style={styles.teacherSub} numberOfLines={1}>
-                {item.tutions?.[0]?.subject || "Basic Subject"}
-              </Text>
-            )}
-            {isSkill && (
-              <Text style={styles.teacherSub} numberOfLines={1}>Skill Teacher</Text>
-            )}
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.marqueeTeacherContainer}>
-      <ScrollView
-        ref={scrollViewRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.marqueeTeacherContent}
-        scrollEventThrottle={16}
-        bounces={false}
-        scrollEnabled={false}
-      >
-        {/* Multiple duplicate sets for truly infinite looping */}
-        {[...teachers, ...teachers, ...teachers].map((teacher, index) => (
-          <TouchableOpacity
-            key={`teacher-${teacher.email}-${index}`}
-            style={styles.teacherCard}
-            onPressIn={handleTouchStart}
-            onPressOut={handleTouchEnd}
-            activeOpacity={1}
-            onPress={() => {
-              router.push({
-                pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
-                params: {
-                  name: teacher.name,
-                  email: teacher.email,
-                  language: teacher.language,
-                  profilePic: teacher.profilePic,
-                  ...(isSkill && { profilepic: teacher.profilePic }),
-                },
-              });
-            }}
-          >
-            <View style={styles.imageContainer}>
+      <View style={styles.marqueeTeacherContainer}>
+        <ScrollView
+          ref={scrollViewRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.marqueeTeacherContent}
+          scrollEventThrottle={16}
+          bounces={false}
+          scrollEnabled={false}
+        >
+          {[...teachers, ...teachers, ...teachers].map((teacher, index) => (
+            <TouchableOpacity
+              key={`teacher-${teacher.email}-${index}`}
+              style={styles.teacherCard}
+              onPressIn={handleTouchStart}
+              onPressOut={handleTouchEnd}
+              activeOpacity={0.8}
+              onPress={() => {
+                router.push({
+                  pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
+                  params: {
+                    name: teacher.name,
+                    email: teacher.email,
+                    language: teacher.language,
+                    profilePic: teacher.profilePic,
+                    ...(isSkill && { profilepic: teacher.profilePic }),
+                  },
+                });
+              }}
+            >
               <Image
                 source={teacher.profilePic ? { uri: teacher.profilePic } : require("../../../assets/images/Profile.png")}
                 style={styles.teacherImage}
                 resizeMode="cover"
               />
-            </View>
-            <Text style={styles.teacherName} numberOfLines={1}>{teacher.name}</Text>
-            {!isSkill && (
-              <Text style={styles.teacherSub} numberOfLines={1}>
-                {teacher.tutions?.[0]?.subject || "Basic Subject"}
-              </Text>
-            )}
-            {isSkill && (
-              <Text style={styles.teacherSub} numberOfLines={1}>Skill Teacher</Text>
-            )}
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  );
-};
-
-const renderHome = () => {
-  // Use search results if searching, otherwise use the preview data
-  const displaySpotlightSubjectTeachers = isSearching 
-    ? allSpotlightSubjectTeachers 
-    : allSpotlightSubjectTeachers.slice(0, 50);
-
-  const displaySpotlightSkillTeachers = isSearching 
-    ? allSpotlightSkillTeachers 
-    : allSpotlightSkillTeachers.slice(0, 4);
-
-  // 🚨 FIX: Use View instead of ScrollView when searching to avoid nesting
-  const ContainerComponent = isSearching ? View : ScrollView;
-  const containerProps = isSearching ? {} : {
-    contentContainerStyle: { paddingBottom: hp("13.45%") },
-    showsVerticalScrollIndicator: false
+              <Text style={styles.teacherName} numberOfLines={1}>{teacher.name}</Text>
+              {!isSkill && (
+                <Text style={styles.teacherSub} numberOfLines={1}>
+                  {teacher.tutions?.[0]?.subject || "Subject"}
+                </Text>
+              )}
+              {isSkill && (
+                <Text style={styles.teacherSub} numberOfLines={1}>Skill</Text>
+              )}
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    );
   };
 
-return (
-    <View style={{ flex: 1 }}>
-      <ContainerComponent 
-        style={{ flex: 1 }}
-        {...containerProps}
-      >
-      {/* Show search results indicator when searching */}
-      {isSearching && (
-        <View style={styles.searchResultsContainer}>
-          <Text style={[
-            styles.searchResultsText,
-            showAiText && { fontStyle: 'italic' }
-          ]}>
-            {showAiText 
-              ? aiTexts[selectedAiTextIndex] 
-              : `Search results for "${searchQuery}"`}
-          </Text>
-        </View>
-      )}
+  const renderHome = () => {
+    const displaySpotlightSubjectTeachers = isSearching 
+      ? allSpotlightSubjectTeachers 
+      : allSpotlightSubjectTeachers.slice(0, 50);
 
-      {/* Only show regular sections when NOT searching */}
-      {!isSearching && (
-        <>
-          <View style={styles.mytutorsContainer}>
-            <TouchableOpacity onPress={() => setCurrentSection("boards")}>
-            <View style={styles.mytutorsContainerTitle}>
-              <BookOpenReaderIcon
-                width={wp("13.33%")}
-                height={wp("13.33%")}
-                color="#ffffff"
-              />
-              <Text style={styles.titleText}>My Tutors</Text>
-            </View>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
-      
-      {/* Spotlight Section - Only show header when NOT searching */}
-      {(!isSearching || displaySpotlightSubjectTeachers.length > 0) && (
-        <View style={styles.spotlight}>
-          {/* Remove the spotlight header when searching */}
-          {!isSearching && (
-            <View style={styles.spotlightHeader}>
-              <View style={{ flexDirection: "row", gap: wp("4%") }}>
-                <View style={styles.spotlightT}>
-                  <Text style={styles.tutors}>Tutors</Text>
-                  <Text style={styles.spot}>Spotlight</Text>
-                  <Animated.Text 
-                    style={[
-                      styles.trend, 
-                      { opacity: blinkAnim }
-                    ]}
-                  >
-                    Trending
-                  </Animated.Text>
-                </View>
-              </View>
+    const displaySpotlightSkillTeachers = isSearching 
+      ? allSpotlightSkillTeachers 
+      : allSpotlightSkillTeachers.slice(0, 4);
 
-              <TouchableOpacity onPress={() => setCurrentSection("spotlight")}>
-                <Text style={styles.seeAllText}>See all</Text>
-              </TouchableOpacity>
+    const ContainerComponent = isSearching ? View : ScrollView;
+    const containerProps = isSearching ? {} : {
+      contentContainerStyle: { paddingBottom: hp("13.45%") },
+      showsVerticalScrollIndicator: false
+    };
+
+    return (
+      <View style={{ flex: 1, backgroundColor: '#fff' }}>
+        <ContainerComponent 
+          style={{ flex: 1 }}
+          {...containerProps}
+        >
+          {isSearching && (
+            <View style={styles.searchResultsContainer}>
+              <Text style={[
+                styles.searchResultsText,
+                showAiText && { fontStyle: 'italic' }
+              ]}>
+                {showAiText 
+                  ? aiTexts[selectedAiTextIndex] 
+                  : `Search results for "${searchQuery}"`}
+              </Text>
             </View>
           )}
 
-        {displaySpotlightSubjectTeachers.length > 0 ? (
-          <>
-            {/* 🚨 FIX: Use horizontal FlatList only when not searching */}
-            {!isSearching ? (
-              <>
-<MarqueeTeacherList 
-  teachers={displaySpotlightSubjectTeachers} 
-  isSkill={false}
-/>
-              </>
-            ) : (
-              // 🚨 FIX: Use regular View with map when searching
-              <View style={styles.searchResultsList}>
-                {displaySpotlightSubjectTeachers.map((item) => (
-                  <TouchableOpacity
-                    key={item.email}
-                    style={styles.searchTeacherCard}
-                    onPress={() => {
-                      router.push({
-                        pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
-                        params: {
-                          name: item.name,
-                          email: item.email,
-                          language: item.language,
-                          profilePic: item.profilePic,
-                        },
-                      });
-                    }}
-                  >
-                    <Image
-                      source={item.profilePic ? { uri: item.profilePic } : require("../../../assets/images/Profile.png")}
-                      style={styles.searchTeacherImage}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.searchTeacherInfo}>
-                      <Text style={styles.teacherName}>{item.name}</Text>
-                      <Text style={styles.teacherSub}>
-                        {item.tutions?.[0]?.subject || "Basic Subject"}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </>
-        ) : isSearching ? (
-          <View style={styles.noResultsContainer}>
-            <Text style={styles.noResultsText}>
-              No teachers found for "{searchQuery}"
-            </Text>
-          </View>
-        ) : null}
-      </View>
-      )}
-
-      {/* Only show other sections when not searching */}
-      {!isSearching && (
-        <>
-          <View style={styles.thanksCard}>
-            <Text style={styles.thanksTitle}>Thanksgiving is coming!</Text>
-            <Text style={styles.thanksDescription}>
-              Get up to 50% off for every course on your wishlist. Keep learning
-              something every day. Enjoy!
-            </Text>
-          </View>
-
-          {/* Skill Classes Section */}
-          <View style={styles.mytutorsContainer}>
-            <TouchableOpacity onPress={() => setCurrentSection("skill")}>
-
-            <View style={styles.mytutorsContainerTitle}>
-              <BookOpenReaderIcon width={50} height={50} color="#ffffff" />
-              <Text style={styles.titleText}>Skill Classes</Text>
-            </View>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
-
-           {/* Skill Spotlight Section - Only show header when NOT searching */}
-      {(!isSearching || displaySpotlightSkillTeachers.length > 0) && (
-        <View style={styles.spotlight}>
-          {/* Remove the skill spotlight header when searching */}
           {!isSearching && (
-            <View style={styles.spotlightHeader}>
-              <View style={{ flexDirection: "row", gap: 15 }}>
-                <View style={styles.spotlightT}>
-                  <Text style={styles.tutors}>Skill</Text>
-                  <Text style={styles.spot}>Spotlight</Text>
-                  <Animated.Text 
-                    style={[
-                      styles.trend, 
-                      { opacity: blinkAnim }
-                    ]}
-                  >
-                    Trending
-                  </Animated.Text>
-
-                </View>
-              </View>
-
-              {!isSearching && (
-                <TouchableOpacity onPress={() => setCurrentSection("skillspotlight")}>
-                  <Text style={styles.seeAllText}>See all</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-
-        {displaySpotlightSkillTeachers.length > 0 ? (
-          <>
-            {/* 🚨 FIX: Use horizontal FlatList only when not searching */}
-            {!isSearching ? (
-              <>
-                <MarqueeTeacherList 
-                  teachers={displaySpotlightSkillTeachers} 
-                  isSkill={true}
-                  reverseDirection={true}
-                />
-              </>
-            ) : (
-              // 🚨 FIX: Use regular View with map when searching
-              <View style={styles.searchResultsList}>
-                {displaySpotlightSkillTeachers.map((item) => (
-                  <TouchableOpacity
-                    key={item.email}
-                    style={styles.searchTeacherCard}
-                    onPress={() => {
-                      router.push({
-                        pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
-                        params: {
-                          name: item.name,
-                          email: item.email,
-                          profilepic: item.profilePic,
-                        },
-                      });
-                    }}
-                  >
-                    <Image
-                      source={item.profilePic ? { uri: item.profilePic } : require("../../../assets/images/Profile.png")}
-                      style={styles.searchTeacherImage}
-                      resizeMode="cover"
+            <>
+              <View style={styles.mytutorsContainer}>
+                <TouchableOpacity onPress={() => setCurrentSection("boards")}>
+                  <View style={styles.mytutorsContainerTitle}>
+                    <BookOpenReaderIcon
+                      width={wp("13.33%")}
+                      height={wp("13.33%")}
+                      color="#ffffff"
                     />
-                    <View style={styles.searchTeacherInfo}>
-                      <Text style={styles.teacherName}>{item.name}</Text>
-                      <Text style={styles.teacherSub}>Skill Teacher</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </>
-        ) : isSearching ? (
-          <View style={styles.noResultsContainer}>
-            <Text style={styles.noResultsText}>
-              No skill teachers found for "{searchQuery}"
-            </Text>
-          </View>
-        ) : null}
-      </View>
-      )}
-      
-      {/* Only show offer banner when not searching */}
-      {!isSearching && (
-        <View style={styles.offerBanner}>
-          <Image
-            source={require("../../../assets/image/offer-banner.png")}
-            style={styles.offerImage}
-            resizeMode="cover"
-          />
-        </View>
-      )}
-    </ContainerComponent>
-    </View>
-  );
-};
-
-   return (
-    <View style={styles.container}>
-      {/* Header - Only show on home screen */}
-      {currentScreenIndex === 1 && (
-        <View style={styles.headerContainer}>
-          <View style={styles.logoContainer}>
-            <Text style={styles.logoText}>GROWSMART</Text>
-          </View>
-
-          <View style={styles.topRow}>
-            {/* Profile */}
-            <TouchableOpacity
-              onPress={() => setIsSidebarVisible(true)}
-              style={styles.profileContainer}
-            >
-              <Image
-                style={styles.profileImage}
-                source={
-                  profileImage
-                    ? { uri: profileImage }
-                    : require("../../../assets/images/Profile.png")
-                }
-              />
-            </TouchableOpacity>
-
-            {/* Search */}
-            <View style={styles.searchRow}>
-              <View style={styles.searchInputContainer}>
-                <Image
-                  style={styles.searchIcon}
-                  source={require("../../../assets/images/Search.png")}
-                />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search teachers"
-                  placeholderTextColor="#82878F"
-                  value={searchQuery}
-                  onChangeText={(text) => {
-                    setSearchQuery(text);
-                    if (text.trim() === "") {
-                      setIsSearching(false);
-                      setShowAiText(false);
-                      setPage(1);
-                      setHasMoreData(true);
-                      fetchTeachers(false);
-                    }
-                  }}
-                  returnKeyType="search"
-                  onSubmitEditing={() => {
-                    if (searchQuery.trim() !== "") {
-                      setIsSearching(true);
-                      setShowAiText(false);
-                      setPage(1);
-                      setHasMoreData(true);
-                      fetchTeachers(false);
-                    }
-                  }}
-                />
-                
-                {/* Show AntDesign icon when typing */}
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity 
-                    onPress={() => {
-                      if (searchQuery.trim() !== "") {
-                        setShowAiText(true);
-                        setIsSearching(true);
-                        setPage(1);
-                        setHasMoreData(true);
-                        fetchTeachers(false);
-                        
-                        const randomIndex = Math.floor(Math.random() * aiTexts.length);
-                        setSelectedAiTextIndex(randomIndex);
-                      }
-                    }}
-                    style={styles.questionButton}
-                  >
-                    <AntDesign name="question" size={wp("4.5%")} color="#5f5fff" />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-
-            <TouchableOpacity
-              onPress={() =>
-                router.push("/(tabs)/StudentDashBoard/StudentNotification")
-              }
-            >
-              <View style={{ position: "relative" }}>
-                <NotificationBellIcon size={wp("6.4%")} />
-                {unreadCount > 0 && (
-                  <View style={styles.notificationBadge}>
-                    <Text style={styles.notificationText}>
-                      {unreadCount > 9 ? '9+' : unreadCount}
-                    </Text>
+                    <Text style={styles.titleText}>My Tutors</Text>
                   </View>
-                )}
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-      
-      {/* Swipeable Content Area */}
-   {/* FIXED Swipeable Content Area */}
-    <View style={styles.swipeContainer}>
-      <Animated.View
-        style={[
-          styles.swipeContent,
-          {
-            transform: [{ translateX: swipeAnim }],
-            width: width * SCREEN_COUNT,
-          },
-        ]}
-        {...panResponder.panHandlers}
-      >
-        {/* Left Screen (Index 0) */}
-        <View style={[styles.screen, { width }]}>
-          <LeftScreen />
-        </View>
-        
-        {/* Home Screen (Index 1) */}
-        <View style={[styles.screen, { width }]}>
-          {renderContent()}
-        </View>
-        
-        {/* Right Screen (Index 2) */}
-        <View style={[styles.screen, { width }]}>
-          <RightScreen />
-        </View>
-      </Animated.View>
-    </View>
+            </>
+          )}
+          
+          {(!isSearching || displaySpotlightSubjectTeachers.length > 0) && (
+            <View style={styles.spotlight}>
+              {!isSearching && (
+                <View style={styles.spotlightHeader}>
+                  <View style={{ flexDirection: "row", gap: wp("4%") }}>
+                    <View style={styles.spotlightT}>
+                      <Text style={styles.tutors}>Tutors</Text>
+                      <Text style={styles.spot}>Spotlight</Text>
+                      <Animated.Text 
+                        style={[
+                          styles.trend, 
+                          { opacity: blinkAnim }
+                        ]}
+                      >
+                        Trending
+                      </Animated.Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity onPress={() => setCurrentSection("spotlight")}>
+                    <Text style={styles.seeAllText}>See all</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
-      
-      {/* Swipe Indicators - Only show on home screen */}
+              {displaySpotlightSubjectTeachers.length > 0 ? (
+                <>
+                  {!isSearching ? (
+                    <>
+                      <MarqueeTeacherList 
+                        teachers={displaySpotlightSubjectTeachers} 
+                        isSkill={false}
+                      />
+                    </>
+                  ) : (
+                    <View style={styles.searchResultsList}>
+                      {displaySpotlightSubjectTeachers.map((item) => (
+                        <TouchableOpacity
+                          key={item.email}
+                          style={styles.searchTeacherCard}
+                          onPress={() => {
+                            router.push({
+                              pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
+                              params: {
+                                name: item.name,
+                                email: item.email,
+                                language: item.language,
+                                profilePic: item.profilePic,
+                              },
+                            });
+                          }}
+                        >
+                          <Image
+                            source={item.profilePic ? { uri: item.profilePic } : require("../../../assets/images/Profile.png")}
+                            style={styles.searchTeacherImage}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.searchTeacherInfo}>
+                            <Text style={styles.teacherName}>{item.name}</Text>
+                            <Text style={styles.teacherSub}>
+                              {item.tutions?.[0]?.subject || "Basic Subject"}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </>
+              ) : isSearching ? (
+                <View style={styles.noResultsContainer}>
+                  <Text style={styles.noResultsText}>
+                    No teachers found for "{searchQuery}"
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          )}
+
+          {!isSearching && (
+            <>
+              <Image 
+                source={require("../../../assets/images/growsmart.png")} 
+                style={{ width: '100%', height: 200 }}
+                resizeMode="cover"
+              />
+
+              <View style={styles.mytutorsContainer}>
+                <TouchableOpacity onPress={() => setCurrentSection("skill")}>
+                  <View style={styles.mytutorsContainerTitle}>
+                    <BookOpenReaderIcon width={50} height={50} color="#ffffff" />
+                    <Text style={styles.titleText}>Skill Classes</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          {(!isSearching || displaySpotlightSkillTeachers.length > 0) && (
+            <View style={styles.spotlight}>
+              {!isSearching && (
+                <View style={styles.spotlightHeader}>
+                  <View style={{ flexDirection: "row", gap: 15 }}>
+                    <View style={styles.spotlightT}>
+                      <Text style={styles.tutors}>Skill</Text>
+                      <Text style={styles.spot}>Spotlight</Text>
+                      <Animated.Text 
+                        style={[
+                          styles.trend, 
+                          { opacity: blinkAnim }
+                        ]}
+                      >
+                        Trending
+                      </Animated.Text>
+                    </View>
+                  </View>
+                  {!isSearching && (
+                    <TouchableOpacity onPress={() => setCurrentSection("skillspotlight")}>
+                      <Text style={styles.seeAllText}>See all</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {displaySpotlightSkillTeachers.length > 0 ? (
+                <>
+                  {!isSearching ? (
+                    <>
+                      <MarqueeTeacherList 
+                        teachers={displaySpotlightSkillTeachers} 
+                        isSkill={true}
+                        reverseDirection={true}
+                      />
+                    </>
+                  ) : (
+                    <View style={styles.searchResultsList}>
+                      {displaySpotlightSkillTeachers.map((item) => (
+                        <TouchableOpacity
+                          key={item.email}
+                          style={styles.searchTeacherCard}
+                          onPress={() => {
+                            router.push({
+                              pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
+                              params: {
+                                name: item.name,
+                                email: item.email,
+                                profilepic: item.profilePic,
+                              },
+                            });
+                          }}
+                        >
+                          <Image
+                            source={item.profilePic ? { uri: item.profilePic } : require("../../../assets/images/Profile.png")}
+                            style={styles.searchTeacherImage}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.searchTeacherInfo}>
+                            <Text style={styles.teacherName}>{item.name}</Text>
+                            <Text style={styles.teacherSub}>Skill Teacher</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </>
+              ) : isSearching ? (
+                <View style={styles.noResultsContainer}>
+                  <Text style={styles.noResultsText}>
+                    No skill teachers found for "{searchQuery}"
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          )}
+          
+          {!isSearching && (
+            <View style={styles.offerBanner}>
+              <Image
+                source={require("../../../assets/image/offer-banner.png")}
+                style={styles.offerImage}
+                resizeMode="cover"
+              />
+            </View>
+          )}
+        </ContainerComponent>
+      </View>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.swipeContainer}>
+        <Animated.View
+          style={[
+            styles.swipeContent,
+            {
+              transform: [{ translateX: swipeAnim }],
+              width: width * SCREEN_COUNT,
+            },
+          ]}
+          {...panResponder.panHandlers}
+        >
+          <View style={[styles.screen, { width }]}>
+            <LeftScreen />
+          </View>
+          
+          <View style={[styles.screen, { width }]}>
+            <View style={styles.fullScreenContainer}>
+              <View style={styles.headerContainer}>
+                <View style={styles.logoContainer}>
+                  <Text style={styles.logoText}>GROWSMART</Text>
+                </View>
+
+                <View style={styles.topRow}>
+                  <TouchableOpacity
+                    onPress={() => setIsSidebarVisible(true)}
+                    style={styles.profileContainer}
+                  >
+                    <Image
+                      style={styles.profileImage}
+                      source={
+                        profileImage
+                          ? { uri: profileImage }
+                          : require("../../../assets/images/Profile.png")
+                      }
+                    />
+                  </TouchableOpacity>
+
+                  <View style={styles.searchRow}>
+                    <View style={styles.searchInputContainer}>
+                      <Image
+                        style={styles.searchIcon}
+                        source={require("../../../assets/images/Search.png")}
+                      />
+                      <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search teachers"
+                        placeholderTextColor="#82878F"
+                        value={searchQuery}
+                        onChangeText={(text) => {
+                          setSearchQuery(text);
+                          if (text.trim() === "") {
+                            setIsSearching(false);
+                            setShowAiText(false);
+                            setPage(1);
+                            setHasMoreData(true);
+                            fetchTeachers(false);
+                          }
+                        }}
+                        returnKeyType="search"
+                        onSubmitEditing={() => {
+                          if (searchQuery.trim() !== "") {
+                            setIsSearching(true);
+                            setShowAiText(false);
+                            setPage(1);
+                            setHasMoreData(true);
+                            fetchTeachers(false);
+                          }
+                        }}
+                      />
+                      
+                      {searchQuery.length > 0 && (
+                        <TouchableOpacity 
+                          onPress={() => {
+                            if (searchQuery.trim() !== "") {
+                              setShowAiText(true);
+                              setIsSearching(true);
+                              setPage(1);
+                              setHasMoreData(true);
+                              fetchTeachers(false);
+                              
+                              const randomIndex = Math.floor(Math.random() * aiTexts.length);
+                              setSelectedAiTextIndex(randomIndex);
+                            }
+                          }}
+                          style={styles.questionButton}
+                        >
+                          <AntDesign name="question" size={wp("4.5%")} color="#5f5fff" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+
+                  <TouchableOpacity style={styles.notificationButton}>
+                    <NotificationBellIcon width={wp("6%")} height={wp("6%")} color="#fff" />
+                    {unreadCount > 0 && (
+                      <View style={styles.notificationBadge}>
+                        <Text style={styles.notificationText}>
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+              
+              <View style={styles.contentContainer}>
+                {renderContent()}
+              </View>
+            </View>
+          </View>
+          
+          <View style={[styles.screen, { width }]}>
+            <RightScreen />
+          </View>
+        </Animated.View>
+      </View>
+
       {currentScreenIndex === 1 && (
         <View style={styles.swipeIndicator}>
           <Text style={styles.swipeHintText}>Swipe left or right</Text>
@@ -1428,14 +1312,12 @@ return (
         </View>
       )}
       
-      {/* Sidebar and BottomNav - Only show on home screen */}
       {currentScreenIndex === 1 && (
         <>
           <Sidebar
             visible={isSidebarVisible}
             onClose={() => setIsSidebarVisible(false)}
-            activeSubText={activeSubText}
-            setActiveSubText={setActiveSubText}
+            activeItem={activeMenu}
             studentName={studentName}
             profileImage={profileImage}
             userEmail={userEmail || ""}
@@ -1486,409 +1368,73 @@ return (
   );
 }
 
-
 export const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  screen: {
-    flex: 1,
-  },
-swipeContainer: {
-  flex: 1,
-  overflow: 'hidden',
-  backgroundColor: '#fff', // Add this to ensure background
-},
-  headerContainer: { 
-    backgroundColor: "#5f5fff", 
-    paddingHorizontal: wp("4.8%"), 
-    paddingTop: hp("5%"), // Reduced from hp("5.1%")
-    paddingBottom: hp("2%"), // Reduced from hp("2.96%")
-    borderBottomLeftRadius: wp("4.53%"), 
-    borderBottomRightRadius: wp("4.53%"),
-  },
-  screenContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
-  },
-  carouselContainer: {
-  height: wp("55%"),
-  marginBottom: hp("2%"),
-},
-carouselWrapper: {
-  flex: 1,
-  justifyContent: 'center',
-},
-teachersRow: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  flex: 1,
-  paddingHorizontal: wp("1%"),
-},
-swipeIndicator: {
-  position: 'absolute',
-  bottom: hp('10%'),
-  alignSelf: 'center',
-  alignItems: 'center',
-  backgroundColor: 'rgba(255, 255, 255, 0.8)',
-  paddingHorizontal: wp('4%'),
-  paddingVertical: hp('1%'),
-  borderRadius: wp('2%'),
-},
-swipeHintText: {
-  fontSize: wp('3%'),
-  color: '#666',
-  marginBottom: hp('1%'),
-  fontFamily: 'Poppins_400Regular',
-},
-dotContainer: {
-  flexDirection: 'row',
-  gap: wp('2%'),
-},
-dot: {
-  width: wp('2%'),
-  height: wp('2%'),
-  borderRadius: wp('1%'),
-  backgroundColor: '#ddd',
-},
-activeDot: {
-  backgroundColor: '#5f5fff',
-  width: wp('4%'),
-},
-imageContainer: {
-  position: 'relative',
-  marginBottom: hp("1%"),
-},
-dotsContainer: {
-  flexDirection: 'row',
-  justifyContent: 'center',
-  alignItems: 'center',
-  marginTop: hp("2%"),
-  gap: wp("1.5%"),
-},
-dotWrapper: {
-  padding: wp("1%"),
-},
-inactiveDot: {
-  backgroundColor: '#E5E7EB',
-},
-popularBadge: {
-  position: 'absolute',
-  top: -wp("1%"),
-  right: -wp("1%"),
-  backgroundColor: '#FF6B6B',
-  paddingHorizontal: wp("2%"),
-  paddingVertical: wp("0.5%"),
-  borderRadius: wp("2%"),
-},
-popularText: {
-  color: '#fff',
-  fontSize: wp("2.5%"),
-  fontFamily: "Poppins_700Bold",
-},
-searchTeacherImage: {
-  width: wp("15%"),
-  height: wp("15%"),
-  borderRadius: wp("2%"),
-  marginRight: wp("3%"),
-},
-searchTeacherInfo: {
-  flex: 1,
-},
-//   clearButton: {
-//   padding: wp("1%"),
-//   marginLeft: wp("1%"),
-// },
-// clearButtonText: {
-//   fontSize: wp("4%"),
-//   color: "#666",
-// },
-//   searchResultsContainer: {
-//     padding: wp("4%"),
-//     backgroundColor: "#f8f9fa",
-//     borderBottomWidth: 1,
-//     borderBottomColor: "#e9ecef",
-//   },
-  // searchResultsText: {
-  //   fontSize: wp("4%"),
-  //   fontFamily: "Poppins_400Regular",
-  //   color: "#495057",
-  //   textAlign: "center",
-  // },
-  searchResultsList: {
-    flexDirection: "column",
-    gap: 15,
-  },
-  searchTeacherCard: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 0,
-    marginBottom: hp("1%"),
-    padding: wp("3%"),
-    backgroundColor: "#f8f9fa",
-    borderRadius: wp("2%"),
-  },
-  noResultsContainer: {
-    padding: wp("5%"),
-    alignItems: "center",
-  },
-  noResultsText: {
-    fontSize: wp("4%"),
-    fontFamily: "Poppins_400Regular",
-    color: "#6c757d",
-    textAlign: "center", 
-  },
-  // Update the headerContainer style:
-headerContainer: { 
-  backgroundColor: "#5f5fff", 
-  paddingHorizontal: wp("4.8%"), 
-  paddingTop: hp("5%"), // Reduced from hp("5.1%")
-  paddingBottom: hp("2%"), // Reduced from hp("2.96%")
-  borderBottomLeftRadius: wp("4.53%"), 
-  borderBottomRightRadius: wp("4.53%"),
-},
-// Update the topRow style to have proper margin:
-topRow: { 
-  flexDirection: "row", 
-  alignItems: "center", 
-  justifyContent: "space-between", 
-  width: "100%", 
-  paddingHorizontal: wp("4%"),
-},
-  // headerContainer: { backgroundColor: "#5f5fff", paddingHorizontal: wp("4.8%"), paddingTop: hp("5.1%"), paddingBottom: hp("2.96%"), borderBottomLeftRadius: wp("4.53%"), borderBottomRightRadius: wp("4.53%") },
-  // topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%", paddingHorizontal: wp("4%") },
-  profileContainer: { justifyContent: "center", alignItems: "center", marginRight: wp("2%"), borderWidth: 1, borderColor: 'white', borderRadius: 100,  },
-  profileImage: { width: wp("12%"), height: wp("12%"), borderRadius: wp("6%") },
+  screen: { flex: 1 },
+  swipeContainer: { flex: 1, overflow: "hidden", backgroundColor: "#fff" },
+  swipeContent: { flex: 1, flexDirection: "row", height: "100%" },
+  fullScreenContainer: { flex: 1, backgroundColor: '#fff' },
+  contentContainer: { flex: 1, backgroundColor: '#fff' },
+  headerContainer: { backgroundColor: "#5f5fff", paddingHorizontal: wp("4.8%"), paddingTop: hp("5%"), paddingBottom: hp("2%"), borderBottomLeftRadius: wp("4.53%"), borderBottomRightRadius: wp("4.53%") },
+  screenContainer: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, width: "100%", height: "100%" },
+  carouselContainer: { height: wp("55%"), marginBottom: hp("2%") },
+  carouselWrapper: { flex: 1, justifyContent: "center" },
+  teachersRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", flex: 1, paddingHorizontal: wp("1%") },
+  swipeIndicator: { position: "absolute", bottom: hp("10%"), alignSelf: "center", alignItems: "center", backgroundColor: "rgba(255,255,255,0.8)", paddingHorizontal: wp("4%"), paddingVertical: hp("1%"), borderRadius: wp("2%") },
+  swipeHintText: { fontSize: wp("3%"), color: "#666", marginBottom: hp("1%"), fontFamily: "Poppins_400Regular" },
+  dotContainer: { flexDirection: "row", gap: wp("2%") },
+  dot: { width: wp("2%"), height: wp("2%"), borderRadius: wp("1%"), backgroundColor: "#ddd" },
+  activeDot: { backgroundColor: "#5f5fff", width: wp("4%") },
+  navButtonContainer: { position: "absolute", flexDirection: "row", justifyContent: "space-between", width: "100%", paddingHorizontal: wp("5%"), top: "50%", marginTop: -30, zIndex: 10 },
+  navButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: "rgba(95,95,255,0.8)", justifyContent: "center", alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 },
+  navButtonText: { fontSize: 20, color: "#fff", fontWeight: "bold" },
+  imageContainer: { position: "relative", marginBottom: hp("1%") },
+  dotsContainer: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: hp("2%"), gap: wp("1.5%") },
+  dotWrapper: { padding: wp("1%") },
+  inactiveDot: { backgroundColor: "#E5E7EB" },
+  popularBadge: { position: "absolute", top: -wp("1%"), right: -wp("1%"), backgroundColor: "#FF6B6B", paddingHorizontal: wp("2%"), paddingVertical: wp("0.5%"), borderRadius: wp("2%") },
+  popularText: { color: "#fff", fontSize: wp("2.5%"), fontFamily: "Poppins_700Bold" },
+  searchTeacherImage: { width: wp("15%"), height: wp("15%"), borderRadius: wp("2%"), marginRight: wp("3%") },
+  searchTeacherInfo: { flex: 1 },
+  searchResultsList: { flexDirection: "column", gap: 15 },
+  searchTeacherCard: { width: "100%", flexDirection: "row", alignItems: "center", marginRight: 0, marginBottom: hp("1%"), padding: wp("3%"), backgroundColor: "#f8f9fa", borderRadius: wp("2%") },
+  noResultsContainer: { padding: wp("5%"), alignItems: "center" },
+  noResultsText: { fontSize: wp("4%"), fontFamily: "Poppins_400Regular", color: "#6c757d", textAlign: "center" },
+  logoContainer: { alignItems: "center", marginBottom: hp("1.5%") },
+  logoText: { fontSize: wp("3.4%"), color: "#fff", fontFamily: "Poppins_600SemiBold", letterSpacing: wp("0.8%") },
+  profileContainer: { justifyContent: "center", alignItems: "center", marginRight: wp("2%"), borderWidth: 1, borderColor: "white", borderRadius: 100 },
   searchRow: { flex: 1, marginHorizontal: wp("2%") },
-  // searchInputContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#f1f1f1", paddingHorizontal: wp("3%"), borderRadius: wp("4.27%"), height: wp("10%") },
-  searchIcon: { width: wp("4%"), height: wp("4%"), marginRight: wp("2%"), tintColor: "#000" },
-  // searchInput: { flex: 1, fontFamily: "Montserrat_400Regular", fontSize: wp("3.73%"), color: "#7d7d7d", overflowX: "hidden", height: "100%", borderWidth: 0, outlineWidth: 0, width: "100%", paddingVertical: 0, textAlignVertical: "center" },
+  searchInputContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#f1f1f1", paddingHorizontal: wp("3%"), borderRadius: wp("4.27%"), height: wp("10%") },
+  searchIcon: { width: wp("6%"), height: wp("6%"), marginRight: wp("2%"), tintColor: "#000" },
+  searchInput: { flex: 1, fontFamily: "Montserrat_400Regular", fontSize: wp("3.73%"), color: "#7d7d7d", overflow: "hidden", height: "100%", borderWidth: 0, outlineWidth: 0, width: "100%", paddingVertical: -wp("1%"), textAlignVertical: "center", paddingHorizontal: wp("1%") },
+  questionButton: { padding: wp("1%"), marginLeft: wp("1%") },
+  notificationButton: { padding: wp("1.5%"), borderRadius: wp("2%"), backgroundColor: "rgba(255,255,255,0.1)", position: "relative" },
+  notificationBadge: { position: "absolute", top: -3, right: -3, backgroundColor: "#FF3B30", borderRadius: 10, minWidth: 20, height: 20, justifyContent: "center", alignItems: "center", paddingHorizontal: 4, zIndex: 1000, elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
+  notificationText: { color: "#ffffff", fontSize: 10, fontWeight: "700", textAlign: "center", includeFontPadding: false },
   spotlightT: { flexDirection: "row", alignItems: "center", gap: wp("0.8%"), flexShrink: 1 },
- tutors: { 
-  color: "#454358", 
-  fontSize: wp("5.33%"), 
-  fontWeight: 500, 
-  fontFamily: "Poppins_400Regular", 
-  lineHeight: hp("4%") 
-},
-spot: { 
-  color: "#03070e", 
-  fontSize: wp("5.33%"), 
-  fontWeight: 600, 
-  fontFamily: "Poppins_600SemiBold",
-  lineHeight: hp("4%"), 
-  flexShrink: 1,
-  flexWrap: 'nowrap', 
-},
-trend: { 
-  color: "#ff0000", 
-  lineHeight: hp("2.42%"), 
-  fontSize: wp("3.73%"), 
-  fontFamily: "OpenSans_500Medium" // Changed to OpenSans
-},
-teacherName: { 
-  marginTop: hp("0.672%"), 
-  fontSize: wp("4.27%"), 
-  color: "#000000", 
-  textAlign: "center", 
-  fontFamily: "OpenSans_400Regular", // Keep this as is
-  lineHeight: hp("3.23%") 
-},
-teacherSub: { 
-  color: "rgba(27,27,27,0.6)", 
-  fontSize: wp("3.733%"), 
-  fontFamily: "OpenSans_400Regular", // Keep this as is
-  lineHeight: hp("2.422%"), 
-  textAlign: "center" 
-},
-  mytutorsContainer: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    justifyContent: "space-between", 
-    margin: "auto", 
-    backgroundColor: "#dbe2ff", 
-    height: hp("7.5%"), 
-    paddingHorizontal: wp("4.5%"), 
-    paddingVertical: hp("0.2%"), 
-    marginHorizontal: wp("4%"), 
-    borderRadius: wp("4.533%"), 
-    marginTop: hp("1.8%"), 
-    borderWidth: wp("1%"), 
-    borderColor: "#5f5fff" 
-  },
-  mytutorsContainerTitle: { 
-    flex: 1, 
-    flexDirection: "row", 
-    alignItems: "center", 
-    justifyContent: "space-between", 
-    width: wp("50%"), 
-    margin: 0,
-    padding: 0
-  },
- titleText: { 
-  color: "#454358", 
-  fontSize: wp("4.5%"), 
-  fontFamily: "Roboto_500Medium", // Changed from Poppins_700Bold
-  flex: 1, 
-  marginLeft: wp("10%"),
-  paddingVertical: -wp("4%") 
-},
-seeAllText: { 
-  color: "#4255FF", 
-  fontSize: wp("3.5%"), 
-  fontWeight: "500", 
-  fontFamily: "Roboto_500Medium" // Changed from Poppins_400Regular
-},
-  spotlight: { 
-    marginTop: hp("1.2%"), 
-    marginHorizontal: wp("4%"),
-    marginBottom: hp("0.5%")
-  },
-  spotlightHeader: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    alignItems: "center", 
-    marginBottom: hp("0.5%")
-  },
-  teacherCard: { marginRight: wp("2.66%"), alignItems: "center", width: wp("29.33%") },
-  teacherImage: { width: wp("29.33%"), height: wp("29.33%"), borderRadius: wp("0.8%"), backgroundColor: "rgba(201,59,59,0)" },
-  thanksCard: { 
-    height: hp("18%"), 
-    backgroundColor: "#663259", 
-    marginTop: hp("1.5%"), 
-    marginBottom: hp("1.2%"),
-    borderRadius: 0,
-    paddingVertical: hp("3.5%"),
-    paddingHorizontal: wp("4%"),
-    marginHorizontal: 0,
-    width: '100%',
-    justifyContent: "center" 
-  },
- thanksTitle: { 
-  color: "#fff", 
-  fontSize: wp("5%"), 
-  fontWeight: "600", 
-  marginBottom: hp("2.08%"), 
-  fontFamily: "OpenSans_500Medium" // Already correct - keep this
-},
-thanksDescription: { 
-  color: "#FFFFFF80", 
-  fontFamily: "OpenSans_300Light", // Already correct - keep this
-  fontSize: wp("3.5%"), 
-  lineHeight: wp("5.5%") 
-},
-  offerBanner: { marginTop: hp("2.69%"), alignItems: "center", marginBottom: hp("2.69%") },
-  offerImage: { width: wp("98%"), height: wp("50%"),  },
-  notificationBadge: { position: "absolute", top: hp("-0.538%"), right: wp("-1.066%"), backgroundColor: "red", borderRadius: wp("2.666%"), minWidth: wp("4.8%"), height: wp("4.8%"), justifyContent: "center", alignItems: "center", paddingHorizontal: wp("1.065%"), zIndex: 1 },
-  notificationText: { color: "white", fontSize: wp("3.2%"), fontWeight: "bold" },
-marqueeTeacherContainer: {
-  height: wp("55%"),
-  marginBottom: -hp("2%"),
-  overflow: 'hidden',
-},
-marqueeTeacherContent: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  paddingRight: wp('10%'),
-},
-
-// In the styles object, add this style:
-logoContainer: {
-  alignItems: 'center',
-  width: '100%',
-  marginBottom: hp('3%'), // Adjust spacing as needed
-},
-logoText: {
-  color: '#e5e7eb',
-  fontSize: wp('4%'), // Using wp for responsive font size
-  fontFamily: 'Poppins_400Regular', // Using the loaded font
-  fontWeight: '500',
-  lineHeight: hp('1.6%'), // Using hp for responsive line height
-  textAlign: 'center',
-  letterSpacing: wp('0.2%'), // Optional: add some letter spacing for better appearance
-  top: hp("2%"),
-  bottom: hp("3%")
-},
-logoImage: {
-  width: wp('20%'),
-  height: wp('20%'), // Adjust aspect ratio as needed
-  marginTop: -hp('5%'),
-  marginBottom: -hp("1.5%"),
-},
-
-searchResultsContainer: {
-  padding: wp("4%"),
-  backgroundColor: "#f8f9fa",
-  borderBottomWidth: 1,
-  borderBottomColor: "#e9ecef",
-},
-
-searchResultsText: {
-  fontSize: wp("4%"),
-  fontFamily: "Poppins_400Regular",
-  color: "#495057",
-  textAlign: "center",
-},
-rightIconsContainer: {
-  flexDirection: "row",
-  alignItems: "center",
-},
-
-questionButton: {
-  paddingHorizontal: wp("2%"),
-  paddingVertical: wp("1%"),
-  justifyContent: "center",
-  alignItems: "center",
-  backgroundColor: "#ffffff", // Add background color
-  borderRadius: wp("2%"), // Add border radius
-  borderWidth: 1, // Add border
-  borderColor: "#5f5fff", // Match the icon color
-  marginLeft: wp("1%"), // Add some spacing
-},
-clearButton: {
-  paddingHorizontal: wp("2%"),
-  paddingVertical: wp("1%"),
-},
-
-clearButtonText: {
-  fontSize: wp("4%"),
-  color: "#666",
-},
-
-searchInputContainer: { 
-  flexDirection: "row", 
-  alignItems: "center", 
-  backgroundColor: "#f1f1f1", 
-  paddingHorizontal: wp("2%"), // Reduced padding
-  borderRadius: wp("4.27%"), 
-  height: wp("10%") 
-},
-
-searchInput: { 
-  flex: 1, 
-  fontFamily: "Montserrat_400Regular", 
-  fontSize: wp("3.73%"), 
-  color: "#7d7d7d", 
-  overflowX: "hidden", 
-  height: "100%", 
-  borderWidth: 0, 
-  outlineWidth: 0, 
-  width: "100%", 
-  paddingVertical: -wp("1%"), 
-  textAlignVertical: "center",
-  paddingHorizontal: wp("1%"), // Added padding
-},
-
-swipeContent: {
-  flex: 1,
-  flexDirection: 'row',
-  height: '100%',
-},
-
-
+  tutors: { color: "#454358", fontSize: wp("5.33%"), fontWeight: 500, fontFamily: "Poppins_400Regular", lineHeight: hp("4%") },
+  spot: { color: "#03070e", fontSize: wp("5.33%"), fontWeight: 600, fontFamily: "Poppins_600SemiBold", lineHeight: hp("4%"), flexShrink: 1, flexWrap: "nowrap" },
+  trend: { color: "#ff0000", lineHeight: hp("2.42%"), fontSize: wp("3.73%"), fontFamily: "OpenSans_500Medium" },
+  teacherCard: { marginRight: wp("0.8%"), marginLeft: wp("0.8%"), alignItems: "center", width: wp("28%"), padding: 0, borderRadius: 0, backgroundColor: "transparent", shadowColor: "transparent", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0, shadowRadius: 0, elevation: 0 },
+  teacherImage: { width: wp("28%"), height: wp("28%"), borderRadius: wp("2%"), marginBottom: hp("0.5%"), borderWidth: 0, borderColor: "transparent", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
+  teacherName: { fontSize: wp("3.2%"), color: "#1a1a1a", textAlign: "center", fontFamily: "Poppins_600SemiBold", fontWeight: "600", marginBottom: hp("0.2%"), maxWidth: "100%", letterSpacing: 0.1, lineHeight: wp("3.8%") },
+  teacherSub: { color: "#888", fontSize: wp("2.6%"), fontFamily: "Poppins_400Regular", textAlign: "center", marginTop: 0, opacity: 0.8 },
+  mytutorsContainer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", margin: "auto", backgroundColor: "#dbe2ff", height: hp("7.5%"), paddingHorizontal: wp("4.5%"), paddingVertical: hp("0.2%"), marginHorizontal: wp("4%"), borderRadius: wp("4.533%"), marginTop: hp("1.8%"), borderWidth: wp("1%"), borderColor: "#5f5fff" },
+  mytutorsContainerTitle: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: wp("50%"), margin: 0, padding: 0 },
+  titleText: { color: "#454358", fontSize: wp("4.5%"), fontFamily: "Roboto_500Medium", flex: 1, marginLeft: wp("10%"), paddingVertical: -wp("4%") },
+  seeAllText: { color: "#4255FF", fontSize: wp("3.5%"), fontWeight: "500", fontFamily: "Roboto_500Medium" },
+  spotlight: { marginTop: hp("1.2%"), marginHorizontal: wp("4%"), marginBottom: hp("0.5%") },
+  spotlightHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: hp("0.5%") },
+  thanksCard: { height: hp("18%"), backgroundColor: "#663259", marginTop: hp("1.5%"), marginBottom: hp("1.2%"), borderRadius: 0, paddingVertical: hp("3.5%"), paddingHorizontal: wp("4%"), marginHorizontal: 0, width: "100%", justifyContent: "center", alignItems: "center" },
+  growsmartImage: { width: "100%", height: "100%", resizeMode: "contain" },
+  marqueeTeacherContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: wp('2%') },
+  marqueeTeacherContent: { flexDirection: 'row', alignItems: 'center' },
+  searchResultsContainer: { paddingHorizontal: wp('4%'), paddingVertical: hp('2%') },
+  searchResultsText: { fontSize: wp('4%'), fontFamily: 'Poppins_600SemiBold', color: '#333', marginBottom: hp('2%') },
+  thanksTitle: { fontSize: wp('4.5%'), fontFamily: 'Poppins_700Bold', color: '#fff', marginBottom: hp('1%') },
+  thanksDescription: { fontSize: wp('3.5%'), fontFamily: 'Poppins_400Regular', color: '#fff', lineHeight: hp('2.5%') },
+  offerBanner: { width: '100%', height: hp('15%'), backgroundColor: '#f8f9fa', borderRadius: wp('2%'), marginBottom: hp('2%'), overflow: 'hidden' },
+  offerImage: { width: '100%', height: '150%', resizeMode: 'cover' },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  profileImage: { width: wp('8%'), height: wp('8%'), borderRadius: wp('4%') },
 });

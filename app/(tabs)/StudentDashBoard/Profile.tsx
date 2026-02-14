@@ -26,7 +26,7 @@ import { BASE_URL } from "../../../config";
 import { db } from "../../../firebaseConfig";
 import { getAuthData } from "../../../utils/authStorage";
 import Pencil from "../../../assets/svgIcons/Pencil";
-import { Entypo } from "@expo/vector-icons";
+import { Entypo, Ionicons, FontAwesome6, FontAwesome } from "@expo/vector-icons";
 
 interface FormErrors {
   studentName?: string;
@@ -68,34 +68,33 @@ export default function Profile() {
   const DEFAULT_PROFILE_IMAGE = "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png";
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [previewModalVisible, setPreviewModalVisible] = useState(true);
-  // Add this state near your other useState declarations
-const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
-const navigation = useNavigation();
+  const navigation = useNavigation();
 
-useFocusEffect(
-  React.useCallback(() => {
-    const onBackPress = () => {
-      if (previewModalVisible) {
-        setPreviewModalVisible(false);
+  useFocusEffect(
+    React.useCallback(() => {
+      const onBackPress = () => {
+        if (previewModalVisible) {
+          setPreviewModalVisible(false);
+          return true;
+        }
+        if (modalVisible) {
+          setModalVisible(false);
+          return true;
+        }
+        router.back();
         return true;
-      }
-      if (modalVisible) {
-        setModalVisible(false);
-        return true;
-      }
-      router.back();
-      return true;
-    };
+      };
 
-    const subscription = BackHandler.addEventListener(
-      'hardwareBackPress',
-      onBackPress
-    );
+      const subscription = BackHandler.addEventListener(
+        'hardwareBackPress',
+        onBackPress
+      );
 
-    return () => subscription.remove();
-  }, [router, previewModalVisible, modalVisible])
-);
+      return () => subscription.remove();
+    }, [router, previewModalVisible, modalVisible])
+  );
 
   let [fontsLoaded] = useFonts({
     Poppins_600SemiBold,
@@ -125,132 +124,126 @@ useFocusEffect(
 
   const onChange = (event: any, selectedDate?: Date) => {
     if (event.type === "set" && selectedDate) {
-      const formattedDate = selectedDate.toLocaleDateString("en-GB"); // DD/MM/YYYY
+      const formattedDate = selectedDate.toLocaleDateString("en-GB");
       console.log("📅 Selected:", formattedDate);
       setDateofBirth(formattedDate);
     }
-    setShowPicker(false); // close picker after selection
+    setShowPicker(false);
   };
 
-// useEffect(() => {
-const fetchProfileAndBoards = async () => {
-  try {
-    const auth = await getAuthData();
-    
-    // Add null check for auth
-    if (!auth || !auth.token) {
-      console.error("No authentication data found");
-      Alert.alert("Error", "Please login again");
-      return;
-    }
-    console.log("auth", auth.email);
-    const role = auth.role;
-    const loggedInEmail = auth.email;
-    const token = auth.token;
-    console.log("token", token);
-    
-    const headers = {
-      Authorization: `Bearer ${token}`,
-    };
-
-    // Fetch profile data
-    const response = await axios.post(
-      `${BASE_URL}/api/sudentProfile`,
-      { email: loggedInEmail },
-      { headers }
-    );
-    console.log("res", response.data);
-
-    const {
-      name,
-      email,
-      phone,
-      profileimage,
-      dateOfBirth,
-      educationBoard,
-      instituteName,
-      preferredMedium,
-      fullAddress,
-      stateName,
-      pincode,
-      country,
-      classYear,
-    } = response.data;
-
-    setStudentName(name || "");
-    setEmail(email || "");
-    setPhone(phone || "");
-    setProfileImage(profileimage || null);
-    setDateofBirth(dateOfBirth || "");
-    setEducationBoard(educationBoard || "");
-    setInstituteName(instituteName || "");
-    setPreferredMedium(preferredMedium || "");
-    setFullAddress(fullAddress || "");
-    setStateName(stateName || "");
-    setPincode(pincode || "");
-    setCountry(country || "");
-    setClassYear(classYear || "");
-
-    // Now fetch boards data
-    console.log("Making API call to:", `${BASE_URL}/api/allboards`);
+  const fetchProfileAndBoards = async () => {
     try {
-      const boardsResponse = await axios.post(
-        `${BASE_URL}/api/allboards`,
-        { category: "student" },
+      const auth = await getAuthData();
+      
+      if (!auth || !auth.token) {
+        console.error("No authentication data found");
+        Alert.alert("Error", "Please login again");
+        return;
+      }
+      console.log("auth", auth.email);
+      const role = auth.role;
+      const loggedInEmail = auth.email;
+      const token = auth.token;
+      console.log("token", token);
+      
+      const headers = {
+        Authorization: `Bearer ${token}`,
+      };
+
+      const response = await axios.post(
+        `${BASE_URL}/api/sudentProfile`,
+        { email: loggedInEmail },
         { headers }
       );
+      console.log("res", response.data);
 
-      console.log("Boards API raw data:", boardsResponse.data);
-      
-      // 🚨 FIX: Direct extraction from your API structure
-      const boardsData = Array.isArray(boardsResponse.data) ? boardsResponse.data : [];
-      
-      const formattedBoards = boardsData
-        .map((board: any) => ({
-          boardName: board.boardName,
-          boardId: board.boardId
-        }))
-        .filter(board => board.boardName); // Ensure we have valid board names
+      const {
+        name,
+        email,
+        phone,
+        profileimage,
+        dateOfBirth,
+        educationBoard,
+        instituteName,
+        preferredMedium,
+        fullAddress,
+        stateName,
+        pincode,
+        country,
+        classYear,
+      } = response.data;
 
-      console.log("Formatted boards:", formattedBoards);
-      setBoards(formattedBoards);
+      setStudentName(name || "");
+      setEmail(email || "");
+      setPhone(phone || "");
+      setProfileImage(profileimage || null);
+      setDateofBirth(dateOfBirth || "");
+      setEducationBoard(educationBoard || "");
+      setInstituteName(instituteName || "");
+      setPreferredMedium(preferredMedium || "");
+      setFullAddress(fullAddress || "");
+      setStateName(stateName || "");
+      setPincode(pincode || "");
+      setCountry(country || "");
+      setClassYear(classYear || "");
+
+      console.log("Making API call to:", `${BASE_URL}/api/allboards`);
+      try {
+        const boardsResponse = await axios.post(
+          `${BASE_URL}/api/allboards`,
+          { category: "student" },
+          { headers }
+        );
+
+        console.log("Boards API raw data:", boardsResponse.data);
+        
+        const boardsData = Array.isArray(boardsResponse.data) ? boardsResponse.data : [];
+        
+        const formattedBoards = boardsData
+          .map((board: any) => ({
+            boardName: board.boardName,
+            boardId: board.boardId
+          }))
+          .filter(board => board.boardName);
+
+        console.log("Formatted boards:", formattedBoards);
+        setBoards(formattedBoards);
+        
+      } catch (boardsError) {
+        console.log("Boards not available, using default boards");
+        const defaultBoards = [
+          { boardName: 'CBSE', boardId: 'board_cbse' },
+          { boardName: 'ICSE', boardId: 'board_icse' },
+          { boardName: 'State Board', boardId: 'board_state' }
+        ];
+        setBoards(defaultBoards);
+      }
       
-    } catch (boardsError) {
-      console.log("Boards not available, using default boards");
-      const defaultBoards = [
-        { boardName: 'CBSE', boardId: 'board_cbse' },
-        { boardName: 'ICSE', boardId: 'board_icse' },
-        { boardName: 'State Board', boardId: 'board_state' }
-      ];
-      setBoards(defaultBoards);
+    } catch (error) {
+      console.error("Error fetching profile from backend:", error);
+      Alert.alert("Error", "Failed to load profile. Please try again later.");
     }
-    
-  } catch (error) {
-    console.error("Error fetching profile from backend:", error);
-    Alert.alert("Error", "Failed to load profile. Please try again later.");
-  }
-};
-
-useEffect(() => {
-  const initializePage = async () => {
-    await fetchProfileAndBoards();
-    setIsLoading(false);
   };
 
-  initializePage();
-}, []);
+  useEffect(() => {
+    const initializePage = async () => {
+      await fetchProfileAndBoards();
+      setIsLoading(false);
+    };
 
+    initializePage();
+  }, []);
 
-if (isLoading || !fontsLoaded) {
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#5f5fff" />
-        <Text style={styles.loadingText}>Loading profile...</Text>
-      </View>
-    </SafeAreaView>
-  );
-}
+  if (isLoading || !fontsLoaded) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#5f5fff" />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const uploadImageToS3AndUpdateProfile = async (uri: string) => {
     console.log("🚀 Uploading image to S3...");
@@ -281,7 +274,6 @@ if (isLoading || !fontsLoaded) {
         } as any;
         formData.append("profileimage", imageFile);
       }
-      console.log("Checking here")
 
       formData.append("email", email || "");
       formData.append("name", studentName || "");
@@ -298,17 +290,14 @@ if (isLoading || !fontsLoaded) {
 
       const token = auth.token;
       
-      const headers = {
-        Authorization: `Bearer ${token}`,
-      };
-
       return await fetch(
         `${BASE_URL}/api/updateStudentProfileWithImage`, {
-          method: "POST", body: formData,
+          method: "POST", 
+          body: formData,
           headers: {
             Authorization: `Bearer ${token}`,
           },
-          }
+        }
       ).then(async res => {
         const data = await res.json();
         if (res.status !== 200) {
@@ -365,6 +354,7 @@ if (isLoading || !fontsLoaded) {
         email,
         phone
       });
+      
       const formData = new FormData();
       formData.append("email", email || "");
       formData.append("name", studentName || "");
@@ -378,12 +368,14 @@ if (isLoading || !fontsLoaded) {
       formData.append("stateName", stateName || "");
       formData.append("pincode", pincode || "");
       formData.append("country", country || "");
+      
       const auth = await getAuthData();
       // @ts-ignore
       const token = auth.token;
       const headers = {
         Authorization: `Bearer ${token}`,
       };
+      
       let object : any = {};
       formData.forEach(function(value, key: any){
         object[key] = value;
@@ -488,572 +480,440 @@ if (isLoading || !fontsLoaded) {
     }
   };
   
-return (
-  <SafeAreaView style={styles.container}>
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-    >
-      {/* Only show main content when NOT in preview mode and NOT loading */}
-      {!previewModalVisible ? (
-        <ScrollView
-          style={styles.contentContainer}
-          contentContainerStyle={styles.scrollContentContainer}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        >
-          {/* Your entire form content */}
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.backIconContainer}
-              onPress={() => router.push("/(tabs)/StudentDashBoard/Student")}
-            >
-              <BackArrowIcon
-                width={wp("6.4%")}
-                height={wp("6.4%")}
-              />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Edit profile</Text>
-          </View>
-
-          <View style={styles.imageContainer}>
-            <Image
-              style={styles.profileImage}
-              source={{ uri: profileImage || DEFAULT_PROFILE_IMAGE }}
-            />
-            <View style={styles.upload}>
-              <DriverUpload size={32} />
+  return (
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
+        {!previewModalVisible ? (
+          <ScrollView
+            style={styles.contentContainer}
+            contentContainerStyle={styles.scrollContentContainer}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
+            <View style={styles.header}>
               <TouchableOpacity
-                onPress={handleImagePicker}
-                style={styles.uploadBtn}
+                style={styles.backIconContainer}
+                onPress={() => router.push("/(tabs)/StudentDashBoard/Student")}
               >
-                <Text style={styles.uploadBtnText}>Upload</Text>
+                <BackArrowIcon
+                  width={wp("6.4%")}
+                  height={wp("6.4%")}
+                />
               </TouchableOpacity>
+              <Text style={styles.headerTitle}>Edit profile</Text>
             </View>
-          </View>
-          {/* Input Fields */}
-          {/* Full Name */}
-          <Text style={styles.label}>
-            Full Name <Text style={styles.asterisk}>*</Text>
-          </Text>
-              <TextInput
-                style={styles.input}
-                value={studentName}
-                onChangeText={setStudentName}
-                placeholder="Enter your name"
-                placeholderTextColor={"#afb3c1"}
+
+            <View style={styles.imageContainer}>
+              <Image
+                style={styles.profileImage}
+                source={{ uri: profileImage || DEFAULT_PROFILE_IMAGE }}
               />
-              {errors.studentName && (
-                <Text style={styles.errorText}>{errors.studentName}</Text>
-              )}
-
-              {/* Email */}
-              <Text style={styles.label}>
-                Email <Text style={styles.asterisk}>*</Text>
-              </Text>
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Enter your email"
-                keyboardType="email-address"
-                placeholderTextColor={"#afb3c1"}
-              />
-              {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
-
-              {/* Date of Birth */}
-              <Text style={styles.label}>
-                Date of Birth <Text style={styles.asterisk}>*</Text>
-              </Text>
-              <TouchableOpacity onPress={() => setShowPicker(true)}>
-                <TextInput
-                  style={styles.input}
-                  value={dateOfBirth}
-                  editable={false}
-                  placeholder="DD/MM/YYYY"
-                  placeholderTextColor={"#afb3c1"}
-                />
-              </TouchableOpacity>
-              {showPicker && (
-                <DateTimePicker
-                  mode="date"
-                  value={new Date()}
-                  display="default"
-                  onChange={onChange}
-                  maximumDate={new Date()}
-                />
-              )}
-              {errors.dateOfBirth && (
-                <Text style={styles.errorText}>{errors.dateOfBirth}</Text>
-              )}
-{/* Education Board */}
-<Text style={styles.label}>
-  Education Board <Text style={styles.asterisk}>*</Text>
-</Text>
-<View style={[styles.input, !educationBoard && { justifyContent: 'center' }]}>
-  <Picker
-    selectedValue={educationBoard}
-    dropdownIconColor="#5f5fff"
-    onValueChange={(itemValue: string) => setEducationBoard(itemValue)}
-    style={educationBoard ? { color: '#000' } : { color: '#afb3c1' }}
-    mode="dropdown"
-    itemStyle={styles.pickerItem} 
-  >
-    <Picker.Item label="Select Education Board" value=""
-    style={{ backgroundColor: '#f5f5f5', color: '#afb3c1' }}/>
-    {boards.map((board, index) => (
-      <Picker.Item 
-        key={index} 
-        label={board.boardName} 
-        value={board.boardName}
-        color="#000"
-        style={{ color: '#000', fontSize: 16}}
-      />
-    ))}
-  </Picker>
-</View>
-              {errors.educationBoard && (
-                <Text style={styles.errorText}>{errors.educationBoard}</Text>
-              )}
-
-              {/* School/College/University */}
-              <Text style={styles.label}>
-                School/College/University <Text style={styles.asterisk}>*</Text>
-              </Text>
-              <TextInput
-                style={styles.input}
-                value={instituteName}
-                onChangeText={setInstituteName}
-                placeholder="Enter your institution"
-                placeholderTextColor={"#afb3c1"}
-              />
-              {errors.instituteName && (
-                <Text style={styles.errorText}>{errors.instituteName}</Text>
-              )}
-
-           {/* Class/Year */}
-<Text style={styles.label}>
-  Class/Year <Text style={styles.asterisk}>*</Text>
-</Text>
-<View style={styles.input}>
-  <Picker
-    selectedValue={classYear}
-    onValueChange={(itemValue) => setClassYear(itemValue)}
-    style={classYear ? { color: "#000" } : { color: "#afb3c1" }}
-    mode="dropdown"
-    dropdownIconColor="#5f5fff"
-  >
-    <Picker.Item 
-      label="Enter your Class" 
-      value="" 
-      style={{ backgroundColor: 'transparent ', color: '#afb3c1', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="Class 6" 
-      value="Class 6" 
-      style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="Class 7" 
-      value="Class 7" 
-      style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="Class 8" 
-      value="Class 8" 
-      style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="Class 9" 
-      value="Class 9" 
-      style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="Class 10" 
-      value="Class 10" 
-      style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="Class 11" 
-      value="Class 11" 
-      style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="Class 12" 
-      value="Class 12" 
-      style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="1st Year" 
-      value="1st Year" 
-      style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="2nd Year" 
-      value="2nd Year" 
-      style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="3rd Year" 
-      value="3rd Year" 
-      style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="4th Year" 
-      value="4th Year" 
-      style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="5th Year" 
-      value="5th Year" 
-      style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} 
-    />
-  </Picker>
-</View>
-              {errors.classYear && (
-                <Text style={styles.errorText}>{errors.classYear}</Text>
-              )}
-
-              {/* Preferred Medium */}
-              <Text style={styles.label}>
-                Preferred Medium <Text style={styles.asterisk}>*</Text>
-              </Text>
-<View style={styles.input}>
-  <Picker
-    selectedValue={preferredMedium}
-    onValueChange={(itemValue) => setPreferredMedium(itemValue)}
-    style={preferredMedium ? { color: "#000" } : { color: "#afb3c1" }}
-    mode="dropdown"
-    dropdownIconColor="#5f5fff"
-  >
-    <Picker.Item 
-      label="Select Medium" 
-      value="" 
-      style={{ backgroundColor: 'transparent', color: '#afb3c1', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="English" 
-      value="English" 
-      style={{ backgroundColor: 'transparent', color: '#000', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="Bengali" 
-      value="Bengali" 
-      style={{ backgroundColor: 'transparent', color: '#000', fontSize: 16 }} 
-    />
-    <Picker.Item 
-      label="Hindi" 
-      value="Hindi" 
-      style={{ backgroundColor: 'transparent', color: '#000', fontSize: 16 }} 
-    />
-  </Picker>
-</View>
-              {errors.preferredMedium &&  <Text style={styles.errorText}>{errors.preferredMedium}</Text>}
-
-              {/* Phone Number */}
-              <Text style={styles.label}>
-                Phone Number <Text style={styles.asterisk}>*</Text>
-              </Text>
-              <TextInput
-                style={styles.input}
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="Enter your phone number"
-                keyboardType="phone-pad"
-                placeholderTextColor={"#afb3c1"}
-              />
-              {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
-
-              {/* Full Address */}
-              <Text style={styles.label}>Full Address</Text>
-              <TextInput
-                style={styles.input}
-                value={fullAddress}
-                onChangeText={setFullAddress}
-                placeholder="Street No | State | Pin Code"
-                placeholderTextColor={"#afb3c1"}
-              />
-
-
-          <Text style={styles.label}>State</Text>
-        <View style={styles.input}>
-          <Picker
-            selectedValue={stateName}
-            onValueChange={(itemValue) => setStateName(itemValue)}
-            style={stateName ? { color: "#000" } : { color: "#afb3c1" }}
-            mode="dropdown"
-             itemStyle={styles.pickerItem} 
-          >
-            <Picker.Item label="Select your State/UT" value=""
-             style={{ backgroundColor: 'transparent', color: '#afb3c1' }} 
-            />
-            <Picker.Item label="Andhra Pradesh" value="Andhra Pradesh"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Arunachal Pradesh" value="Arunachal Pradesh"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Assam" value="Assam"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Bihar" value="Bihar"   style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Chhattisgarh" value="Chhattisgarh"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Goa" value="Goa" style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Gujarat" value="Gujarat"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Haryana" value="Haryana"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Himachal Pradesh" value="Himachal Pradesh"  style={{ backgroundColor: 'transparent', color: '#000' }} />
-            <Picker.Item label="Jharkhand" value="Jharkhand"  style={{ backgroundColor: 'transparent', color: '#000' }} />
-            <Picker.Item label="Karnataka" value="Karnataka" style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Kerala" value="Kerala"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Madhya Pradesh" value="Madhya Pradesh"  style={{ backgroundColor: 'transparent', color: '#000' }} />
-            <Picker.Item label="Maharashtra" value="Maharashtra"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Manipur" value="Manipur"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Meghalaya" value="Meghalaya"  style={{ backgroundColor: 'transparent', color: '#000' }} />
-            <Picker.Item label="Mizoram" value="Mizoram"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Nagaland" value="Nagaland" style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Odisha" value="Odisha"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Punjab" value="Punjab"  style={{ backgroundColor: 'transparent', color: '#000' }} />
-            <Picker.Item label="Rajasthan" value="Rajasthan"  style={{ backgroundColor: 'transparent', color: '#000' }} />
-            <Picker.Item label="Sikkim" value="Sikkim" style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Tamil Nadu" value="Tamil Nadu"  style={{ backgroundColor: 'transparent', color: '#000' }} />
-            <Picker.Item label="Telangana" value="Telangana"  style={{ backgroundColor: 'transparent', color: '#000' }} />
-            <Picker.Item label="Tripura" value="Tripura"  style={{ backgroundColor: 'transparent', color: '#000' }} />
-            <Picker.Item label="Uttar Pradesh" value="Uttar Pradesh"  style={{ backgroundColor: 'transparent', color: '#000' }} />
-            <Picker.Item label="Uttarakhand" value="Uttarakhand" style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="West Bengal" value="West Bengal" style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            {/* Union Territories */}
-            <Picker.Item label="Andaman and Nicobar Islands" value="Andaman and Nicobar Islands" style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Chandigarh" value="Chandigarh" style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Dadra and Nagar Haveli and Daman and Diu" value="Dadra and Nagar Haveli and Daman and Diu"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Delhi" value="Delhi"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Jammu and Kashmir" value="Jammu and Kashmir"  style={{ backgroundColor: 'transparent', color: '#000' }} />
-            <Picker.Item label="Ladakh" value="Ladakh"  style={{ backgroundColor: 'transparent', color: '#000' }} />
-            <Picker.Item label="Lakshadweep" value="Lakshadweep"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-            <Picker.Item label="Puducherry" value="Puducherry"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
-          </Picker>
-          </View>
-
-          <Text style={styles.label}>Pincode</Text>
-          <TextInput
-            style={styles.input}
-            value={pincode}
-            onChangeText={setPincode}
-            placeholder="Enter pin code"
-            keyboardType="numeric"
-            maxLength={6}
-            placeholderTextColor={"#afb3c1"}
-          />
-
-          <Text style={styles.label}>Country</Text>
-          <View style={styles.input}>
-            <Picker
-              selectedValue={country}
-              onValueChange={(itemValue) => setCountry(itemValue)}
-              style={country ? { color: "#000" } : { color: "#afb3c1" }}
-              mode="dropdown"
-               itemStyle={styles.pickerItem} 
-               
-            >
-            <Picker.Item 
-                label="Select your Country" 
-                value="" 
-                style={{ backgroundColor: 'transparent', color: '#afb3c1' }} 
-              />
-              <Picker.Item 
-                label="India" 
-                value="India" 
-                style={{ backgroundColor: 'transparent', color: '#000' }} 
-              />
-            </Picker>
-          </View>
-
-          {/* Buttons */}
-          <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.button} onPress={handleSave}>
-              <Text style={styles.buttonTxt}>Save</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => setPreviewModalVisible(true)}
-            >
-              <Text style={styles.buttonTxt}>Preview</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Image Picker Modal */}
-          <Modal
-            animationType="slide"
-            transparent={true}
-            visible={modalVisible}
-            onRequestClose={() => setModalVisible(false)}
-          >
-            <View style={styles.centeredView}>
-              <View style={styles.modalView}>
+              <View style={styles.upload}>
+                <DriverUpload size={32} />
                 <TouchableOpacity
-                  onPress={handleCamera}
-                  style={styles.modalBts}
+                  onPress={handleImagePicker}
+                  style={styles.uploadBtn}
                 >
-                  <Text style={styles.modelTxt}>Take Photo</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={handleGallery}
-                  style={styles.modalBts}
-                >
-                  <Text style={styles.modelTxt}>Choose from Gallery</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setModalVisible(false)}
-                  style={styles.modalBts}
-                >
-                  <Text style={styles.modelTxt}>Cancel</Text>
+                  <Text style={styles.uploadBtnText}>Upload</Text>
                 </TouchableOpacity>
               </View>
             </View>
-          </Modal>
-        </ScrollView>
-      ) : (
-        // Show empty view when in preview mode
-        <View style={{ flex: 1 }} />
-      )}
-      {/* Preview Modal */}
+
+            <Text style={styles.label}>
+              Full Name <Text style={styles.asterisk}>*</Text>
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={studentName}
+              onChangeText={setStudentName}
+              placeholder="Enter your name"
+              placeholderTextColor={"#afb3c1"}
+            />
+            {errors.studentName && (
+              <Text style={styles.errorText}>{errors.studentName}</Text>
+            )}
+
+            <Text style={styles.label}>
+              Email <Text style={styles.asterisk}>*</Text>
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Enter your email"
+              keyboardType="email-address"
+              placeholderTextColor={"#afb3c1"}
+            />
+            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+
+            <Text style={styles.label}>
+              Date of Birth <Text style={styles.asterisk}>*</Text>
+            </Text>
+            <TouchableOpacity onPress={() => setShowPicker(true)}>
+              <TextInput
+                style={styles.input}
+                value={dateOfBirth}
+                editable={false}
+                placeholder="DD/MM/YYYY"
+                placeholderTextColor={"#afb3c1"}
+              />
+            </TouchableOpacity>
+            {showPicker && (
+              <DateTimePicker
+                mode="date"
+                value={new Date()}
+                display="default"
+                onChange={onChange}
+                maximumDate={new Date()}
+              />
+            )}
+            {errors.dateOfBirth && (
+              <Text style={styles.errorText}>{errors.dateOfBirth}</Text>
+            )}
+
+            <Text style={styles.label}>
+              Education Board <Text style={styles.asterisk}>*</Text>
+            </Text>
+            <View style={[styles.input, !educationBoard && { justifyContent: 'center' }]}>
+              <Picker
+                selectedValue={educationBoard}
+                dropdownIconColor="#5f5fff"
+                onValueChange={(itemValue: string) => setEducationBoard(itemValue)}
+                style={educationBoard ? { color: '#000' } : { color: '#afb3c1' }}
+                mode="dropdown"
+                itemStyle={styles.pickerItem} 
+              >
+                <Picker.Item label="Select Education Board" value=""
+                style={{ backgroundColor: '#f5f5f5', color: '#afb3c1' }}/>
+                {boards.map((board, index) => (
+                  <Picker.Item 
+                    key={index} 
+                    label={board.boardName} 
+                    value={board.boardName}
+                    color="#000"
+                    style={{ color: '#000', fontSize: 16}}
+                  />
+                ))}
+              </Picker>
+            </View>
+            {errors.educationBoard && (
+              <Text style={styles.errorText}>{errors.educationBoard}</Text>
+            )}
+
+            <Text style={styles.label}>
+              School/College/University <Text style={styles.asterisk}>*</Text>
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={instituteName}
+              onChangeText={setInstituteName}
+              placeholder="Enter your institution"
+              placeholderTextColor={"#afb3c1"}
+            />
+            {errors.instituteName && (
+              <Text style={styles.errorText}>{errors.instituteName}</Text>
+            )}
+
+            <Text style={styles.label}>
+              Class/Year <Text style={styles.asterisk}>*</Text>
+            </Text>
+            <View style={styles.input}>
+              <Picker
+                selectedValue={classYear}
+                onValueChange={(itemValue) => setClassYear(itemValue)}
+                style={classYear ? { color: "#000" } : { color: "#afb3c1" }}
+                mode="dropdown"
+                dropdownIconColor="#5f5fff"
+              >
+                <Picker.Item 
+                  label="Enter your Class" 
+                  value="" 
+                  style={{ backgroundColor: 'transparent ', color: '#afb3c1', fontSize: 16 }} 
+                />
+                <Picker.Item label="Class 6" value="Class 6" style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} />
+                <Picker.Item label="Class 7" value="Class 7" style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} />
+                <Picker.Item label="Class 8" value="Class 8" style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} />
+                <Picker.Item label="Class 9" value="Class 9" style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} />
+                <Picker.Item label="Class 10" value="Class 10" style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} />
+                <Picker.Item label="Class 11" value="Class 11" style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} />
+                <Picker.Item label="Class 12" value="Class 12" style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} />
+                <Picker.Item label="1st Year" value="1st Year" style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} />
+                <Picker.Item label="2nd Year" value="2nd Year" style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} />
+                <Picker.Item label="3rd Year" value="3rd Year" style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} />
+                <Picker.Item label="4th Year" value="4th Year" style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} />
+                <Picker.Item label="5th Year" value="5th Year" style={{ backgroundColor: '#f5f5f5', color: '#000', fontSize: 16 }} />
+              </Picker>
+            </View>
+            {errors.classYear && (
+              <Text style={styles.errorText}>{errors.classYear}</Text>
+            )}
+
+            <Text style={styles.label}>
+              Preferred Medium <Text style={styles.asterisk}>*</Text>
+            </Text>
+            <View style={styles.input}>
+              <Picker
+                selectedValue={preferredMedium}
+                onValueChange={(itemValue) => setPreferredMedium(itemValue)}
+                style={preferredMedium ? { color: "#000" } : { color: "#afb3c1" }}
+                mode="dropdown"
+                dropdownIconColor="#5f5fff"
+              >
+                <Picker.Item label="Select Medium" value="" style={{ backgroundColor: 'transparent', color: '#afb3c1', fontSize: 16 }} />
+                <Picker.Item label="English" value="English" style={{ backgroundColor: 'transparent', color: '#000', fontSize: 16 }} />
+                <Picker.Item label="Bengali" value="Bengali" style={{ backgroundColor: 'transparent', color: '#000', fontSize: 16 }} />
+                <Picker.Item label="Hindi" value="Hindi" style={{ backgroundColor: 'transparent', color: '#000', fontSize: 16 }} />
+              </Picker>
+            </View>
+            {errors.preferredMedium &&  <Text style={styles.errorText}>{errors.preferredMedium}</Text>}
+
+            <Text style={styles.label}>
+              Phone Number <Text style={styles.asterisk}>*</Text>
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="Enter your phone number"
+              keyboardType="phone-pad"
+              placeholderTextColor={"#afb3c1"}
+            />
+            {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+
+            <Text style={styles.label}>Full Address</Text>
+            <TextInput
+              style={styles.input}
+              value={fullAddress}
+              onChangeText={setFullAddress}
+              placeholder="Street No | State | Pin Code"
+              placeholderTextColor={"#afb3c1"}
+            />
+
+            <Text style={styles.label}>State</Text>
+            <View style={styles.input}>
+              <Picker
+                selectedValue={stateName}
+                onValueChange={(itemValue) => setStateName(itemValue)}
+                style={stateName ? { color: "#000" } : { color: "#afb3c1" }}
+                mode="dropdown"
+                itemStyle={styles.pickerItem} 
+              >
+                <Picker.Item label="Select your State/UT" value="" style={{ backgroundColor: 'transparent', color: '#afb3c1' }} />
+                <Picker.Item label="Andhra Pradesh" value="Andhra Pradesh"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Arunachal Pradesh" value="Arunachal Pradesh"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Assam" value="Assam"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Bihar" value="Bihar"   style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Chhattisgarh" value="Chhattisgarh"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Goa" value="Goa" style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Gujarat" value="Gujarat"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Haryana" value="Haryana"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Himachal Pradesh" value="Himachal Pradesh"  style={{ backgroundColor: 'transparent', color: '#000' }} />
+                <Picker.Item label="Jharkhand" value="Jharkhand"  style={{ backgroundColor: 'transparent', color: '#000' }} />
+                <Picker.Item label="Karnataka" value="Karnataka" style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Kerala" value="Kerala"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Madhya Pradesh" value="Madhya Pradesh"  style={{ backgroundColor: 'transparent', color: '#000' }} />
+                <Picker.Item label="Maharashtra" value="Maharashtra"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Manipur" value="Manipur"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Meghalaya" value="Meghalaya"  style={{ backgroundColor: 'transparent', color: '#000' }} />
+                <Picker.Item label="Mizoram" value="Mizoram"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Nagaland" value="Nagaland" style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Odisha" value="Odisha"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Punjab" value="Punjab"  style={{ backgroundColor: 'transparent', color: '#000' }} />
+                <Picker.Item label="Rajasthan" value="Rajasthan"  style={{ backgroundColor: 'transparent', color: '#000' }} />
+                <Picker.Item label="Sikkim" value="Sikkim" style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Tamil Nadu" value="Tamil Nadu"  style={{ backgroundColor: 'transparent', color: '#000' }} />
+                <Picker.Item label="Telangana" value="Telangana"  style={{ backgroundColor: 'transparent', color: '#000' }} />
+                <Picker.Item label="Tripura" value="Tripura"  style={{ backgroundColor: 'transparent', color: '#000' }} />
+                <Picker.Item label="Uttar Pradesh" value="Uttar Pradesh"  style={{ backgroundColor: 'transparent', color: '#000' }} />
+                <Picker.Item label="Uttarakhand" value="Uttarakhand" style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="West Bengal" value="West Bengal" style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Andaman and Nicobar Islands" value="Andaman and Nicobar Islands" style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Chandigarh" value="Chandigarh" style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Dadra and Nagar Haveli and Daman and Diu" value="Dadra and Nagar Haveli and Daman and Diu"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Delhi" value="Delhi"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Jammu and Kashmir" value="Jammu and Kashmir"  style={{ backgroundColor: 'transparent', color: '#000' }} />
+                <Picker.Item label="Ladakh" value="Ladakh"  style={{ backgroundColor: 'transparent', color: '#000' }} />
+                <Picker.Item label="Lakshadweep" value="Lakshadweep"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+                <Picker.Item label="Puducherry" value="Puducherry"  style={{ backgroundColor: 'transparent', color: '#000' }}  />
+              </Picker>
+            </View>
+
+            <Text style={styles.label}>Pincode</Text>
+            <TextInput
+              style={styles.input}
+              value={pincode}
+              onChangeText={setPincode}
+              placeholder="Enter pin code"
+              keyboardType="numeric"
+              maxLength={6}
+              placeholderTextColor={"#afb3c1"}
+            />
+
+            <Text style={styles.label}>Country</Text>
+            <View style={styles.input}>
+              <Picker
+                selectedValue={country}
+                onValueChange={(itemValue) => setCountry(itemValue)}
+                style={country ? { color: "#000" } : { color: "#afb3c1" }}
+                mode="dropdown"
+                itemStyle={styles.pickerItem} 
+              >
+                <Picker.Item label="Select your Country" value="" style={{ backgroundColor: 'transparent', color: '#afb3c1' }} />
+                <Picker.Item label="India" value="India" style={{ backgroundColor: 'transparent', color: '#000' }} />
+              </Picker>
+            </View>
+
+            <View style={styles.buttonRow}>
+              <TouchableOpacity style={styles.button} onPress={handleSave}>
+                <Text style={styles.buttonTxt}>Save</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.button}
+                onPress={() => setPreviewModalVisible(true)}
+              >
+                <Text style={styles.buttonTxt}>Preview</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Modal
+              animationType="slide"
+              transparent={true}
+              visible={modalVisible}
+              onRequestClose={() => setModalVisible(false)}
+            >
+              <View style={styles.centeredView}>
+                <View style={styles.modalView}>
+                  <TouchableOpacity
+                    onPress={handleCamera}
+                    style={styles.modalBts}
+                  >
+                    <Text style={styles.modelTxt}>Take Photo</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handleGallery}
+                    style={styles.modalBts}
+                  >
+                    <Text style={styles.modelTxt}>Choose from Gallery</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setModalVisible(false)}
+                    style={styles.modalBts}
+                  >
+                    <Text style={styles.modelTxt}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Modal>
+          </ScrollView>
+        ) : (
+          <View style={{ flex: 1 }} />
+        )}
+        
         <Modal
           visible={previewModalVisible}
           animationType="none"
           transparent={false}
-          onRequestClose={() => setPreviewModalVisible(false)} // Add this line
+          onRequestClose={() => setPreviewModalVisible(false)}
         >
-        <ScrollView
-          contentContainerStyle={styles.previewContainer}
-          showsHorizontalScrollIndicator={false}
-          showsVerticalScrollIndicator={false}
-        >
-      <View style={styles.previewimageContainer}>
-  <TouchableOpacity
-    onPress={() => setPreviewModalVisible(false)}
-    style={styles.editPreviewButton}
-  >
-    <Pencil color="#000" />
-  </TouchableOpacity>
-  
-  <TouchableOpacity
-    style={styles.crossPreviewButton}
-    onPress={() => {
-      setPreviewModalVisible(false);
-      router.push("/(tabs)/StudentDashBoard/Student");
-    }}
-  >
-    <Entypo name="cross" size={34} color="black" />
-  </TouchableOpacity>
-  
-  <Image
-    style={styles.profileImagePreview}
-    source={{ uri: profileImage || DEFAULT_PROFILE_IMAGE }}
-  />
-  <Text style={styles.studentName} numberOfLines={1} ellipsizeMode="tail">
-    {studentName || "Your Name"}
-  </Text>
-  <Text style={styles.email} numberOfLines={1} ellipsizeMode="tail">
-    {email || "your.email@example.com"}
-  </Text>
-</View>
+          <SafeAreaView style={styles.previewMainContainer}>
+            <View style={styles.previewContainer}>
+              <View style={styles.previewTopSection}>
+                <TouchableOpacity
+                  style={styles.crossPreviewButton}
+                  onPress={() => {
+                    setPreviewModalVisible(false);
+                    router.push("/(tabs)/StudentDashBoard/Student");
+                  }}
+                >
+                  <Entypo name="cross" size={wp("7%")} color="white" />
+                </TouchableOpacity>
+                
+                <Text style={styles.previewHeaderText}>PROFILE</Text>
+                
+                <TouchableOpacity
+                  onPress={() => setPreviewModalVisible(false)}
+                  style={styles.editPreviewButton}
+                >
+                  <Pencil color="#fff" width={wp("5%")} height={wp("5%")} />
+                </TouchableOpacity>
+                
+                <Image
+                  style={styles.profileImagePreview}
+                  source={{ uri: profileImage || DEFAULT_PROFILE_IMAGE }}
+                />
+                
+                <Text style={styles.studentName} numberOfLines={1} ellipsizeMode="tail">
+                  {studentName || "Full Name"}
+                </Text>
+              </View>
 
-<Text style={styles.aboutMeHeading}>About Me</Text>
-
-<View style={styles.aboutMe}>
-  <View style={styles.aboutmecontainer}>
-    <CakeIcon
-      height={wp("10.66%")}
-      width={wp("10.66%")}
-    />
-    <View style={styles.aboutmeTextContainer}>
-      <Text style={styles.aboutMeTitle}>Date of Birth</Text>
-      <Text style={styles.aboutmeValue} numberOfLines={1} ellipsizeMode="tail">
-        {dateOfBirth || "DD/MM/YYYY"}
-      </Text>
-    </View>
-  </View>
-
-  <View style={styles.aboutmecontainer}>
-    <SchoolIcon
-      height={wp("10.66%")}
-      width={wp("10.66%")}
-    />
-    <View style={styles.aboutmeTextContainer}>
-      <Text style={styles.aboutMeTitle}>
-        School/College/University
-      </Text>
-      <Text style={styles.aboutmeValue} numberOfLines={2} ellipsizeMode="tail">
-        {instituteName || "Your Institution Name"}
-      </Text>
-    </View>
-  </View>
-
-  <View style={styles.aboutmecontainer}>
-    <BookOpenReaderIcon
-      height={wp("10.66%")}
-      width={wp("10.66%")}
-    />
-    <View style={styles.aboutmeTextContainer}>
-      <Text style={styles.aboutMeTitle}>Educational Board</Text>
-      <Text style={styles.aboutmeValue} numberOfLines={2} ellipsizeMode="tail">
-        {educationBoard || "Your Education Board"}
-      </Text>
-    </View>
-  </View>
-</View>
-
-<View style={styles.address}>
-  <View style={styles.classandMediumContainer}>
-    <View style={styles.classContainer}>
-      <Image
-        source={require("../../../assets/image/class.jpeg")}
-        style={styles.iconImage}
-      />
-      <Text style={styles.classtitle}>Class/Year</Text>
-      <Text style={styles.classvalue} numberOfLines={1} ellipsizeMode="tail">
-        {classYear || "Your Class"}
-      </Text>
-    </View>
-
-    <View style={styles.classContainer}>
-      <Image
-        source={require("../../../assets/image/medium.jpeg")}
-        style={styles.iconImage}
-      />
-      <Text style={styles.classtitle}>Medium</Text>
-      <Text style={styles.classvalue} numberOfLines={1} ellipsizeMode="tail">
-        {preferredMedium || "Your Medium"}
-      </Text>
-    </View>
-  </View>
-
-  <View style={styles.mobileAndAddress}>
-    <PhoneIcon size={wp("9.066%")} />
-    <View>
-      <Text style={styles.titlePhoneandAddress}>
-        Phone Number
-      </Text>
-      <Text style={styles.valuePhoneandAddress} numberOfLines={1} ellipsizeMode="tail">
-        {phone || "+91 XXXXXXXXXX"}
-      </Text>
-    </View>
-  </View>
-
-  <View style={styles.mobileAndAddress}>
-    <Map size={wp("9.066%")} />
-    <View>
-      <Text style={styles.titlePhoneandAddress}>
-        Full Address
-      </Text>
-      <Text style={styles.valuePhoneandAddress} numberOfLines={2} ellipsizeMode="tail">
-        {fullAddress || "Your Full Address"}
-      </Text>
-    </View>
-  </View>
-</View>
-        </ScrollView>
-      </Modal>
-    </KeyboardAvoidingView>
-  </SafeAreaView>
+              <View style={styles.previewCardsContainer}>
+                <View style={styles.previewCardRow}>
+                  <View style={styles.previewCard}>
+                    <Text style={styles.previewCardLabel}>CLASS</Text>
+                    <Text style={styles.previewCardValue}>
+                      {classYear ? classYear.replace(/Class |Year |st |nd |rd |th /g, '') : '8'}<Text style={styles.previewCardSuperscript}>th</Text>
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.previewCard}>
+                    <Text style={styles.previewCardLabel}>MEDIUM</Text>
+                    <Text style={styles.previewCardValue}>{preferredMedium || "Hindi"}</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.previewCardRow}>
+                  <View style={styles.previewCard}>
+                    <Ionicons name="calendar-sharp" size={wp("6%")} color="#808080" />
+                    <Text style={styles.previewCardLabel}>DOB</Text>
+                    <Text style={styles.previewCardValueSmall} numberOfLines={1}>
+                      {dateOfBirth || "11 Nov, 1991"}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.previewCard}>
+                    <FontAwesome6 name="graduation-cap" size={wp("6%")} color="#808080" />
+                    <Text style={styles.previewCardLabel}>Board</Text>
+                    <Text style={styles.previewCardValueSmall} numberOfLines={1}>
+                      {educationBoard || "WBHSE"}
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={styles.previewFullWidthCard}>
+                  <FontAwesome6 name="school" size={wp("6%")} color="#808080" />
+                  <View style={styles.previewFullWidthCardText}>
+                    <Text style={styles.previewFullWidthCardLabel}>INSTITUTION</Text>
+                    <Text style={styles.previewFullWidthCardValue} numberOfLines={1}>
+                      {instituteName || "Delhi University"}
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={styles.previewFullWidthCard}>
+                  <FontAwesome name="map" size={wp("6%")} color="#808080" />
+                  <View style={styles.previewFullWidthCardText}>
+                    <Text style={styles.previewFullWidthCardLabel}>ADDRESS</Text>
+                    <Text style={styles.previewFullWidthCardValue} numberOfLines={1}>
+                      {fullAddress || pincode || stateName ? `${fullAddress || ''}, ${pincode || ''}, ${country || 'India'}` : "abcd, xyz, 20013, India"}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </SafeAreaView>
+        </Modal>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   inputError: { borderColor: "red", borderWidth: 1 },
@@ -1075,96 +935,175 @@ const styles = StyleSheet.create({
   uploadBtnText: { color: "#fff", fontWeight: "500" },
   label: { fontSize: wp("3.2%"), fontWeight: "700", marginTop: hp("1.1%"), color: "#353945", lineHeight: hp("1.61%") },
   asterisk: { color: "red" },
-  previewHeader: { flexDirection: "row", alignItems: "center", padding: 16, backgroundColor: "#f5f5f5", borderBottomWidth: 1, borderBottomColor: "#e4e6ea" },
-  closeIcon: { fontSize: wp("8%"), color: "#15153cff", fontWeight: "200", lineHeight: wp("6%"), textAlign: "center" },
-  closePreviewButton: { position: "absolute", top: wp("2%"), right: wp("2%"), zIndex: 10, height: wp("8%"), width: wp("8%"), alignItems: "center", justifyContent: "center" },
-  previewHeaderTitle: { fontSize: wp("5%"), fontWeight: "600", color: "#21242d", marginLeft: 10 },
   input: { width: wp("87.2%"), height: hp("6.46%"), backgroundColor: "rgba(255,255,255,0)", borderRadius: wp("24%"), paddingHorizontal: wp("2.13%"), marginTop: hp("0.504%"), marginBottom: hp("2.01%"), borderWidth: wp("0.53%"), borderColor: "#e4e6ea", elevation: 0, fontSize: wp("4.27%"), lineHeight: hp("3.23%"), color: "#000000", paddingVertical: Platform.OS === "ios" ? hp("1%") : 0 },
   buttonRow: { flexDirection: "row", justifyContent: "space-between", marginTop: hp("2.69%") },
   button: { backgroundColor: "#5f5fff", padding: 8, borderRadius: 50, flex: 1, alignItems: "center", justifyContent: "center", marginRight: 10, borderColor: "#26cb63", width: wp("37.06%"), height: hp("4.84%") },
   buttonTxt: { color: "#fff", textAlign: "center", fontSize: wp("4.8%"), lineHeight: hp("2%") },
- // Add these styles to your StyleSheet:
-editPreviewButton: { 
-  position: "absolute", 
-  top: wp("2%"), 
-  right: wp("2%"), 
-  zIndex: 10, 
-  height: wp("8%"), 
-  width: wp("8%"), 
-  alignItems: "center", 
-  justifyContent: "center",
-  backgroundColor: "#f2f4f7",
-  borderRadius: wp("4%")
-},
-editIcon: { 
-  fontSize: wp("5%"), 
-  color: "#FFFFFF", 
-  fontWeight: "bold", 
-  textAlign: "center" 
-},
-  previewContainer: { paddingTop: hp("7.806%"), paddingBottom: hp("5.921%"), paddingHorizontal: wp("7.46%"), backgroundColor: "#5f5fff", alignItems: "center", justifyContent: "center" },
-  previewTitle: { fontSize: 20, fontWeight: "bold", marginBottom: 20 },
-  previewText: { fontSize: 16, marginVertical: 4 },
-  previewimageContainer: { position: "relative", backgroundColor: "#FFF", width: wp("85.33%"), height: hp("31%"), borderRadius: wp("4.27%"), alignItems: "center", justifyContent: "center" },
-  profileImagePreview: { height: wp("37.33%"), width: wp("37.33%"), borderRadius: wp("50%") },
-  aboutMe: { backgroundColor: "#ffffff", width: wp("85.33%"), height: hp("28.53%"), borderRadius: wp("4.27%"), justifyContent: "center", paddingHorizontal: wp("5.33%"), gap: wp("4.27"), paddingTop: hp("1%"), paddingBottom: hp("2.422%") },
   centeredView: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.5)" },
   modalView: { backgroundColor: "#fff", padding: 20, borderRadius: 10, alignItems: "center", width: "90%" },
-  studentName: { color: "#030303", fontSize: wp("6.4%"), fontWeight: "600", lineHeight: hp("4.31%"), fontFamily: "Poppins_600SemiBold", marginTop: hp("1%") },
-  aboutMeHeading: { marginTop: hp("2.15%"), marginBottom: hp("1.74%"), color: "#ffffff", fontSize: wp("6.4%"), fontFamily: "OpenSans_600SemiBold", fontWeight: "600", lineHeight: hp("4%") },
-  email: { color: "#858585", fontSize: wp("3.733%") },
-  aboutmecontainer: { flexDirection: "row", alignItems: "center", gap: wp("4.27%") },
-  aboutmeTextContainer: { flexDirection: "column", alignItems: "flex-start", justifyContent: "center" },
-  aboutMeTitle: { marginTop: hp("0.942%"), fontSize: wp("5.06%"), fontWeight: "600", color: "#000000", lineHeight: hp("4.17") },
-  mobileAndAddress: { flexDirection: "row", alignItems: "center", gap: wp("4.27%") },
-  aboutmeValue: { fontSize: wp("4%"), color: "#000", marginTop: 2 },
-  address: { marginTop: hp("2.69%"), backgroundColor: "#3131b0", padding: wp("3.2%"), borderRadius: wp("4.27%"), width: wp("70.13%"), alignSelf: "center", height: hp("40.37%"), gap: wp("4.37%"), borderWidth: wp("0.266%"), borderColor: "#ffffff" },
-  classandMediumContainer: { flexDirection: "row", justifyContent: "space-between", gap: wp("3.2%") },
-  titlePhoneandAddress: { color: "#ffff", fontSize: wp("5.33%"), lineHeight: hp("3.499%"), fontFamily: "Poppins_600SemiBold", fontWeight: "600" },
-  valuePhoneandAddress: { color: "#ffff", fontSize: wp("3.733%") },
-  classContainer: { flex: 1, width: wp("30%"), height: hp("18.971%"), alignItems: "center", backgroundColor: "#FFF", borderRadius: 12, padding: wp("1.6%"), elevation: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
-  iconImage: { width: wp("26.93%"), height: hp("10.497%"), borderRadius: wp("3.12%") },
-  value: { fontSize: 14, color: "#FFF" },
-  classtitle: { fontSize: wp("4.27%"), fontWeight: "600", color: "#000" },
-  classvalue: { fontSize: wp("3.733%"), color: "#000" },
   modalBts: { width: "90%", height: 60, backgroundColor: "#5f5fff", marginBottom: 20, alignItems: "center", justifyContent: "center" },
   modelTxt: { fontSize: 16, lineHeight: 21, color: "#ffffff", fontWeight: "600" },
   scrollContentContainer: { paddingVertical: 10, paddingHorizontal: 16, paddingBottom: Platform.OS === "android" ? hp("10%") : hp("5%") },
-  // pickerContainer: { width: wp("87.2%"), borderWidth: wp("0.53%"), borderColor: "#e4e6ea", borderRadius: wp("24%"), marginTop: hp("0.504%"), marginBottom: hp("2.01%"), backgroundColor: "rgba(255,255,255,0)", overflow: "hidden" },
   picker: { width: "100%", height: hp("6.46%"), color: "#000000" },
-  pickerPlaceholder: { color: "#afb3c1" },
   loadingContainer: { 
-  flex: 1, 
-  justifyContent: 'center', 
-  alignItems: 'center', 
-  backgroundColor: '#f5f5f5' 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    backgroundColor: '#f5f5f5' 
   },
   loadingText: { 
     marginTop: 10, 
     color: '#666',
     fontSize: wp('4%')
   },
-    // ADD THESE 2 STYLES:
-  pickerContainer: {
-    backgroundColor: 'red',
-    borderRadius: wp("24%"),
-  },
-  
   pickerItem: {
     backgroundColor: '#ffffff',
     color: '#000000',
     fontSize: wp("4.27%"),
   },
+  
+  // Preview Modal Styles - Single Page Responsive
+  previewMainContainer: {
+    flex: 1,
+    backgroundColor: "#5f5fff",
+  },
+  previewContainer: { 
+    flex: 1,
+    backgroundColor: "#5f5fff",
+  },
+  previewTopSection: {
+    backgroundColor: "#5f5fff",
+    alignItems: "center",
+    paddingTop: hp("3%"),
+    paddingBottom: hp("2.5%"),
+    position: "relative"
+  },
   crossPreviewButton: { 
-  position: "absolute", 
-  top: wp("2%"), 
-  left: wp("2%"), 
-  zIndex: 10, 
-  height: wp("8%"), 
-  width: wp("8%"), 
-  alignItems: "center", 
-  justifyContent: "center",
-  backgroundColor: "#f2f4f7",
-  borderRadius: wp("4%")
-},
+    position: "absolute", 
+    top: hp("1%"), 
+    left: wp("5%"), 
+    zIndex: 10, 
+    height: wp("8%"), 
+    width: wp("8%"), 
+    alignItems: "center", 
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    borderRadius: wp("4%")
+  },
+  editPreviewButton: { 
+    position: "absolute", 
+    top: hp("1%"), 
+    right: wp("5%"), 
+    zIndex: 10, 
+    height: wp("8%"), 
+    width: wp("8%"), 
+    alignItems: "center", 
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    borderRadius: wp("4%")
+  },
+  previewHeaderText: {
+    color: "#ffffff",
+    fontSize: wp("3%"),
+    fontWeight: "600",
+    letterSpacing: 1.5,
+    marginBottom: hp("1%"),
+    fontFamily: "Poppins_600SemiBold"
+  },
+  profileImagePreview: { 
+    height: wp("35%"), 
+    width: wp("35%"), 
+    borderRadius: wp("50%"),
+    borderWidth: 3,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+    marginBottom: hp("1.5%")
+  },
+  studentName: { 
+    color: "#ffffff", 
+    fontSize: wp("5.5%"), 
+    fontWeight: "600", 
+    fontFamily: "Poppins_600SemiBold",
+    marginTop: hp("0.8%"),
+    textAlign: "center",
+    paddingHorizontal: wp("10%")
+  },
+  previewCardsContainer: {
+    paddingHorizontal: wp("6%"),
+    paddingTop: hp("2%"),
+    paddingBottom: hp("2%"),
+    gap: hp("2%"),
+    flex: 1,
+  },
+  previewCardRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: wp("2.5%")
+  },
+  previewCard: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    borderRadius: wp("3%"),
+    padding: wp("4%"),
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: hp("14%"),
+    maxHeight: hp("16%")
+  },
+  previewCardLabel: {
+    color: "#7a7a7a",
+    fontSize: wp("3%"),
+    fontWeight: "600",
+    marginTop: hp("0.5%"),
+    marginBottom: hp("0.3%"),
+    fontFamily: "Poppins_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 0.5
+  },
+  previewCardValue: {
+    color: "#000000",
+    fontSize: wp("8%"),
+    fontWeight: "bold",
+    fontFamily: "Poppins_600SemiBold"
+  },
+  previewCardSuperscript: {
+    color: "#000000",
+    fontSize: wp("3.5%"),
+    fontWeight: "600",
+    fontFamily: "Poppins_600SemiBold"
+  },
+  previewCardValueSmall: {
+    color: "#000000",
+    fontSize: wp("3.5%"),
+    fontWeight: "600",
+    textAlign: "center",
+    fontFamily: "Poppins_600SemiBold"
+  },
+  previewFullWidthCard: {
+    backgroundColor: "#e8e8ff",
+    borderRadius: wp("3%"),
+    padding: wp("4%"),
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wp("3%"),
+    minHeight: hp("10%"),
+    maxHeight: hp("12%")
+  },
+  previewFullWidthCardText: {
+    flex: 1
+  },
+  previewFullWidthCardLabel: {
+    color: "#7a7a7a",
+    fontSize: wp("3%"),
+    fontWeight: "600",
+    marginBottom: hp("0.3%"),
+    fontFamily: "Poppins_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 0.5
+  },
+  previewFullWidthCardValue: {
+    color: "#000000",
+    fontSize: wp("3.5%"),
+    fontWeight: "500",
+    fontFamily: "Poppins_600SemiBold"
+  },
 });

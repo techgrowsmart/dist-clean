@@ -1,4 +1,4 @@
-{
+export const boardsData = {
     "boards": [
       {
         "id": "board_cbse",
@@ -55,5 +55,5 @@
         ]
       }
     ]
-  }
+  };
   

@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
   // Cross button styles
   crossButton: {
     position: 'absolute',
-    top: hp("2%"),
+    top: hp("8%"),
     right: wp("5%"),
     zIndex: 10,
     width: wp(10),

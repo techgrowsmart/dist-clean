@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Image, ImageBackground, TextInput, ActivityIndicator } from 'react-native';
-import { useFonts } from 'expo-font';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useFonts, Montserrat_400Regular, Montserrat_500Medium, Montserrat_600SemiBold, Montserrat_700Bold } from '@expo-google-fonts/montserrat';
+import { OpenSans_700Bold } from '@expo-google-fonts/open-sans';
+import { Quicksand_400Regular, Quicksand_500Medium, Quicksand_600SemiBold, Quicksand_700Bold } from '@expo-google-fonts/quicksand';
+import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
 
 const { width, height } = Dimensions.get('window');
 
@@ -26,16 +29,24 @@ interface Review {
 
 const LeftScreen: React.FC = () => {
   const [fontsLoaded] = useFonts({
-    'Montserrat-Regular': require('@expo-google-fonts/montserrat').Montserrat_400Regular,
-    'Montserrat-Medium': require('@expo-google-fonts/montserrat').Montserrat_500Medium,
-    'Montserrat-SemiBold': require('@expo-google-fonts/montserrat').Montserrat_600SemiBold,
-    'Montserrat-Bold': require('@expo-google-fonts/montserrat').Montserrat_700Bold,
-    'OpenSans-Bold': require('@expo-google-fonts/open-sans').OpenSans_700Bold,
-    'Quicksand-Regular': require('@expo-google-fonts/quicksand').Quicksand_400Regular,
-    'Quicksand-Medium': require('@expo-google-fonts/quicksand').Quicksand_500Medium,
-    'Quicksand-SemiBold': require('@expo-google-fonts/quicksand').Quicksand_600SemiBold,
-    'Quicksand-Bold': require('@expo-google-fonts/quicksand').Quicksand_700Bold,
+    Montserrat_400Regular,
+    Montserrat_500Medium,
+    Montserrat_600SemiBold,
+    Montserrat_700Bold,
+    OpenSans_700Bold,
+    Quicksand_400Regular,
+    Quicksand_500Medium,
+    Quicksand_600SemiBold,
+    Quicksand_700Bold,
   });
+
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      setIsReady(true);
+    }
+  }, [fontsLoaded]);
 
   const [activeTab, setActiveTab] = useState<'myReviews' | 'reviews'>('myReviews');
   const [searchQuery, setSearchQuery] = useState('');
@@ -69,26 +80,46 @@ const LeftScreen: React.FC = () => {
     return name.split(' ').map(part => part[0]).join('').toUpperCase();
   };
 
-  if (!fontsLoaded) {
+  if (!isReady) {
     return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#5B5FE8" /></View>;
   }
 
   return (
-    <ImageBackground source={require('../../../assets/images/teacherleftbackground.png')} style={styles.background} resizeMode="cover">
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.container}>
+    <ImageBackground 
+      source={require('../../../assets/images/TeacherLeftBackground.png')} 
+      style={styles.background} 
+      resizeMode="cover"
+    >
+      <View style={styles.container}>
+        <ScrollView 
+          style={styles.scrollView} 
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={styles.scrollContent}
+        >
           <Text style={styles.headerTitle}>My Teachers</Text>
 
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={20} color="#A0A0A0" style={styles.searchIcon} />
-            <TextInput style={styles.searchInput} placeholder="Search for a teacher ..." placeholderTextColor="#A0A0A0" value={searchQuery} onChangeText={setSearchQuery} />
+            <TextInput 
+              style={styles.searchInput} 
+              placeholder="Search for a teacher ..." 
+              placeholderTextColor="#A0A0A0" 
+              value={searchQuery} 
+              onChangeText={setSearchQuery} 
+            />
           </View>
 
           <View style={styles.tabContainer}>
-            <TouchableOpacity style={[styles.tab, activeTab === 'myReviews' && styles.activeTab]} onPress={() => setActiveTab('myReviews')}>
+            <TouchableOpacity 
+              style={[styles.tab, activeTab === 'myReviews' && styles.activeTab]} 
+              onPress={() => setActiveTab('myReviews')}
+            >
               <Text style={[styles.tabText, activeTab === 'myReviews' && styles.activeTabText]}>My Reviews</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.tab, activeTab === 'reviews' && styles.activeTab]} onPress={() => setActiveTab('reviews')}>
+            <TouchableOpacity 
+              style={[styles.tab, activeTab === 'reviews' && styles.activeTab]} 
+              onPress={() => setActiveTab('reviews')}
+            >
               <Text style={[styles.tabText, activeTab === 'reviews' && styles.activeTabText]}>Reviews</Text>
             </TouchableOpacity>
           </View>
@@ -100,7 +131,7 @@ const LeftScreen: React.FC = () => {
                   <View style={styles.teacherInfo}>
                     <View style={styles.avatarContainer}>
                       {teacher.avatar ? (
-                        <Image source={teacher.avatar} style={styles.avatar} onError={() => { teacher.avatar = null; }} />
+                        <Image source={teacher.avatar} style={styles.avatar} />
                       ) : (
                         <View style={styles.avatarPlaceholder}>
                           <Text style={styles.avatarText}>{getInitials(teacher.name)}</Text>
@@ -121,7 +152,6 @@ const LeftScreen: React.FC = () => {
                         teacherId: teacher.id,
                         teacherName: teacher.name,
                         teacherDepartment: teacher.department,
-                        teacherAvatar: teacher.avatar
                       }
                     })}
                   >
@@ -153,12 +183,18 @@ const LeftScreen: React.FC = () => {
                       </View>
                       <View style={styles.ratingRow}>
                         <View style={styles.starsRow}>
-                          {[1, 2, 3, 4].map((star) => (
-                            <Ionicons key={star} name="star" size={18} color="#FFC107" style={styles.starIcon} />
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Ionicons 
+                              key={star} 
+                              name={star <= Math.floor(review.rating) ? "star" : "star-outline"} 
+                              size={16} 
+                              color="#FFC107" 
+                              style={styles.starIcon} 
+                            />
                           ))}
                         </View>
                         <Text style={styles.ratingText}>{review.rating}</Text>
-                        <Text style={styles.totalReviewsText}>Total reviews: {review.totalReviews}</Text>
+                        <Text style={styles.totalReviewsText}>({review.totalReviews})</Text>
                       </View>
                     </View>
                   </View>
@@ -177,62 +213,62 @@ const LeftScreen: React.FC = () => {
               <Text style={styles.bottomSubText}>Find new teachers to subscribe</Text>
             </View>
           )}
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
     </ImageBackground>
   );
 };
 
 const styles = StyleSheet.create({
-  background: { flex: 1, width: '100%', height: '100%' },
-  scrollView: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingBottom: height * 0.05, paddingTop: height * 0.06, paddingHorizontal: width * 0.05 },
-  container: { width: '100%', minHeight: '100%' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
-  headerTitle: { fontSize: width * 0.065, fontFamily: 'OpenSans-Bold', color: '#FFFFFF', marginBottom: height * 0.025, textAlign: 'center' },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 30, paddingHorizontal: width * 0.045, paddingVertical: height * 0.016, marginBottom: height * 0.02, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
-  searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, fontSize: width * 0.038, fontFamily: 'Montserrat-Regular', color: '#333' },
-  tabContainer: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 30, padding: 5, marginBottom: height * 0.02, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
-  tab: { flex: 1, paddingVertical: height * 0.014, alignItems: 'center', borderRadius: 25 },
+  background: { flex: 1, width: '100%', height: '100%' },
+  container: { flex: 1, backgroundColor: 'transparent' },
+  scrollView: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingBottom: hp('10%'), paddingTop: hp('6%'), paddingHorizontal: wp('5%') },
+  headerTitle: { fontSize: wp('6.5%'), fontFamily: 'OpenSans_700Bold', color: '#FFFFFF', marginBottom: hp('2.5%'), textAlign: 'center' },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: wp('8%'), paddingHorizontal: wp('4.5%'), paddingVertical: hp('1.6%'), marginBottom: hp('2%'), shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
+  searchIcon: { marginRight: wp('2%') },
+  searchInput: { flex: 1, fontSize: wp('3.8%'), fontFamily: 'Montserrat_400Regular', color: '#333' },
+  tabContainer: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: wp('8%'), padding: 5, marginBottom: hp('2%'), shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
+  tab: { flex: 1, paddingVertical: hp('1.4%'), alignItems: 'center', borderRadius: wp('6%') },
   activeTab: { backgroundColor: '#5B5FE8' },
-  tabText: { fontSize: width * 0.038, fontFamily: 'Montserrat-SemiBold', color: '#64748B' },
+  tabText: { fontSize: wp('3.8%'), fontFamily: 'Montserrat_600SemiBold', color: '#64748B' },
   activeTabText: { color: '#FFFFFF' },
-  teachersList: { flex: 1, marginBottom: height * 0.02 },
-  teacherCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', borderRadius: 20, padding: width * 0.04, marginBottom: height * 0.015, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
+  teachersList: { flex: 1, marginBottom: hp('2%') },
+  teacherCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', borderRadius: wp('5%'), padding: wp('4%'), marginBottom: hp('1.5%'), shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
   teacherInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  avatarContainer: { position: 'relative', marginRight: 15 },
-  avatar: { width: 55, height: 55, borderRadius: 27.5 },
-  avatarPlaceholder: { width: 55, height: 55, borderRadius: 27.5, backgroundColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },
-  avatarText: { fontSize: 18, fontFamily: 'Montserrat-Bold', color: '#4A5568' },
-  onlineBadge: { position: 'absolute', bottom: 2, right: 2, width: 12, height: 12, borderRadius: 6, backgroundColor: '#10B981', borderWidth: 2, borderColor: '#FFFFFF' },
-  teacherDetails: { flex: 1, marginRight: 10 },
-  teacherName: { fontSize: width * 0.042, fontFamily: 'Montserrat-Bold', color: '#1E293B', marginBottom: 3 },
-  teacherDepartment: { fontSize: width * 0.034, fontFamily: 'Montserrat-Medium', color: '#64748B' },
-  reviewButton: { backgroundColor: '#E0E7FF', paddingHorizontal: width * 0.055, paddingVertical: height * 0.011, borderRadius: 18 },
-  reviewButtonText: { fontSize: width * 0.036, fontFamily: 'Montserrat-SemiBold', color: '#5B5FE8' },
-  reviewsList: { flex: 1, marginBottom: height * 0.02 },
-  reviewCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: width * 0.04, marginBottom: height * 0.015, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
-  reviewHeader: { flexDirection: 'row', marginBottom: height * 0.012 },
-  reviewAvatarContainer: { marginRight: 12 },
-  reviewAvatar: { width: 50, height: 50, borderRadius: 25 },
-  reviewAvatarPlaceholder: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },
-  reviewAvatarText: { fontSize: 16, fontFamily: 'Quicksand-Bold', color: '#4A5568' },
+  avatarContainer: { position: 'relative', marginRight: wp('4%') },
+  avatar: { width: wp('12%'), height: wp('12%'), borderRadius: wp('6%') },
+  avatarPlaceholder: { width: wp('12%'), height: wp('12%'), borderRadius: wp('6%'), backgroundColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },
+  avatarText: { fontSize: wp('4%'), fontFamily: 'Montserrat_700Bold', color: '#4A5568' },
+  onlineBadge: { position: 'absolute', bottom: 2, right: 2, width: wp('2.5%'), height: wp('2.5%'), borderRadius: wp('1.25%'), backgroundColor: '#10B981', borderWidth: 2, borderColor: '#FFFFFF' },
+  teacherDetails: { flex: 1, marginRight: wp('2%') },
+  teacherName: { fontSize: wp('4.2%'), fontFamily: 'Montserrat_700Bold', color: '#1E293B', marginBottom: 3 },
+  teacherDepartment: { fontSize: wp('3.4%'), fontFamily: 'Montserrat_500Medium', color: '#64748B' },
+  reviewButton: { backgroundColor: '#E0E7FF', paddingHorizontal: wp('5.5%'), paddingVertical: hp('1.1%'), borderRadius: wp('4.5%') },
+  reviewButtonText: { fontSize: wp('3.6%'), fontFamily: 'Montserrat_600SemiBold', color: '#5B5FE8' },
+  reviewsList: { flex: 1, marginBottom: hp('2%') },
+  reviewCard: { backgroundColor: '#FFFFFF', borderRadius: wp('5%'), padding: wp('4%'), marginBottom: hp('1.5%'), shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
+  reviewHeader: { flexDirection: 'row', marginBottom: hp('1.2%') },
+  reviewAvatarContainer: { marginRight: wp('3%') },
+  reviewAvatar: { width: wp('11%'), height: wp('11%'), borderRadius: wp('5.5%') },
+  reviewAvatarPlaceholder: { width: wp('11%'), height: wp('11%'), borderRadius: wp('5.5%'), backgroundColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },
+  reviewAvatarText: { fontSize: wp('4%'), fontFamily: 'Quicksand_700Bold', color: '#4A5568' },
   reviewTeacherInfo: { flex: 1 },
-  reviewTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  reviewTeacherName: { fontSize: width * 0.038, fontFamily: 'Quicksand-Bold', color: '#1E293B', marginRight: 8 },
-  departmentBadge: { backgroundColor: '#A7F3D0', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12 },
-  departmentBadgeText: { fontSize: width * 0.028, fontFamily: 'Quicksand-Bold', color: '#059669' },
-  ratingRow: { flexDirection: 'row', alignItems: 'center' },
-  starsRow: { flexDirection: 'row', marginRight: 6 },
-  starIcon: { marginRight: 1 },
-  ratingText: { fontSize: width * 0.042, fontFamily: 'Quicksand-Bold', color: '#FFA500', marginRight: 6 },
-  totalReviewsText: { fontSize: width * 0.032, fontFamily: 'Quicksand-Medium', color: '#64748B' },
-  reviewText: { fontSize: width * 0.035, fontFamily: 'Quicksand-Regular', color: '#475569', lineHeight: width * 0.05 },
-  bottomSection: { alignItems: 'center', marginTop: height * 0.03, marginBottom: height * 0.02 },
-  addTeacherButton: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', marginBottom: height * 0.02, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
-  bottomText: { fontSize: width * 0.042, fontFamily: 'Montserrat-SemiBold', color: '#FFFFFF', marginBottom: height * 0.008, textAlign: 'center' },
-  bottomSubText: { fontSize: width * 0.036, fontFamily: 'Montserrat-Medium', color: '#E0E7FF', textAlign: 'center' },
+  reviewTopRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 },
+  reviewTeacherName: { fontSize: wp('3.8%'), fontFamily: 'Quicksand_700Bold', color: '#1E293B', marginRight: wp('2%') },
+  departmentBadge: { backgroundColor: '#A7F3D0', paddingHorizontal: wp('2.5%'), paddingVertical: hp('0.3%'), borderRadius: wp('3%') },
+  departmentBadgeText: { fontSize: wp('2.8%'), fontFamily: 'Quicksand_700Bold', color: '#059669' },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
+  starsRow: { flexDirection: 'row', marginRight: wp('1.5%') },
+  starIcon: { marginRight: 2 },
+  ratingText: { fontSize: wp('3.8%'), fontFamily: 'Quicksand_700Bold', color: '#FFA500', marginRight: 4 },
+  totalReviewsText: { fontSize: wp('3.2%'), fontFamily: 'Quicksand_500Medium', color: '#64748B' },
+  reviewText: { fontSize: wp('3.5%'), fontFamily: 'Quicksand_400Regular', color: '#475569', lineHeight: wp('5%') },
+  bottomSection: { alignItems: 'center', marginTop: hp('3%'), marginBottom: hp('2%') },
+  addTeacherButton: { width: wp('15%'), height: wp('15%'), borderRadius: wp('7.5%'), backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', marginBottom: hp('2%'), shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
+  bottomText: { fontSize: wp('4.2%'), fontFamily: 'Montserrat_600SemiBold', color: '#FFFFFF', marginBottom: hp('0.8%'), textAlign: 'center' },
+  bottomSubText: { fontSize: wp('3.6%'), fontFamily: 'Montserrat_500Medium', color: '#E0E7FF', textAlign: 'center' },
 });
 
 export default LeftScreen;

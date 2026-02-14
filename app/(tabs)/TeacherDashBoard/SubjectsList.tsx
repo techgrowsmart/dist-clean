@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { 
   View, 
   Text, 
@@ -7,13 +7,15 @@ import {
   ScrollView, 
   Image, 
   ActivityIndicator,
-  BackHandler // Add this import
+  BackHandler,
+  RefreshControl
 } from "react-native";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import BottomNavigation from "../../../app/(tabs)/BottomNavigation";
 
 interface Tuition {
@@ -36,33 +38,67 @@ interface TeacherData {
   tuitions: Tuition[] | string;
 }
 
+const CACHE_KEY = "subjects_list_cache";
+
 export default function SubjectsList() {
   const router = useRouter();
   const [subjects, setSubjects] = useState<Tuition[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchSubjects();
-    
-    // Add back handler
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      handleBackPress
-    );
+  const handleBackPress = useCallback(() => {
+    // Use router.back() instead of router.push for proper navigation
+    router.back();
+    return true;
+  }, [router]);
 
-    // Cleanup the event listener
-    return () => backHandler.remove();
+  // Load cached data first for instant display
+  const loadCachedData = useCallback(async () => {
+    try {
+      const cached = await AsyncStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const { subjects: cachedSubjects, timestamp } = JSON.parse(cached);
+        const cacheAge = Date.now() - timestamp;
+        
+        // Use cache if it's less than 5 minutes old
+        if (cacheAge < 5 * 60 * 1000 && cachedSubjects.length > 0) {
+          console.log('📚 Using cached subjects data:', cachedSubjects.length);
+          setSubjects(cachedSubjects);
+          setLoading(false);
+          return true;
+        }
+      }
+    } catch (err) {
+      console.error('Cache loading error:', err);
+    }
+    return false;
   }, []);
 
-  const handleBackPress = () => {
-    router.push("/(tabs)/TeacherDashBoard/Teacher");
-    return true; // This prevents the app from closing
-  };
-
-  const fetchSubjects = async () => {
+  // Cache the fetched data
+  const cacheData = useCallback(async (data: Tuition[]) => {
     try {
+      await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({
+        subjects: data,
+        timestamp: Date.now()
+      }));
+    } catch (err) {
+      console.error('Cache saving error:', err);
+    }
+  }, []);
+
+  const fetchSubjects = useCallback(async (useCache = true) => {
+    try {
+      setError(null);
+      
+      // Try to load from cache first
+      if (useCache && await loadCachedData()) {
+        return;
+      }
+
       const auth = await getAuthData();
       if (!auth || !auth.email) {
+        setError("Authentication required. Please login again.");
         router.replace("/");
         return;
       }
@@ -70,48 +106,36 @@ export default function SubjectsList() {
       const { email, token } = auth;
       const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
-      const res = await fetch(`${BASE_URL}/api/teacherInfo`, { method: "POST", headers, body: JSON.stringify({ teacherEmail: email }) });
-      const data = await res.json();
+      console.log('🚀 Fetching subjects data...');
+      const startTime = Date.now();
 
-      console.log("📚 API Response:", data);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const res = await fetch(`${BASE_URL}/api/teacherProfile`, { 
+        method: "POST", 
+        headers, 
+        body: JSON.stringify({ email }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      
+      const data: any = await res.json();
+      console.log("📚 API Response received in", Date.now() - startTime, "ms");
 
       let allTuitions: Tuition[] = [];
 
-      // Process all teacher entries that match the email
-      const processTeachers = (teachers: any) => {
-        if (Array.isArray(teachers)) {
-          teachers.forEach((teacher: TeacherData) => {
-            if (teacher.email === email) {
-              let tuitions = teacher.tuitions;
-              if (typeof tuitions === "string") {
-                try { 
-                  tuitions = JSON.parse(tuitions); 
-                } catch (err) { 
-                  console.error("Parse error:", err); 
-                  tuitions = []; 
-                }
-              }
-              if (Array.isArray(tuitions)) {
-                allTuitions.push(...tuitions);
-              }
-            }
-          });
-        }
-      };
-
-      // Process spotlightTeachers
-      if (data.spotlightTeachers) {
-        Object.values(data.spotlightTeachers).forEach(processTeachers);
-      }
-
-      // Process popularTeachers  
-      if (data.popularTeachers) {
-        Object.values(data.popularTeachers).forEach(processTeachers);
-      }
-
-      // Also check if there are direct teacher entries in the response
-      if (data.teachers && Array.isArray(data.teachers)) {
-        processTeachers(data.teachers);
+      // Process the teacherProfile API response structure
+      if (data?.tuitions && Array.isArray(data.tuitions)) {
+        allTuitions = data.tuitions;
+        console.log("📚 Found tuitions in teacherProfile response:", allTuitions.length);
+      } else {
+        console.log("⚠️ No tuitions found in teacherProfile response");
       }
 
       console.log("📚 All Tuitions Found:", allTuitions);
@@ -126,14 +150,42 @@ export default function SubjectsList() {
         ).values()
       );
       
-      console.log("✅ Unique Tuitions:", uniqueTuitions);
+      console.log("✅ Unique Tuitions:", uniqueTuitions.length);
       setSubjects(uniqueTuitions);
+      
+      // Cache the results
+      await cacheData(uniqueTuitions);
+      
     } catch (error) {
       console.error("Error fetching subjects:", error);
+      setError(error instanceof Error ? error.message : "Failed to load subjects");
+      
+      // Try to show stale cache if available
+      await loadCachedData();
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [loadCachedData, cacheData]);
+
+  // Refresh function for pull-to-refresh
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchSubjects(false); // Skip cache on refresh
+  }, [fetchSubjects]);
+
+  useEffect(() => {
+    fetchSubjects();
+    
+    // Add back handler
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      handleBackPress
+    );
+
+    // Cleanup the event listener
+    return () => backHandler.remove();
+  }, [fetchSubjects]);
 
   const formatTime = (timeFrom: string, timeTo: string) => `${timeFrom} - ${timeTo}`;
 
@@ -141,6 +193,7 @@ export default function SubjectsList() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#006a89" />
+        <Text style={styles.loadingText}>Loading subjects...</Text>
       </View>
     );
   }
@@ -155,14 +208,40 @@ export default function SubjectsList() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {subjects.length === 0 ? (
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton} 
+            onPress={() => fetchSubjects(false)}
+          >
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#006a89"]}
+            tintColor="#006a89"
+          />
+        }
+      >
+        {subjects.length === 0 && !error ? (
           <View style={styles.emptyContainer}>
+            <Ionicons name="book-outline" size={wp("15%")} color="#ccc" />
             <Text style={styles.emptyText}>No subjects found</Text>
+            <Text style={styles.emptySubText}>Your subjects will appear here once you add them</Text>
           </View>
         ) : (
           subjects.map((item, index) => (
-            <View key={index} style={styles.subjectCard}>
+            <View key={`${item.classId || item.skillId}-${index}`} style={styles.subjectCard}>
               <View style={styles.leftSection}>
                 <View style={styles.iconContainer}>
                 <Image 
@@ -196,7 +275,18 @@ export default function SubjectsList() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f6f7f8" },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f6f7f8" },
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: "center", 
+    alignItems: "center", 
+    backgroundColor: "#f6f7f8" 
+  },
+  loadingText: {
+    marginTop: hp("2%"),
+    fontSize: wp("4%"),
+    color: "#666",
+    fontFamily: "WorkSans-Medium"
+  },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: wp("5%"), paddingTop: hp("6%"), paddingBottom: hp("2%"), backgroundColor: "#f6f7f8" },
   backButton: { padding: wp("2%") },
   headerTitle: { 
@@ -211,12 +301,46 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: hp("12%"), paddingTop: hp("2%") },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingTop: hp("20%") },
   emptyText: { 
-    fontSize: wp("4%"), 
+    fontSize: wp("4.5%"), 
     color: "#999", 
     fontWeight: "500",
-    fontFamily: "WorkSans-Medium" 
+    fontFamily: "WorkSans-Medium",
+    marginTop: hp("2%")
   },
- 
+  emptySubText: {
+    fontSize: wp("3.5%"),
+    color: "#ccc",
+    textAlign: "center",
+    fontFamily: "WorkSans-Light",
+    marginTop: hp("1%"),
+    paddingHorizontal: wp("10%")
+  },
+  errorContainer: {
+    backgroundColor: "#fee",
+    padding: wp("4%"),
+    marginHorizontal: wp("5%"),
+    marginTop: hp("2%"),
+    borderRadius: wp("3%"),
+    alignItems: "center"
+  },
+  errorText: {
+    color: "#c00",
+    fontSize: wp("3.5%"),
+    textAlign: "center",
+    fontFamily: "WorkSans-Medium"
+  },
+  retryButton: {
+    marginTop: hp("1%"),
+    backgroundColor: "#006a89",
+    paddingHorizontal: wp("6%"),
+    paddingVertical: hp("1%"),
+    borderRadius: wp("2%")
+  },
+  retryText: {
+    color: "#fff",
+    fontSize: wp("3.5%"),
+    fontFamily: "WorkSans-Medium"
+  },
   subjectCard: { 
     flexDirection: "row", 
     alignItems: "stretch", 

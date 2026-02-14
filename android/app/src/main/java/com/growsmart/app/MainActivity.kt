@@ -1,4 +1,4 @@
-package com.gogrowsmart.app
+package com.growsmart.app
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

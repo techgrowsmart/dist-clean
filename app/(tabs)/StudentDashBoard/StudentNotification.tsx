@@ -57,7 +57,7 @@ const StudentNotification = () => {
                     'Authorization': `Bearer ${currentToken}`,
                     'Content-Type': 'application/json'
                 },
-                timeout: 15000
+                timeout: 5000 // Reduced from 15s to 5s to match Teacher
             });
             
             console.log(`✅ Student notifications fetched successfully: ${response.data.length} items`);
@@ -95,9 +95,11 @@ const StudentNotification = () => {
     useFocusEffect(
         React.useCallback(() => {
             fetchNotifications();
-            const interval = setInterval(fetchNotifications, 60000);
-            return () => clearInterval(interval);
-        }, [])
+            // Removed excessive polling - only fetch on focus
+            return () => {
+                // Cleanup if needed
+            };
+        }, [fetchNotifications])
     );
 
     const formatTime = (dateString: string | Date) => {
@@ -139,8 +141,7 @@ const StudentNotification = () => {
                         headers: {
                             'Authorization': `Bearer ${token?.token}`,
                             'Content-Type': 'application/json'
-                        },
-                        timeout: 10000
+                        }
                     }
                 );
                 console.log('✅ Student notification marked as read successfully');

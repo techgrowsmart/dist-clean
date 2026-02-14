@@ -112,7 +112,7 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
     if (isActive) {
       return "#ffffff"; // White when tab is active
     } else if (hasFavorites) {
-      return "#4255ff"; // Blue when has favorites
+      return "#82878F"; // Blue when has favorites
     } else {
       return "#82878F"; // Gray when no favorites
     }

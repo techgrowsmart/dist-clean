@@ -1,4 +1,4 @@
-package com.gogrowsmart.app
+package com.growsmart.app
 
 import android.app.Application
 import android.content.res.Configuration

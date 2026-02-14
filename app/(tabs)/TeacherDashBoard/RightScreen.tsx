@@ -16,19 +16,86 @@ import {
 import { useFonts } from 'expo-font';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { getAuthData, storeAuthData } from '../../../utils/authStorage';
+import { autoRefreshToken } from '../../../utils/tokenRefresh';
+import { BASE_URL } from '../../../config';
+import axios from 'axios';
 
 const { width, height } = Dimensions.get('window');
 
-interface Post {
+const getProfileImageSource = (profilePic?: string) => {
+    if (!profilePic) { 
+      return null; // Will show initials instead
+    }
+    
+    // Handle different profile image formats
+    if (typeof profilePic === 'string') {
+      // If it's already a full URL (http/https/file)
+      if (profilePic.startsWith('http') || profilePic.startsWith('file://')) {
+        return { uri: profilePic };
+      }
+      
+      // If it's a relative path starting with /
+      if (profilePic.startsWith('/')) {
+        return { uri: `${BASE_URL}${profilePic}` };
+      }
+      
+      // If it's a relative path without leading /
+      if (profilePic.includes('uploads/') || profilePic.includes('images/')) {
+        return { uri: `${BASE_URL}/${profilePic}` };
+      }
+      
+      // Default case - treat as relative path
+      return { uri: `${BASE_URL}/${profilePic}` };
+    }
+    
+    return null;
+  };
+
+interface Like {
+  user_email: string;
+  user_name: string;
+  user_profile_pic: string;
+  liked_at: string;
+}
+
+interface Comment {
   id: string;
-  author: string;
-  role: string;
+  author: {
+    email: string;
+    name: string;
+    role: string;
+    profile_pic: string;
+  };
   content: string;
   likes: number;
+  createdAt: string;
+  isLiked?: boolean;
+}
+
+interface Post {
+  id: string;
+  author: {
+    email: string;
+    name: string;
+    role: string;
+    profile_pic: string;
+  };
+  content: string;
+  likes: number;
+  likes_details?: Like[];
+  comments?: Comment[];
   createdAt: string;
   tags?: string[];
   postImage?: string;
   isLiked?: boolean;
+}
+
+interface CurrentUser {
+  email: string;
+  name: string;
+  role: string;
+  profileImage?: string;
 }
 
 const RightScreen: React.FC = () => {
@@ -44,61 +111,185 @@ const RightScreen: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
 
-  // Mock user data - replace with actual user context
-  const currentUser = {
-    email: 'teacher@example.com',
-    name: 'Teacher',
-    role: 'teacher'
+  // Modals state
+  const [showLikesModal, setShowLikesModal] = useState(false);
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [postLikes, setPostLikes] = useState<Like[]>([]);
+  const [postComments, setPostComments] = useState<Comment[]>([]);
+  const [commentText, setCommentText] = useState('');
+
+  const initializeUserData = async () => {
+    try {
+      const authData = await getAuthData();
+      console.log('🔐 Auth data retrieved:', authData); // Debug log
+      
+      // Auto-refresh token if role is missing
+      const wasRefreshed = await autoRefreshToken();
+      if (wasRefreshed) {
+        console.log('🔄 Token was refreshed, getting updated auth data...');
+        const updatedAuthData = await getAuthData();
+        console.log('📋 Updated auth data:', updatedAuthData);
+        
+        if (updatedAuthData) {
+          setAuthToken(updatedAuthData.token);
+          setCurrentUser({
+            email: updatedAuthData.email,
+            name: updatedAuthData.name || 'Teacher', // Don't extract from email here, let the fallback system handle it
+            role: updatedAuthData.role,
+            profileImage: updatedAuthData.profileImage
+          });
+          console.log('👤 User role after refresh:', updatedAuthData.role); // Debug role
+          console.log('👤 User name from auth:', updatedAuthData.name); // Debug name
+          console.log('🖼️ Profile image from auth:', updatedAuthData.profileImage);
+          
+          // Fetch user profile image from backend
+          if (updatedAuthData.email && updatedAuthData.token) {
+            console.log('🔍 Fetching profile image from backend...');
+            await fetchUserProfile(updatedAuthData.token, updatedAuthData.email);
+          }
+          
+          fetchPosts(updatedAuthData.token);
+        }
+      } else if (authData) {
+        setAuthToken(authData.token);
+        setCurrentUser({
+          email: authData.email,
+          name: authData.name || 'Teacher', // Don't extract from email here, let the fallback system handle it
+          role: authData.role,
+          profileImage: authData.profileImage
+        });
+        console.log('👤 User role:', authData.role); // Debug role
+        console.log('👤 User name from auth:', authData.name); // Debug name
+        console.log('🖼️ Profile image from auth:', authData.profileImage);
+        
+        // Fetch user profile image from backend
+        if (authData.email && authData.token) {
+          console.log('🔍 Fetching profile image from backend...');
+          await fetchUserProfile(authData.token, authData.email);
+        }
+        
+        fetchPosts(authData.token);
+      }
+    } catch (error) {
+      console.error('❌ Error initializing user data:', error);
+      Alert.alert('Error', 'Failed to initialize user data');
+    }
   };
 
-  // API base URL - replace with your actual backend URL
-  const API_BASE_URL = 'http://localhost:5000/api';
-
-  // Fetch posts on component mount
+  // Fetch user data and posts on component mount
   useEffect(() => {
-    fetchPosts();
+    initializeUserData();
   }, []);
 
-  const fetchPosts = async () => {
+  const fetchUserProfile = async (token: string, email: string) => {
+    try {
+      const response = await axios.post(`${BASE_URL}/api/teacherProfile`, { email }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.data) {
+        // Try different possible field names for profile picture
+        const profilePic = response.data.profileimage || response.data.profilePic || response.data.profilepic || response.data.profile_image;
+        
+        // Try different possible field names for user name
+        const userName = response.data.name || response.data.userName || response.data.fullname || response.data.fullName || response.data.displayName;
+        
+        if (profilePic || userName) {
+          // Ensure we have a proper URL format for profile image
+          let finalProfilePic = profilePic;
+          if (!profilePic.startsWith('http') && !profilePic.startsWith('/')) {
+            finalProfilePic = `/${profilePic}`;
+          }
+          
+          setCurrentUser(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              profileImage: finalProfilePic,
+              name: userName || prev.name // Use fetched name or keep existing
+            };
+          });
+          
+          // Update stored auth data with profile image and name
+          const authData = await getAuthData();
+          if (authData) {
+            await storeAuthData({ 
+              ...authData, 
+              profileImage: finalProfilePic,
+              name: userName || authData.name 
+            });
+          }
+        } else {
+          console.log('⚠️ No profile image or name found in response');
+        }
+      }
+    } catch (error) {
+      console.log('❌ Profile fetch error:', error);
+      // Don't show alert for profile image fetch error as it's not critical
+    }
+  };
+
+  const getProfileImageSource = (profilePic?: string) => {
+    if (!profilePic) { 
+      return null; // Will show initials instead
+    }
+    
+    // Handle different profile image formats
+    if (typeof profilePic === 'string') {
+      // If it's already a full URL (http/https/file)
+      if (profilePic.startsWith('http') || profilePic.startsWith('file://')) {
+        return { uri: profilePic };
+      }
+      
+      // If it's a relative path starting with /
+      if (profilePic.startsWith('/')) {
+        return { uri: `${BASE_URL}${profilePic}` };
+      }
+      
+      // If it's a relative path without leading /
+      if (profilePic.includes('uploads/') || profilePic.includes('images/')) {
+        return { uri: `${BASE_URL}/${profilePic}` };
+      }
+      
+      // Default case - treat as relative path
+      return { uri: `${BASE_URL}/${profilePic}` };
+    }
+    
+    return null;
+  };
+
+  const fetchPosts = async (token: string) => {
     try {
       setRefreshing(true);
-      // Mock implementation for now - replace with actual API call
-      // const response = await fetch(`${API_BASE_URL}/posts/all`, {
-      //   headers: {
-      //     'Authorization': `Bearer ${await getToken()}`
-      //   }
-      // });
-      // const data = await response.json();
-      // if (data.success) {
-      //   setPosts(data.data);
-      // }
-      
-      // Temporary mock data
-      setPosts([
-        {
-          id: '1',
-          author: 'Sarah Wilson',
-          role: 'History Tutor',
-          content: 'Just tried the "flipped classroom" method for 9th grade History. The engagement was unreal! 🎉',
-          likes: 14,
-          createdAt: '2h ago',
-          isLiked: false
-        },
-        {
-          id: '2',
-          author: 'David Chen',
-          role: 'SCIENCE',
-          content: 'Does anyone have extra graph paper? My supply ran out mid-lab. SOS!',
-          likes: 2,
-          createdAt: '5 mins ago',
-          tags: ['Supplies'],
-          isLiked: false
+      const response = await axios.get(`${BASE_URL}/api/posts/all`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
-      ]);
-    } catch (error) {
+      });
+      
+      if (response.data.success) {
+        const formattedPosts = response.data.data.map((post: any) => ({
+          ...post,
+          createdAt: formatTimeAgo(post.createdAt)
+        }));
+        setPosts(formattedPosts);
+      } else {
+        // Don't show error if there are no posts
+        setPosts([]);
+      }
+    } catch (error: any) {
       console.error('Error fetching posts:', error);
-      Alert.alert('Error', 'Failed to fetch posts');
+      // Only show error alert if it's not just empty posts
+      if (error.response?.status !== 404) {
+        Alert.alert('Error', 'Failed to fetch posts');
+      }
     } finally {
       setRefreshing(false);
     }
@@ -134,95 +325,290 @@ const RightScreen: React.FC = () => {
       return;
     }
 
+    if (!authToken || !currentUser) {
+      Alert.alert('Error', 'User not authenticated');
+      return;
+    }
+
+    console.log('Creating post with user role:', currentUser.role); // Debug log
+
     try {
       setLoading(true);
       
-      // Mock implementation for now - replace with actual API call
-      // const formData = new FormData();
-      // formData.append('content', newPostContent);
-      // if (selectedImage) {
-      //   formData.append('postImage', {
-      //     uri: selectedImage,
-      //     type: 'image/jpeg',
-      //     name: 'post-image.jpg'
-      //   } as any);
-      // }
-
-      // const response = await fetch(`${API_BASE_URL}/posts/create`, {
-      //   method: 'POST',
-      //   headers: {
-      //     'Authorization': `Bearer ${await getToken()}`,
-      //     'Content-Type': 'multipart/form-data'
-      //   },
-      //   body: formData
-      // });
-
-      // const data = await response.json();
-      // if (data.success) {
-      //   setNewPostContent('');
-      //   setSelectedImage(null);
-      //   fetchPosts();
-      //   Alert.alert('Success', 'Post created successfully');
-      // } else {
-      //   Alert.alert('Error', data.message || 'Failed to create post');
-      // }
-
-      // Temporary mock implementation
-      const newPost: Post = {
-        id: Date.now().toString(),
-        author: currentUser.name,
-        role: 'Teacher',
-        content: newPostContent,
-        likes: 0,
-        createdAt: 'Just now',
-        isLiked: false
-      };
+      const formData = new FormData();
+      formData.append('content', newPostContent);
       
-      setPosts([newPost, ...posts]);
-      setNewPostContent('');
-      setSelectedImage(null);
-      Alert.alert('Success', 'Post created successfully');
+      // Explicitly send user information to ensure correct author data
+      formData.append('authorName', currentUser.name || 'Teacher');
+      formData.append('authorEmail', currentUser.email);
+      formData.append('authorRole', currentUser.role || 'Teacher');
+      if (currentUser.profileImage) {
+        formData.append('authorProfileImage', currentUser.profileImage);
+      }
       
-    } catch (error) {
-      console.error('Error creating post:', error);
-      Alert.alert('Error', 'Failed to create post');
+      // Add additional user data fields to ensure backend has correct info
+      formData.append('userName', currentUser.name || 'Teacher');
+      formData.append('userEmail', currentUser.email);
+      formData.append('userRole', currentUser.role || 'Teacher');
+      formData.append('userProfileImage', currentUser.profileImage || '');
+      
+      console.log('📤 Sending complete user data:', {
+        authorName: currentUser.name,
+        authorEmail: currentUser.email,
+        authorRole: currentUser.role,
+        authorProfileImage: currentUser.profileImage
+      });
+      
+      if (selectedImage) {
+        const uri = selectedImage;
+        const fileType = uri.split('.').pop();
+        formData.append('postImage', {
+          uri: uri,
+          type: `image/${fileType}`,
+          name: `post-image.${fileType}`
+        } as any);
+      }
+
+      const response = await axios.post(`${BASE_URL}/api/posts/create`, formData, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      console.log('📨 Create post response:', response.data); // Debug response
+      
+      if (response.data.success) {
+        console.log('✅ Post created successfully!');
+        console.log('📝 Post data:', response.data.data);
+        if (response.data.data?.author) {
+          console.log('👤 Author in response:', response.data.data.author);
+        }
+        setNewPostContent('');
+        setSelectedImage(null);
+        fetchPosts(authToken);
+        Alert.alert('Success', 'Post created successfully');
+      } else {
+        console.log('❌ Post creation failed:', response.data);
+        const errorMessage = response.data?.message || 'Failed to create post';
+        Alert.alert('Error', errorMessage);
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Error creating post:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to create post';
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   const handleLike = async (postId: string) => {
-    try {
-      // Mock implementation - replace with actual API call
-      // const response = await fetch(`${API_BASE_URL}/posts/${postId}/like`, {
-      //   method: 'POST',
-      //   headers: {
-      //     'Authorization': `Bearer ${await getToken()}`
-      //   }
-      // });
-      
-      // if (response.ok) {
-      //   setPosts(posts.map(post => 
-      //     post.id === postId 
-      //       ? { ...post, likes: post.isLiked ? post.likes - 1 : post.likes + 1, isLiked: !post.isLiked }
-      //       : post
-      //   ));
-      // }
+    if (!authToken || !currentUser) {
+      Alert.alert('Error', 'User not authenticated');
+      return;
+    }
 
-      // Temporary mock implementation
-      setPosts(posts.map(post => 
-        post.id === postId 
-          ? { ...post, likes: post.isLiked ? post.likes - 1 : post.likes + 1, isLiked: !post.isLiked }
-          : post
+    try {
+      const post = posts.find(p => p.id === postId);
+      if (!post) return;
+
+      // Optimistically update UI immediately
+      const newIsLiked = !post.isLiked;
+      const newLikesCount = newIsLiked ? post.likes + 1 : Math.max(0, post.likes - 1);
+      
+      setPosts(posts.map(p => 
+        p.id === postId 
+          ? { ...p, likes: newLikesCount, isLiked: newIsLiked }
+          : p
       ));
-    } catch (error) {
+
+      // Make API call
+      const endpoint = `${BASE_URL}/api/posts/${postId}/like`;
+      
+      if (newIsLiked) {
+        // Like the post
+        const response = await axios.post(endpoint, {}, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`
+          }
+        });
+        
+        if (!response.data.success) {
+          throw new Error(response.data.message || 'Failed to like post');
+        }
+        console.log('✅ Post liked successfully');
+      } else {
+        // Unlike the post
+        const response = await axios.delete(endpoint, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`
+          }
+        });
+        
+        if (!response.data.success) {
+          throw new Error(response.data.message || 'Failed to unlike post');
+        }
+        console.log('✅ Post unliked successfully');
+      }
+      
+    } catch (error: any) {
       console.error('Error liking post:', error);
+      
+      // Revert the optimistic update on error
+      const post = posts.find(p => p.id === postId);
+      if (post) {
+        setPosts(posts.map(p => 
+          p.id === postId 
+            ? { ...p, likes: post.likes, isLiked: post.isLiked }
+            : p
+        ));
+      }
+      
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to toggle like';
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
+  const fetchPostLikes = async (postId: string) => {
+    try {
+      const response = await axios.get(`${BASE_URL}/api/posts/${postId}/likes`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+      
+      if (response.data.success) {
+        setPostLikes(response.data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching likes:', error);
+      setPostLikes([]);
+    }
+  };
+
+  const fetchPostComments = async (postId: string) => {
+    try {
+      const response = await axios.get(`${BASE_URL}/api/posts/${postId}/comments`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+      
+      if (response.data.success) {
+        const formattedComments = response.data.data.map((comment: any) => ({
+          ...comment,
+          createdAt: formatTimeAgo(comment.createdAt),
+          isLiked: false
+        }));
+        setPostComments(formattedComments);
+      }
+    } catch (error) {
+      console.error('Error fetching comments:', error);
+      setPostComments([]);
+    }
+  };
+
+  const openLikesModal = async (post: Post) => {
+    setSelectedPost(post);
+    setShowLikesModal(true);
+    await fetchPostLikes(post.id);
+  };
+
+  const openCommentsModal = async (post: Post) => {
+    setSelectedPost(post);
+    setShowCommentsModal(true);
+    setCommentText('');
+    await fetchPostComments(post.id);
+  };
+
+  const addComment = async () => {
+    if (!commentText.trim() || !selectedPost || !authToken) {
+      return;
+    }
+
+    try {
+      const response = await axios.post(`${BASE_URL}/api/posts/${selectedPost.id}/comments`, 
+        { content: commentText.trim() },
+        {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.data.success) {
+        const newComment: Comment = {
+          ...response.data.data,
+          createdAt: 'Just now',
+          isLiked: false
+        };
+        setPostComments([newComment, ...postComments]);
+        setCommentText('');
+        
+        // Update post comments count
+        setPosts(posts.map(p => 
+          p.id === selectedPost.id 
+            ? { ...p, comments: [newComment, ...(p.comments || [])] }
+            : p
+        ));
+      }
+    } catch (error) {
+      console.error('Error adding comment:', error);
+      Alert.alert('Error', 'Failed to add comment');
     }
   };
 
   const formatTimeAgo = (createdAt: string) => {
-    // Simple time formatting - enhance as needed
-    return createdAt;
+    try {
+      if (!createdAt) return 'Just now';
+      
+      // Handle relative time formats like "2d ago", "3h ago", etc.
+      if (typeof createdAt === 'string' && createdAt.includes('ago')) {
+        return createdAt; // Return as-is if already formatted
+      }
+      
+      // Handle null, undefined, or empty string
+      if (!createdAt || createdAt === 'null' || createdAt === 'undefined') {
+        return 'Just now';
+      }
+      
+      const date = new Date(createdAt);
+      const now = new Date();
+      
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        console.warn('Invalid date detected:', createdAt);
+        return 'Just now';
+      }
+      
+      const diffInMs = now.getTime() - date.getTime();
+      
+      // Handle future dates
+      if (diffInMs < 0) {
+        return 'Just now';
+      }
+      
+      const diffInMins = Math.floor(diffInMs / 60000);
+      const diffInHours = Math.floor(diffInMins / 60);
+      const diffInDays = Math.floor(diffInHours / 24);
+
+      if (diffInMins < 1) return 'Just now';
+      if (diffInMins < 60) return `${diffInMins}m ago`;
+      if (diffInHours < 24) return `${diffInHours}h ago`;
+      if (diffInDays < 7) return `${diffInDays}d ago`;
+      
+      // For older dates, show formatted date
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+      });
+    } catch (err) {
+      console.error("Error in formatTimeAgo:", err);
+      return 'Just now';
+    }
   };
 
   if (!fontsLoaded) {
@@ -231,7 +617,7 @@ const RightScreen: React.FC = () => {
 
   return (
     <ImageBackground
-      source={require("../../../assets/images/teacherleftbackground.png")}
+      source={require("../../../assets/images/TeacherLeftBackground.png")}
       style={styles.background}
       resizeMode="cover"
     >
@@ -246,20 +632,55 @@ const RightScreen: React.FC = () => {
             </View>
           </View>
 
+          
           {/* Input Area */}
           <View style={styles.inputCard}>
-            <Image
-              source={require('../../../assets/image/Person3.jpeg')}
-              style={styles.inputAvatar}
-            />
+            <View style={styles.inputUserInfo}>
+              {/* TEMPORARY: Force show profile image for testing */}
+              {currentUser?.profileImage ? (
+                <Image
+                  source={{ 
+                    uri: currentUser.profileImage.startsWith('http') 
+                      ? currentUser.profileImage 
+                      : `${BASE_URL}/${currentUser.profileImage.startsWith('/') ? currentUser.profileImage.substring(1) : currentUser.profileImage}`
+                  }}
+                  style={styles.inputAvatar}
+                  onError={(e) => {
+                    console.log('❌ Error loading user profile image:', e.nativeEvent.error);
+                    const profileImage = currentUser.profileImage;
+                    if (profileImage) {
+                      const attemptedUrl = profileImage.startsWith('http') 
+                        ? profileImage 
+                        : `${BASE_URL}/${profileImage.startsWith('/') ? profileImage.substring(1) : profileImage}`;
+                      console.log('🔗 Attempted URL:', attemptedUrl);
+                    }
+                    console.log('👤 Current user:', currentUser);
+                  }}
+                  onLoad={() => {
+                    console.log('✅ Profile image loaded successfully!');
+                  }}
+                />
+              ) : (
+                <View style={[styles.inputAvatar, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#6B7280' }}>
+                    {currentUser?.name?.charAt(0).toUpperCase() || 'T'}
+                  </Text>
+                </View>
+              )}
+            </View>
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                { backgroundColor: loading ? '#f0f0f0' : '#ffffff' }
+              ]}
               placeholder="Share your thoughts ..."
               placeholderTextColor="#CCCCCC"
               value={newPostContent}
               onChangeText={setNewPostContent}
               multiline
               maxLength={500}
+              editable={!loading}
+              selectTextOnFocus
             />
             <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
               <MaterialCommunityIcons name="image" size={24} color="#6366F1" />
@@ -300,67 +721,559 @@ const RightScreen: React.FC = () => {
             bounces
             nestedScrollEnabled
           >
-            {posts.map((post) => (
-              <View key={post.id} style={styles.postCard}>
-                <View style={styles.postHeader}>
-                  <Image 
-                    source={require('../../../assets/image/Person1.jpeg')} 
-                    style={styles.avatar} 
-                  />
-                  <View style={styles.postInfo}>
-                    <Text style={styles.authorName}>{post.author}</Text>
-                    <View style={styles.roleContainer}>
-                      <Text style={styles.roleText}>{post.role}</Text>
-                      <Text style={styles.timeText}> • {formatTimeAgo(post.createdAt)}</Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity>
-                    <MaterialCommunityIcons name="dots-horizontal" size={24} color="#999" />
-                  </TouchableOpacity>
-                </View>
-
-                <Text style={styles.postContent}>{post.content}</Text>
-
-                {post.tags && post.tags.length > 0 && (
-                  <View style={styles.tagsContainer}>
-                    {post.tags.map((tag, index) => (
-                      <Text key={index} style={styles.hashtag}>#{tag}</Text>
-                    ))}
-                  </View>
-                )}
-
-                {post.postImage && (
-                  <Image source={{ uri: post.postImage }} style={styles.postImage} />
-                )}
-
-                <View style={styles.postActions}>
-                  <TouchableOpacity 
-                    style={styles.actionButton} 
-                    onPress={() => handleLike(post.id)}
-                  >
-                    <Ionicons 
-                      name={post.isLiked ? "heart" : "heart-outline"} 
-                      size={20} 
-                      color={post.isLiked ? "#EF4444" : "#999"} 
-                    />
-                    <Text style={styles.actionText}>{post.likes}</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.actionButton}>
-                    <MaterialCommunityIcons name="message-outline" size={20} color="#999" />
-                    <Text style={styles.actionText}>Reply</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.actionButton}>
-                    <Ionicons name="share-outline" size={20} color="#999" />
-                    <Text style={styles.actionText}>Share</Text>
-                  </TouchableOpacity>
-                </View>
+            {posts.length === 0 ? (
+              <View style={styles.emptyState}>
+                <MaterialCommunityIcons name="post-outline" size={48} color="#CCCCCC" />
+                <Text style={styles.emptyStateText}>No posts yet</Text>
+                <Text style={styles.emptyStateSubtext}>Be the first to share your thoughts!</Text>
               </View>
-            ))}
+            ) : (
+              posts.map((post) => {
+                // Enhanced fallback logic: if post author data looks wrong, use current user info
+                const isCurrentUserPost = post.author.email === currentUser?.email;
+                
+                // Improved name resolution logic
+                let displayName = post.author.name;
+                let displayProfilePic = post.author.profile_pic;
+                let displayRole = post.author.role;
+                
+                // Debug logging to understand the data structure
+                console.log('🔍 Post author data:', {
+                  postAuthorName: post.author.name,
+                  postAuthorEmail: post.author.email,
+                  postAuthorProfilePic: post.author.profile_pic,
+                  postAuthorRole: post.author.role,
+                  isCurrentUserPost
+                });
+                
+                if (isCurrentUserPost) {
+                  // For current user posts, prefer current user data if it's better
+                  if (currentUser?.name && currentUser.name !== 'Teacher' && currentUser.name.length > 2) {
+                    displayName = currentUser.name;
+                  } else if (currentUser?.name && currentUser.name.length > 2) {
+                    displayName = currentUser.name;
+                  }
+                  
+                  // Use current user's profile image if available and better
+                  if (currentUser?.profileImage) {
+                    displayProfilePic = currentUser.profileImage;
+                  }
+                  
+                  // Use current user's role if available
+                  if (currentUser?.role) {
+                    displayRole = currentUser.role;
+                  }
+                } else {
+                  // For other users' posts - trust the backend data but clean it up
+                  
+                  // Only extract from email if the name is clearly an email
+                  if (displayName && displayName.includes('@') && displayName.includes('.')) {
+                    console.log('📧 Converting email to display name:', displayName, '->', displayName.split('@')[0]);
+                    displayName = displayName.split('@')[0];
+                  }
+                  
+                  // If no name is provided, use a fallback
+                  if (!displayName || displayName.trim() === '') {
+                    displayName = post.author.email?.split('@')[0] || 'Unknown User';
+                  }
+                  
+                  // Ensure profile picture URL is properly formatted
+                  if (displayProfilePic && !displayProfilePic.startsWith('http') && !displayProfilePic.startsWith('/')) {
+                    displayProfilePic = `/${displayProfilePic}`;
+                  }
+                }
+                
+                // Final cleanup: ensure we don't have empty values
+                if (!displayName || displayName.trim() === '') {
+                  displayName = 'Unknown User';
+                }
+                
+                if (!displayRole || displayRole.trim() === '') {
+                  displayRole = 'User';
+                }
+                
+                
+
+                return (
+                  <View key={post.id} style={styles.postCard}>
+                    <View style={styles.postHeader}>
+                      {displayProfilePic && displayProfilePic !== '' ? (
+                        <Image 
+                          source={{ 
+                            uri: displayProfilePic.startsWith('http') 
+                              ? displayProfilePic 
+                              : displayProfilePic.startsWith('/') 
+                                ? `${BASE_URL}${displayProfilePic}`
+                                : `${BASE_URL}/${displayProfilePic}`
+                          }} 
+                          style={styles.avatar}
+                          onError={(e) => {
+                            console.log('❌ Error loading author profile image:', e.nativeEvent.error);
+                            console.log('🔗 Attempted URL:', displayProfilePic.startsWith('http') 
+                              ? displayProfilePic 
+                              : displayProfilePic.startsWith('/') 
+                                ? `${BASE_URL}${displayProfilePic}`
+                                : `${BASE_URL}/${displayProfilePic}`);
+                            console.log('👤 Author data for failed image:', {
+                              name: post.author.name,
+                              email: post.author.email,
+                              profile_pic: post.author.profile_pic,
+                              displayName,
+                              displayProfilePic
+                            });
+                          }}
+                          onLoad={() => {
+                            console.log('✅ Author profile image loaded successfully for:', displayName);
+                          }}
+                        />
+                      ) : (
+                        <View style={[styles.avatar, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
+                          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#6B7280' }}>
+                            {displayName?.charAt(0).toUpperCase() || 'U'}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.postInfo}>
+                        <Text style={styles.authorName}>{displayName}</Text>
+                        <View style={styles.roleContainer}>
+                          <Text style={styles.roleText}>{displayRole}</Text>
+                          <Text style={styles.timeText}> • {formatTimeAgo(post.createdAt)}</Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity>
+                        <MaterialCommunityIcons name="dots-horizontal" size={24} color="#999" />
+                      </TouchableOpacity>
+                    </View>
+
+                  <Text style={styles.postContent}>{post.content}</Text>
+
+                  {post.postImage && (
+                    <Image 
+                      source={{ uri: post.postImage }} 
+                      style={styles.postImage} 
+                      resizeMode="cover"
+                    />
+                  )}
+
+                  {post.tags && post.tags.length > 0 && (
+                    <View style={styles.tagsContainer}>
+                      {post.tags.map((tag, index) => (
+                        <View key={index} style={styles.tag}>
+                          <Text style={styles.tagText}>#{tag}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  <View style={styles.postActions}>
+                    <TouchableOpacity 
+                      style={styles.actionButton}
+                      onPress={() => handleLike(post.id)}
+                    >
+                      <Ionicons 
+                        name={post.isLiked ? "heart" : "heart-outline"} 
+                        size={20} 
+                        color={post.isLiked ? "#EF4444" : "#666666"} 
+                      />
+                      <Text style={styles.actionText}>{post.likes}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.actionButton}
+                      onPress={() => openCommentsModal(post)}
+                    >
+                      <Ionicons name="chatbubble-outline" size={20} color="#666666" />
+                      <Text style={styles.actionText}>Reply</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                );
+              })
+            )}
           </ScrollView>
         </View>
       </View>
+
+      {/* Likes Modal */}
+      <Modal
+        visible={showLikesModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowLikesModal(false)}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <View style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: 20,
+            width: width * 0.9,
+            maxHeight: height * 0.7,
+            padding: 20,
+          }}>
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 20,
+            }}>
+              <Text style={{
+                fontSize: width * 0.05,
+                fontFamily: 'Quicksand-Bold',
+                color: '#1F2937',
+              }}>Likes</Text>
+              <TouchableOpacity onPress={() => setShowLikesModal(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: height * 0.4 }}>
+              {postLikes.length === 0 ? (
+                <Text style={{
+                  textAlign: 'center',
+                  fontSize: width * 0.04,
+                  fontFamily: 'Quicksand-Medium',
+                  color: '#9CA3AF',
+                  paddingVertical: 20,
+                }}>No likes yet</Text>
+              ) : (
+                postLikes.map((like, index) => (
+                  <View key={index} style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 10,
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#F0F0F0',
+                  }}>
+                    {like.user_profile_pic && like.user_profile_pic !== '' ? (
+                      <Image
+                        source={{ 
+                          uri: like.user_profile_pic.startsWith('http') 
+                            ? like.user_profile_pic 
+                            : `${BASE_URL}/${like.user_profile_pic.startsWith('/') ? like.user_profile_pic.substring(1) : like.user_profile_pic}`
+                        }}
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 20,
+                          marginRight: 12,
+                        }}
+                        onError={(e) => {
+                          console.log('Error loading likes modal profile image:', e.nativeEvent.error);
+                          console.log('Like user name:', like.user_name);
+                          const attemptedUrl = like.user_profile_pic.startsWith('http') 
+                            ? like.user_profile_pic 
+                            : `${BASE_URL}/${like.user_profile_pic.startsWith('/') ? like.user_profile_pic.substring(1) : like.user_profile_pic}`;
+                          console.log('Attempted URL:', attemptedUrl);
+                        }}
+                      />
+                    ) : (
+                      <View style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        marginRight: 12,
+                        backgroundColor: '#E5E7EB',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}>
+                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#6B7280' }}>
+                          {like.user_name?.charAt(0).toUpperCase() || 'L'}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={{
+                        fontSize: width * 0.04,
+                        fontFamily: 'Quicksand-Medium',
+                        color: '#1F2937',
+                        marginBottom: 2,
+                      }}>{like.user_name}</Text>
+                      <Text style={{
+                        fontSize: width * 0.03,
+                        fontFamily: 'Quicksand-Regular',
+                        color: '#9CA3AF',
+                      }}>{formatTimeAgo(like.liked_at)}</Text>
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Comments Modal */}
+      <Modal
+        visible={showCommentsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCommentsModal(false)}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <View style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: 20,
+            width: width * 0.9,
+            maxHeight: height * 0.8,
+            padding: 20,
+          }}>
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 20,
+            }}>
+              <Text style={{
+                fontSize: width * 0.05,
+                fontFamily: 'Quicksand-Bold',
+                color: '#1F2937',
+              }}>Comments</Text>
+              <TouchableOpacity onPress={() => setShowCommentsModal(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            {/* Comment Input */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingVertical: 15,
+              borderTopWidth: 1,
+              borderTopColor: '#F0F0F0',
+            }}>
+              {currentUser?.profileImage && currentUser.profileImage !== '' ? (
+                <Image
+                  source={{
+                    uri: currentUser.profileImage.startsWith('http') 
+                      ? currentUser.profileImage 
+                      : `${BASE_URL}/${currentUser.profileImage.startsWith('/') ? currentUser.profileImage.substring(1) : currentUser.profileImage}`
+                  }}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    marginRight: 10,
+                  }}
+                  onError={(e) => {
+                    console.log('Error loading comment input profile image:', e.nativeEvent.error);
+                    const attemptedUrl = currentUser?.profileImage?.startsWith('http') 
+                      ? currentUser.profileImage 
+                      : currentUser?.profileImage 
+                        ? `${BASE_URL}/${currentUser.profileImage.startsWith('/') ? currentUser.profileImage.substring(1) : currentUser.profileImage}`
+                        : 'No profile image URL';
+                    console.log('Attempted URL:', attemptedUrl);
+                  }}
+                />
+              ) : (
+                <View style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  marginRight: 10,
+                  backgroundColor: '#E5E7EB',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}>
+                  <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#6B7280' }}>
+                    {currentUser?.name?.charAt(0).toUpperCase() || 'T'}
+                  </Text>
+                </View>
+              )}
+              <TextInput
+                style={{
+                  flex: 1,
+                  borderWidth: 1,
+                  borderColor: '#E5E7EB',
+                  borderRadius: 20,
+                  paddingHorizontal: 15,
+                  paddingVertical: 10,
+                  fontSize: width * 0.04,
+                  fontFamily: 'Quicksand-Regular',
+                  color: '#1F2937',
+                }}
+                placeholder="Add a comment..."
+                placeholderTextColor="#999"
+                value={commentText}
+                onChangeText={setCommentText}
+                multiline
+                maxLength={200}
+              />
+              <TouchableOpacity 
+                style={{
+                  backgroundColor: '#6366F1',
+                  borderRadius: 20,
+                  paddingHorizontal: 20,
+                  paddingVertical: 10,
+                  marginLeft: 10,
+                }}
+                onPress={addComment}
+                disabled={!commentText.trim()}
+              >
+                <Text style={{
+                  color: '#FFFFFF',
+                  fontSize: width * 0.04,
+                  fontFamily: 'Quicksand-Medium',
+                }}>Post</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Comments List */}
+            <ScrollView style={{ maxHeight: height * 0.3 }}>
+              {postComments.length === 0 ? (
+                <Text style={{
+                  textAlign: 'center',
+                  fontSize: width * 0.04,
+                  fontFamily: 'Quicksand-Medium',
+                  color: '#9CA3AF',
+                  paddingVertical: 20,
+                }}>No comments yet</Text>
+              ) : (
+                postComments.map((comment) => {
+                  // Enhanced name resolution logic
+                  const isCurrentUserComment = comment.author.email === currentUser?.email;
+                  
+                  let displayName = comment.author.name;
+                  let displayProfilePic = comment.author.profile_pic;
+                  
+                  console.log('💬 Comment author data:', {
+                    commentAuthorName: comment.author.name,
+                    commentAuthorEmail: comment.author.email,
+                    commentAuthorProfilePic: comment.author.profile_pic,
+                    isCurrentUserComment,
+                    currentUserEmail: currentUser?.email
+                  });
+                  
+                  if (isCurrentUserComment) {
+                    // For current user comments, prefer current user's proper name
+                    if (currentUser?.name && currentUser.name.trim() !== '' && currentUser.name !== 'Teacher') {
+                      displayName = currentUser.name;
+                    } else if (currentUser?.email) {
+                      // Extract proper name from email
+                      let emailName = currentUser.email.split('@')[0];
+                      emailName = emailName.replace(/\./g, ' ').replace(/\d/g, '');
+                      
+                      // Capitalize properly
+                      emailName = emailName.replace(/\b\w/g, (l: string) => l.toLowerCase());
+                      emailName = emailName.replace(/\b\w/g, (l: string) => l.charAt(0).toUpperCase() + l.slice(1));
+                      
+                      displayName = emailName;
+                    }
+                    
+                    displayProfilePic = currentUser?.profileImage || comment.author.profile_pic;
+                  } else {
+                    // For other users' comments - trust backend data but clean it up
+                    
+                    // Only extract from email if name is clearly an email
+                    if (displayName && displayName.includes('@') && displayName.includes('.')) {
+                      let emailName = displayName.split('@')[0];
+                      emailName = emailName.replace(/\./g, ' ').replace(/\d/g, '');
+                      
+                      // Capitalize properly
+                      emailName = emailName.replace(/\b\w/g, (l: string) => l.toLowerCase());
+                      emailName = emailName.replace(/\b\w/g, (l: string) => l.charAt(0).toUpperCase() + l.slice(1));
+                      
+                      displayName = emailName;
+                    }
+                    
+                    // If no name is provided, use a fallback
+                    if (!displayName || displayName.trim() === '') {
+                      displayName = comment.author.email?.split('@')[0] || 'Unknown User';
+                    }
+                    
+                    // Ensure profile picture URL is properly formatted
+                    if (displayProfilePic && !displayProfilePic.startsWith('http') && !displayProfilePic.startsWith('/')) {
+                      displayProfilePic = `/${displayProfilePic}`;
+                    }
+                  }
+                  
+                  // Final cleanup: ensure we don't have empty values
+                  if (!displayName || displayName.trim() === '') {
+                    displayName = 'Unknown User';
+                  }
+
+                  console.log('💬 Final comment display data:', {
+                    isCurrentUserComment,
+                    originalName: comment.author.name,
+                    displayName,
+                    originalProfilePic: comment.author.profile_pic,
+                    displayProfilePic,
+                    currentUserEmail: currentUser?.email,
+                    commentAuthorEmail: comment.author.email
+                  });
+
+                  return (
+                  <View key={comment.id} style={{
+                    flexDirection: 'row',
+                    paddingVertical: 12,
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#F0F0F0',
+                  }}>
+                    {displayProfilePic && displayProfilePic !== '' ? (
+                      <Image
+                        source={getProfileImageSource(displayProfilePic)!}
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 18,
+                          marginRight: 10,
+                        }}
+                        onError={(e) => {
+                          console.log('❌ Error loading comment author profile image:', e.nativeEvent.error);
+                          console.log('💬 Comment author name:', displayName);
+                          const attemptedUrl = getProfileImageSource(displayProfilePic)?.uri || 'No profile image URL';
+                          console.log('🔗 Attempted URL:', attemptedUrl);
+                        }}
+                      />
+                    ) : (
+                      <View style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 18,
+                        marginRight: 10,
+                        backgroundColor: '#E5E7EB',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}>
+                        <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#6B7280' }}>
+                          {displayName?.charAt(0).toUpperCase() || 'A'}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={{
+                        fontSize: width * 0.04,
+                        fontFamily: 'Quicksand-Bold',
+                        color: '#1F2937',
+                        marginBottom: 4,
+                      }}>{displayName}</Text>
+                      <Text style={{
+                        fontSize: width * 0.04,
+                        fontFamily: 'Quicksand-Regular',
+                        color: '#374151',
+                        lineHeight: width * 0.05,
+                        marginBottom: 4,
+                      }}>{comment.content}</Text>
+                      <Text style={{
+                        fontSize: width * 0.03,
+                        fontFamily: 'Quicksand-Regular',
+                        color: '#9CA3AF',
+                      }}>{formatTimeAgo(comment.createdAt)}</Text>
+                    </View>
+                  </View>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </ImageBackground>
   );
 };
@@ -444,6 +1357,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  inputUserInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 12,
+  },
   inputAvatar: {
     width: 40,
     height: 40,
@@ -521,7 +1439,6 @@ const styles = StyleSheet.create({
     fontSize: width * 0.035,
     fontFamily: 'Quicksand-Medium',
     color: '#6366F1',
-    marginBottom: 12,
   },
   postImage: {
     width: '100%',
@@ -609,7 +1526,37 @@ const styles = StyleSheet.create({
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 12,
+    marginTop: height * 0.01,
+  },
+  tag: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: width * 0.03,
+    paddingVertical: height * 0.005,
+    borderRadius: 12,
+    marginRight: width * 0.02,
+    marginBottom: height * 0.005,
+  },
+  tagText: {
+    fontSize: width * 0.03,
+    color: '#6B7280',
+    fontFamily: 'Quicksand-Regular',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: height * 0.1,
+  },
+  emptyStateText: {
+    fontSize: width * 0.045,
+    color: '#9CA3AF',
+    fontFamily: 'Quicksand-Medium',
+    marginTop: height * 0.02,
+  },
+  emptyStateSubtext: {
+    fontSize: width * 0.035,
+    color: '#D1D5DB',
+    fontFamily: 'Quicksand-Regular',
+    marginTop: height * 0.01,
   },
 });
 

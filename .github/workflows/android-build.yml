@@ -86,7 +86,7 @@ jobs:
       uses: r0adkll/upload-google-play@v1
       with:
         serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT }}
-        packageName: com.gogrowsmart.app
+        packageName: com.growsmart.app
         releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
         track: production
         status: completed
