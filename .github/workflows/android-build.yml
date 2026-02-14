@@ -41,7 +41,7 @@ jobs:
       env:
         ENCODED_STRING: ${{ secrets.KEYSTORE_BASE64 }}
       run: |
-        echo $ENCODED_STRING | base64 -di > android/app/release.keystore
+        echo $ENCODED_STRING | base64 -di > android/app/gogrowsmart_release.jks
         
     - name: Create gradle.properties with signing config
       env:
@@ -51,7 +51,7 @@ jobs:
       run: |
         echo "" >> android/gradle.properties
         echo "# Release signing configuration" >> android/gradle.properties
-        echo "MYAPP_UPLOAD_STORE_FILE=release.keystore" >> android/gradle.properties
+        echo "MYAPP_UPLOAD_STORE_FILE=gogrowsmart_release.jks" >> android/gradle.properties
         echo "MYAPP_UPLOAD_KEY_ALIAS=$KEY_ALIAS" >> android/gradle.properties
         echo "MYAPP_UPLOAD_STORE_PASSWORD=$KEYSTORE_PASSWORD" >> android/gradle.properties
         echo "MYAPP_UPLOAD_KEY_PASSWORD=$KEY_PASSWORD" >> android/gradle.properties
