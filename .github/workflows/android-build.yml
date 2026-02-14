@@ -87,8 +87,8 @@ jobs:
       if: github.ref == 'refs/heads/main'
       uses: r0adkll/upload-google-play@v1
       with:
-        serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT }}
+        serviceAccountJsonPlainText: ${{ secrets.PLAY_JSON_KEY }}
         packageName: com.growsmart.app
         releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
-        track: production
+        track: internal
         status: completed
