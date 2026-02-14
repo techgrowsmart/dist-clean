@@ -49,6 +49,8 @@ jobs:
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
       run: |
+        echo "" >> android/gradle.properties
+        echo "# Release signing configuration" >> android/gradle.properties
         echo "MYAPP_UPLOAD_STORE_FILE=release.keystore" >> android/gradle.properties
         echo "MYAPP_UPLOAD_KEY_ALIAS=$KEY_ALIAS" >> android/gradle.properties
         echo "MYAPP_UPLOAD_STORE_PASSWORD=$KEYSTORE_PASSWORD" >> android/gradle.properties
