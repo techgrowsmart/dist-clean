@@ -39,7 +39,7 @@ jobs:
       
     - name: Decode Keystore
       env:
-        ENCODED_STRING: ${{ secrets.KEYSTORE_BASE64 }}
+        ENCODED_STRING: ${{ secrets.KEYSTORE_FILE }}
       run: |
         echo $ENCODED_STRING | base64 -di > android/app/gogrowsmart_release.jks
         
