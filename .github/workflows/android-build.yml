@@ -68,7 +68,7 @@ jobs:
     - name: Build AAB
       run: |
         cd android
-        ./gradlew bundleRelease --no-daemon --max-workers=2 --parallel=false
+        ./gradlew bundleRelease --no-daemon
         
     - name: Build APK
       run: |
