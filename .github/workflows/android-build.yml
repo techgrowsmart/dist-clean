@@ -59,10 +59,16 @@ jobs:
     - name: Make gradlew executable
       run: chmod +x android/gradlew
       
+    - name: Verify keystore file
+      run: |
+        echo "Checking keystore file..."
+        ls -la android/app/*.jks
+        echo "Keystore file verified"
+      
     - name: Build AAB
       run: |
         cd android
-        ./gradlew bundleRelease
+        ./gradlew bundleRelease --no-daemon --max-workers=2 --parallel=false
         
     - name: Build APK
       run: |
