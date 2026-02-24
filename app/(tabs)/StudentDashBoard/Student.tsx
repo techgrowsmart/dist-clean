@@ -1,15 +1,20 @@
-import { AntDesign } from '@expo/vector-icons';
+import { AntDesign, FontAwesome } from '@expo/vector-icons';
 import BottomNavigation from "../../../app/(tabs)/BottomNavigation";
 import BookOpenReaderIcon from "../../../assets/svgIcons/BookOpenReader";
 import NotificationBellIcon from "../../../assets/svgIcons/NotificationBell";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
 import { Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold, useFonts } from "@expo-google-fonts/poppins";
+import { Roboto_500Medium, Roboto_400Regular } from "@expo-google-fonts/roboto";
+import { OpenSans_500Medium, OpenSans_300Light, OpenSans_400Regular } from "@expo-google-fonts/open-sans";
+import { Montserrat_400Regular } from "@expo-google-fonts/montserrat";
+import { isTablet } from "../../../utils/devices";
+import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Dimensions, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Animated, PanResponder } from 'react-native';
+import { Alert, Dimensions, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Animated, PanResponder, StatusBar } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import RazorpayCheckout from "react-native-razorpay";
 import AllBoardsPage from "./AllBoardsPage";
@@ -24,11 +29,9 @@ import MyTeacher from "./MyTeacher";
 import AllSkills from "./AllSkills";
 import LeftScreen from './LeftScreen';
 import RightScreen from './RightScreen';
-import { Roboto_500Medium } from "@expo-google-fonts/roboto";
-import { OpenSans_500Medium, OpenSans_300Light, OpenSans_400Regular } from "@expo-google-fonts/open-sans";
-import { Montserrat_400Regular } from "@expo-google-fonts/montserrat";
-import { isTablet } from "../../../utils/devices";
-import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0;
 
 try {
   if (Platform.OS === "ios" || Platform.OS === "android") {
@@ -81,9 +84,13 @@ const panResponder = useRef(
     onStartShouldSetPanResponder: () => false,
 
     onMoveShouldSetPanResponder: (_, { dx, dy }) => {
+      // Prevent new gestures while animating
+      if (isSwipeLocked.current) return false;
+      
       const absDx = Math.abs(dx);
       const absDy = Math.abs(dy);
-      return absDx > 18 && absDx > absDy * 1.6;
+      // Only set responder if horizontal swipe is significant and more horizontal than vertical
+      return absDx > 15 && absDx > absDy * 1.5;
     },
 
     onPanResponderGrant: () => {
@@ -96,54 +103,82 @@ const panResponder = useRef(
     onPanResponderMove: (_, { dx }) => {
       if (isSwipeLocked.current) return;
 
-      // ✅ curved drag resistance (feels more native)
-      const curvedDx = dx * 0.85;
+      // Calculate the target position based on current screen index and drag
+      let newPosition = -width * currentScreenIndex + dx;
 
-      let newPosition = -width * currentScreenIndex + curvedDx;
-
+      // Apply boundaries with resistance
       const min = -width * (SCREEN_COUNT - 1);
       const max = 0;
-
-      // ✅ stronger edge resistance
-      if (currentScreenIndex === 0 && dx > 0) newPosition *= 0.4;
-      if (currentScreenIndex === SCREEN_COUNT - 1 && dx < 0) newPosition *= 0.4;
+      
+      // Add resistance when trying to go beyond boundaries
+      if (currentScreenIndex === 0 && dx > 0) {
+        newPosition = dx * 0.2; // Strong resistance at first screen (LeftScreen)
+      } else if (currentScreenIndex === SCREEN_COUNT - 1 && dx < 0) {
+        newPosition = -width * (SCREEN_COUNT - 1) + dx * 0.2; // Strong resistance at last screen (RightScreen)
+      }
 
       swipeAnim.setValue(Math.max(min, Math.min(max, newPosition)));
     },
 
-    onPanResponderRelease: (_, { dx }) => {
+    onPanResponderRelease: (_, { dx, vx }) => {
       if (isSwipeLocked.current) return;
 
       setIsSwiping(false);
 
-      // ✅ slightly easier threshold for better UX
-      const threshold = width * 0.26;
-
       let newIndex = currentScreenIndex;
+      
+      // Calculate swipe threshold based on screen width
+      const swipeThreshold = width * 0.3; // 30% of screen width (increased for intentional swipes)
+      const velocityThreshold = 0.3;
+      
+      // Determine swipe direction
+      const isSwipingLeft = dx < -swipeThreshold || (dx < 0 && Math.abs(vx) > velocityThreshold);
+      const isSwipingRight = dx > swipeThreshold || (dx > 0 && Math.abs(vx) > velocityThreshold);
+      
+      // Screen indices: 0 = LeftScreen, 1 = Student (middle), 2 = RightScreen
+      if (isSwipingLeft && currentScreenIndex < SCREEN_COUNT - 1) {
+        // Swipe left -> move to next screen (higher index)
+        newIndex = currentScreenIndex + 1;
+      } else if (isSwipingRight && currentScreenIndex > 0) {
+        // Swipe right -> move to previous screen (lower index)
+        newIndex = currentScreenIndex - 1;
+      }
 
-      if (dx < -threshold) newIndex++;
-      else if (dx > threshold) newIndex--;
-
+      // Ensure index is within bounds
       newIndex = Math.max(0, Math.min(SCREEN_COUNT - 1, newIndex));
 
-      // ✅ lock during snap animation
+      // Lock during snap animation
       isSwipeLocked.current = true;
 
+      // Animate to the new position
       Animated.spring(swipeAnim, {
         toValue: -width * newIndex,
         useNativeDriver: true,
-        tension: 95,
-        friction: 12,
+        tension: 80,
+        friction: 10,
         overshootClamping: true,
       }).start(() => {
         isSwipeLocked.current = false;
+        setCurrentScreenIndex(newIndex);
       });
 
       if (newIndex !== currentScreenIndex) {
         Haptics.selectionAsync();
       }
+    },
 
-      setCurrentScreenIndex(newIndex);
+    onPanResponderTerminate: () => {
+      setIsSwiping(false);
+      if (!isSwipeLocked.current) {
+        // If gesture is terminated, snap back to current screen
+        Animated.spring(swipeAnim, {
+          toValue: -width * currentScreenIndex,
+          useNativeDriver: true,
+          tension: 80,
+          friction: 10,
+          overshootClamping: true,
+        }).start();
+      }
     },
   })
 ).current;
@@ -453,7 +488,7 @@ const panResponder = useRef(
           try {
             tuitions = teacher?.tuitions ? JSON.parse(teacher.tuitions) : [];
           } catch (err) {
-            console.warn("❌ Failed to parse tuitions for", teacher.email, err);
+            console.warn(" Failed to parse tuitions for", teacher.email, err);
           }
 
           try {
@@ -462,7 +497,7 @@ const panResponder = useRef(
               : [];
           } catch (err) {
             console.warn(
-              "❌ Failed to parse qualifications for",
+              " Failed to parse qualifications for",
               teacher.email,
               err
             );
@@ -1200,13 +1235,14 @@ const panResponder = useRef(
           </View>
           
           <View style={[styles.screen, { width }]}>
-            <View style={styles.fullScreenContainer}>
-              <View style={styles.headerContainer}>
-                <View style={styles.logoContainer}>
-                  <Text style={styles.logoText}>GROWSMART</Text>
-                </View>
+            <View style={styles.headerContainer}>
+              <View style={styles.logoContainer}>
+                <Text style={styles.logoText}>GROWSMART</Text>
+              </View>
 
-                <View style={styles.topRow}>
+              <View style={styles.topRow}>
+                {/* Left: Profile */}
+                <View style={styles.leftSection}>
                   <TouchableOpacity
                     onPress={() => setIsSidebarVisible(true)}
                     style={styles.profileContainer}
@@ -1216,67 +1252,76 @@ const panResponder = useRef(
                       source={
                         profileImage
                           ? { uri: profileImage }
-                          : require("../../../assets/images/Profile.png")
+                          : require("../../../assets/image/Person1.jpeg")
                       }
                     />
                   </TouchableOpacity>
+                </View>
 
-                  <View style={styles.searchRow}>
-                    <View style={styles.searchInputContainer}>
-                      <Image
-                        style={styles.searchIcon}
-                        source={require("../../../assets/images/Search.png")}
-                      />
-                      <TextInput
-                        style={styles.searchInput}
-                        placeholder="Search teachers"
-                        placeholderTextColor="#82878F"
-                        value={searchQuery}
-                        onChangeText={(text) => {
-                          setSearchQuery(text);
-                          if (text.trim() === "") {
-                            setIsSearching(false);
-                            setShowAiText(false);
-                            setPage(1);
-                            setHasMoreData(true);
-                            fetchTeachers(false);
-                          }
-                        }}
-                        returnKeyType="search"
-                        onSubmitEditing={() => {
+                {/* Center: Search Bar with full width */}
+                <View style={styles.centerSection}>
+                  <View style={styles.searchInputContainer}>
+                    <Image
+                      style={styles.searchIcon}
+                      source={require("../../../assets/images/Search.png")}
+                    />
+                    <TextInput
+                      style={styles.searchInput}
+                      placeholder="Search teachers"
+                      placeholderTextColor="#82878F"
+                      value={searchQuery}
+                      onChangeText={(text) => {
+                        setSearchQuery(text);
+                        if (text.trim() === "") {
+                          setIsSearching(false);
+                          setShowAiText(false);
+                          setPage(1);
+                          setHasMoreData(true);
+                          fetchTeachers(false);
+                        }
+                      }}
+                      returnKeyType="search"
+                      onSubmitEditing={() => {
+                        if (searchQuery.trim() !== "") {
+                          setIsSearching(true);
+                          setShowAiText(false);
+                          setPage(1);
+                          setHasMoreData(true);
+                          fetchTeachers(false);
+                        }
+                      }}
+                    />
+                    
+                    {searchQuery.length > 0 && (
+                      <TouchableOpacity 
+                        onPress={() => {
                           if (searchQuery.trim() !== "") {
+                            setShowAiText(true);
                             setIsSearching(true);
-                            setShowAiText(false);
                             setPage(1);
                             setHasMoreData(true);
                             fetchTeachers(false);
+                            
+                            const randomIndex = Math.floor(Math.random() * aiTexts.length);
+                            setSelectedAiTextIndex(randomIndex);
                           }
                         }}
-                      />
-                      
-                      {searchQuery.length > 0 && (
-                        <TouchableOpacity 
-                          onPress={() => {
-                            if (searchQuery.trim() !== "") {
-                              setShowAiText(true);
-                              setIsSearching(true);
-                              setPage(1);
-                              setHasMoreData(true);
-                              fetchTeachers(false);
-                              
-                              const randomIndex = Math.floor(Math.random() * aiTexts.length);
-                              setSelectedAiTextIndex(randomIndex);
-                            }
-                          }}
-                          style={styles.questionButton}
-                        >
-                          <AntDesign name="question" size={wp("4.5%")} color="#5f5fff" />
-                        </TouchableOpacity>
-                      )}
-                    </View>
+                        style={styles.questionButton}
+                      >
+                        <AntDesign name="question" size={wp("4.5%")} color="#5f5fff" />
+                      </TouchableOpacity>
+                    )}
                   </View>
+                </View>
 
-                  <TouchableOpacity style={styles.notificationButton}>
+                {/* Right: Notification */}
+                <View style={styles.rightSection}>
+                  <TouchableOpacity 
+                    style={styles.notificationButton}
+                    onPress={() => {
+                      console.log('Notification button pressed');
+                    }}
+                  >
                     <NotificationBellIcon width={wp("6%")} height={wp("6%")} color="#fff" />
                     {unreadCount > 0 && (
                       <View style={styles.notificationBadge}>
@@ -1288,10 +1333,10 @@ const panResponder = useRef(
                   </TouchableOpacity>
                 </View>
               </View>
-              
-              <View style={styles.contentContainer}>
-                {renderContent()}
-              </View>
+            </View>
+            
+            <View style={styles.contentContainer}>
+              {renderContent()}
             </View>
           </View>
           
@@ -1299,71 +1344,130 @@ const panResponder = useRef(
             <RightScreen />
           </View>
         </Animated.View>
-      </View>
-
-      {currentScreenIndex === 1 && (
-        <View style={styles.swipeIndicator}>
-          <Text style={styles.swipeHintText}>Swipe left or right</Text>
-          <View style={styles.dotContainer}>
-            <View style={[styles.dot, currentScreenIndex === 0 && styles.activeDot]} />
-            <View style={[styles.dot, currentScreenIndex === 1 && styles.activeDot]} />
-            <View style={[styles.dot, currentScreenIndex === 2 && styles.activeDot]} />
+        
+        {/* Swipe Indicators */}
+        <View style={styles.swipeIndicators}>
+          <View style={styles.indicatorContainer}>
+            <TouchableOpacity 
+              style={[styles.indicatorDot, currentScreenIndex === 0 && styles.activeIndicatorDot]}
+              onPress={() => {
+                if (!isSwipeLocked.current && currentScreenIndex !== 0) {
+                  isSwipeLocked.current = true;
+                  Animated.spring(swipeAnim, {
+                    toValue: 0,
+                    useNativeDriver: true,
+                    tension: 100,
+                    friction: 8,
+                    overshootClamping: true,
+                    restSpeedThreshold: 0.1,
+                    restDisplacementThreshold: 0.1,
+                  }).start(() => {
+                    isSwipeLocked.current = false;
+                    setCurrentScreenIndex(0);
+                  });
+                }
+              }}
+            >
+              <Text style={[styles.indicatorText, currentScreenIndex === 0 && styles.activeIndicatorText]}>Teachers</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.indicatorDot, currentScreenIndex === 1 && styles.activeIndicatorDot]}
+              onPress={() => {
+                if (!isSwipeLocked.current && currentScreenIndex !== 1) {
+                  isSwipeLocked.current = true;
+                  Animated.spring(swipeAnim, {
+                    toValue: -width,
+                    useNativeDriver: true,
+                    tension: 100,
+                    friction: 8,
+                    overshootClamping: true,
+                    restSpeedThreshold: 0.1,
+                    restDisplacementThreshold: 0.1,
+                  }).start(() => {
+                    isSwipeLocked.current = false;
+                    setCurrentScreenIndex(1);
+                  });
+                }
+              }}
+            >
+              <Text style={[styles.indicatorText, currentScreenIndex === 1 && styles.activeIndicatorText]}>Home</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.indicatorDot, currentScreenIndex === 2 && styles.activeIndicatorDot]}
+              onPress={() => {
+                if (!isSwipeLocked.current && currentScreenIndex !== 2) {
+                  isSwipeLocked.current = true;
+                  Animated.spring(swipeAnim, {
+                    toValue: -width * 2,
+                    useNativeDriver: true,
+                    tension: 100,
+                    friction: 8,
+                    overshootClamping: true,
+                    restSpeedThreshold: 0.1,
+                    restDisplacementThreshold: 0.1,
+                  }).start(() => {
+                    isSwipeLocked.current = false;
+                    setCurrentScreenIndex(2);
+                  });
+                }
+              }}
+            >
+              <Text style={[styles.indicatorText, currentScreenIndex === 2 && styles.activeIndicatorText]}>Thoughts</Text>
+            </TouchableOpacity>
           </View>
         </View>
-      )}
-      
-      {currentScreenIndex === 1 && (
-        <>
-          <Sidebar
-            visible={isSidebarVisible}
-            onClose={() => setIsSidebarVisible(false)}
-            activeItem={activeMenu}
-            studentName={studentName}
-            profileImage={profileImage}
-            userEmail={userEmail || ""}
-            onItemPress={(itemName: string) => {
-              setActiveMenu(itemName);
-              if (itemName === "Billing") {
-                router.push({
-                  pathname: "/(tabs)/Billing",
-                  params: {
-                    userEmail: storedUserEmail,
-                    userType: userRole,
-                  },
-                });
-              }
-              if (itemName === "My Tuitions") {
-                setCurrentSection("myTeachers");
-              }
-              if (itemName === "Faq") router.push("/(tabs)/StudentDashBoard/Faq");
-              if (itemName === "Share") {
-                router.push({
-                  pathname: "/(tabs)/StudentDashBoard/Share",
-                  params: { userEmail, studentName, profileImage },
-                });
-              }
-              if (itemName === "Subscription") {
-                router.push({
-                  pathname: "/(tabs)/StudentDashBoard/Subscription",
-                  params: { userEmail },
-                });
-              }
-              if (itemName === "Terms") {
-                router.push({
-                  pathname: "/(tabs)/StudentDashBoard/TermsAndConditions",
-                });
-              }
-              if (itemName === "Contact Us") {
-                router.push({ pathname: "/(tabs)/Contact" });
-              }
-              if (itemName === "Privacy Policy") {
-                router.push({ pathname: "/(tabs)/StudentDashBoard/PrivacyPolicy" });
-              }
-            }}
-          />
-          <BottomNavigation userType="student" />
-        </>
-      )}
+      </View>
+
+      <Sidebar
+        visible={isSidebarVisible}
+        onClose={() => setIsSidebarVisible(false)}
+        activeItem={activeMenu}
+        studentName={studentName}
+        profileImage={profileImage}
+        userEmail={userEmail || ""}
+        onItemPress={(itemName: string) => {
+          setActiveMenu(itemName);
+          if (itemName === "Billing") {
+            router.push({
+              pathname: "/(tabs)/Billing",
+              params: {
+                userEmail: storedUserEmail,
+                userType: userRole,
+              },
+            });
+          }
+          if (itemName === "My Tuitions") {
+            setCurrentSection("myTeachers");
+          }
+          if (itemName === "Faq") router.push("/(tabs)/StudentDashBoard/Faq");
+          if (itemName === "Share") {
+            router.push({
+              pathname: "/(tabs)/StudentDashBoard/Share",
+              params: { userEmail, studentName, profileImage },
+            });
+          }
+          if (itemName === "Subscription") {
+            router.push({
+              pathname: "/(tabs)/StudentDashBoard/Subscription",
+              params: { userEmail },
+            });
+          }
+          if (itemName === "Terms") {
+            router.push({
+              pathname: "/(tabs)/StudentDashBoard/TermsAndConditions",
+            });
+          }
+          if (itemName === "Contact Us") {
+            router.push({ pathname: "/(tabs)/Contact" });
+          }
+          if (itemName === "Privacy Policy") {
+            router.push({ pathname: "/(tabs)/StudentDashBoard/PrivacyPolicy" });
+          }
+        }}
+      />
+      <BottomNavigation userType="student" />
     </View>
   );
 }
@@ -1375,6 +1479,65 @@ export const styles = StyleSheet.create({
   swipeContent: { flex: 1, flexDirection: "row", height: "100%" },
   fullScreenContainer: { flex: 1, backgroundColor: '#fff' },
   contentContainer: { flex: 1, backgroundColor: '#fff' },
+  
+  // Top Header Styles (matching Messages screen)
+  topHeader: { 
+    backgroundColor: "#5f5fff", 
+    paddingTop: STATUS_BAR_HEIGHT + (SCREEN_HEIGHT * 0.015), 
+    paddingBottom: SCREEN_HEIGHT * 0.015, 
+    paddingHorizontal: SCREEN_WIDTH * 0.065 
+  },
+  topHeaderContent: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "center", 
+    minHeight: SCREEN_HEIGHT * 0.05,
+    width: '100%',
+    marginBottom: SCREEN_HEIGHT * 0.01,
+  },
+  leftSection: {
+    width: wp('12%'),
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  centerSection: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: wp('2%'),
+  },
+  centerContent: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SCREEN_HEIGHT * 0.005,
+  },
+  rightSection: {
+    width: wp('12%'),
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+  },
+  growsmartText: {
+    color: '#e5e7eb',
+    fontSize: wp('3.78%'),
+    fontFamily: 'Poppins_400Regular',
+    fontWeight: '500',
+    textAlign: 'center',
+    letterSpacing: wp('0.15%'),
+  },
+  
+  // Search Bar integrated in header
+  searchBarInHeader: {
+    marginTop: SCREEN_HEIGHT * 0.005,
+  },
+  
+  // Search Bar Container (deprecated, keeping for compatibility)
+  searchBarContainer: {
+    paddingHorizontal: wp("4.8%"),
+    paddingVertical: hp("1%"),
+    backgroundColor: "#fff",
+  },
+  
   headerContainer: { backgroundColor: "#5f5fff", paddingHorizontal: wp("4.8%"), paddingTop: hp("5%"), paddingBottom: hp("2%"), borderBottomLeftRadius: wp("4.53%"), borderBottomRightRadius: wp("4.53%") },
   screenContainer: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, width: "100%", height: "100%" },
   carouselContainer: { height: wp("55%"), marginBottom: hp("2%") },
@@ -1401,7 +1564,7 @@ export const styles = StyleSheet.create({
   noResultsContainer: { padding: wp("5%"), alignItems: "center" },
   noResultsText: { fontSize: wp("4%"), fontFamily: "Poppins_400Regular", color: "#6c757d", textAlign: "center" },
   logoContainer: { alignItems: "center", marginBottom: hp("1.5%") },
-  logoText: { fontSize: wp("3.4%"), color: "#fff", fontFamily: "Poppins_600SemiBold", letterSpacing: wp("0.8%") },
+  logoText: { color: '#e5e7eb', fontSize: wp('3.7%%'), fontFamily: 'Poppins_400Regular' },
   profileContainer: { justifyContent: "center", alignItems: "center", marginRight: wp("2%"), borderWidth: 1, borderColor: "white", borderRadius: 100 },
   searchRow: { flex: 1, marginHorizontal: wp("2%") },
   searchInputContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#f1f1f1", paddingHorizontal: wp("3%"), borderRadius: wp("4.27%"), height: wp("10%") },
@@ -1436,5 +1599,43 @@ export const styles = StyleSheet.create({
   offerBanner: { width: '100%', height: hp('15%'), backgroundColor: '#f8f9fa', borderRadius: wp('2%'), marginBottom: hp('2%'), overflow: 'hidden' },
   offerImage: { width: '100%', height: '150%', resizeMode: 'cover' },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  profileImage: { width: wp('8%'), height: wp('8%'), borderRadius: wp('4%') },
+  profileImage: { width: wp('10%'), height: wp('10%'), borderRadius: wp('4%') },
+  
+  // Swipe Indicators
+  swipeIndicators: { 
+    position: 'absolute', 
+    bottom: hp('2%'), 
+    left: 0, 
+    right: 0, 
+    alignItems: 'center',
+    paddingHorizontal: wp('4%'),
+  },
+  indicatorContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: 'rgba(0, 0, 0, 0.3)', 
+    borderRadius: wp('5%'), 
+    paddingHorizontal: wp('3%'), 
+    paddingVertical: hp('1%'),
+  },
+  indicatorDot: { 
+    paddingHorizontal: wp('3%'), 
+    paddingVertical: hp('0.8%'), 
+    borderRadius: wp('3%'), 
+    marginHorizontal: wp('1%'),
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  activeIndicatorDot: { 
+    backgroundColor: '#5f5fff',
+  },
+  indicatorText: { 
+    fontSize: wp('3%'), 
+    fontFamily: 'Poppins_500Medium', 
+    color: '#ffffff',
+    textAlign: 'center',
+  },
+  activeIndicatorText: { 
+    color: '#ffffff',
+    fontFamily: 'Poppins_600SemiBold',
+  },
 });

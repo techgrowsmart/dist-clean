@@ -12,24 +12,18 @@ export default function AuthCheck() {
             try {
                 const authData = await getAuthData();
 
-               
-                setTimeout(() => {
-                    if (authData) {
-                   
-                        if (authData.role === "teacher") {
-                            router.replace("/(tabs)/TeacherDashBoard/Teacher");
-                        } else if (authData.role === "student") {
-                            router.replace("/(tabs)/StudentDashBoard/Student");
-                        } else {
-                          
-                            router.replace("/Login");
-                        }
+                if (authData && authData.token) {
+                    if (authData.role === "teacher") {
+                        router.replace("/(tabs)/TeacherDashBoard/Teacher");
+                    } else if (authData.role === "student") {
+                        router.replace("/(tabs)/StudentDashBoard/Student");
                     } else {
-                       
                         router.replace("/Login");
                     }
-                    setChecking(false);
-                }, 1000);
+                } else {
+                    router.replace("/Login");
+                }
+                setChecking(false);
             } catch (error) {
                 console.error("Error checking auth:", error);
                 router.replace("/Login");

@@ -1,7 +1,9 @@
 // API service for posts/thoughts functionality
 // This file handles all API calls to the backend
 
-const API_BASE_URL = 'https://growsmartserver.gogrowsmart.com/api';
+import { BASE_URL } from '../../../../config';
+
+const API_BASE_URL = `${BASE_URL}/api`;
 
 console.log('🔗 API_BASE_URL:', API_BASE_URL);
 

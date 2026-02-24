@@ -43,7 +43,7 @@ export default function SplashScreen() {
         <View style={styles.container}>
           
             <Image
-                source={require("../../assets/image/splash.gif")}
+                source={require("../../assets/images/growsmart-icon.png")}
                 style={styles.video}
                 resizeMode="contain"
             />

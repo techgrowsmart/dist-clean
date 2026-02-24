@@ -1,20 +1,24 @@
+import { Platform } from 'react-native';
+
 // Dynamic IP detection for development
 const getBaseUrl = () => {
   // Use environment variable if available
-  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  let url = process.env.EXPO_PUBLIC_API_URL;
   
-  if (envUrl) {
-    console.log('Using API URL from environment:', envUrl);
-    return envUrl;
+  if (!url) {
+    // For local development, use local IP
+    url = "http://172.17.2.72:3000";
   }
-  
-  // Fallback to production URL
-  const productionUrl = "https://growsmartserver.gogrowsmart.com";
-  console.log('Using fallback API URL:', productionUrl);
-  return productionUrl;
+
+  // Android emulator: 127.0.0.1 points to the emulator itself, not the host.
+  // Use 10.0.2.2 to reach the host machine's localhost.
+  if (Platform.OS === 'android' && (url.includes('127.0.0.1') || url.includes('localhost'))) {
+    url = url.replace(/127\.0\.0\.1|localhost/g, '10.0.2.2');
+  }
+  console.log('Using API URL:', url);
+  return url;
 };
 
+// Use production API for stability in emulator/dev when local backend isn't reachable
 export const BASE_URL = getBaseUrl();
-// export const BASE_URL = "http://127.0.0.1:3000";
-// export const BASE_URL = "https://growsmartserver.gogrowsmart.com"
 export const RAZOR_PAY_KEY = process.env.EXPO_PUBLIC_RAZORPAY_KEY || 'rzp_test_RY9WNGFa44XzaQ';

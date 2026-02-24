@@ -8,7 +8,11 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "build:dev": "eas build --platform android --profile development",
+    "build:preview": "eas build --platform android --profile preview",
+    "build:prod": "eas build --platform android --profile production",
+    "build:prod-aab": "eas build --platform android --profile production-aab"
   },
   "dependencies": {
     "@babel/preset-react": "^7.28.5",
@@ -29,8 +33,6 @@
     "@ptomasroos/react-native-multi-slider": "^2.2.2",
     "@react-native-async-storage/async-storage": "2.1.2",
     "@react-native-community/datetimepicker": "8.4.1",
-    "@react-native-firebase/app": "^22.4.0",
-    "@react-native-firebase/messaging": "^22.4.0",
     "@react-native-masked-view/masked-view": "^0.3.2",
     "@react-native-picker/picker": "2.11.1",
     "@react-navigation/bottom-tabs": "^7.3.10",
@@ -63,6 +65,7 @@
     "expo-status-bar": "~2.2.3",
     "expo-symbols": "~0.4.5",
     "expo-system-ui": "~5.0.11",
+    "expo-updates": "~0.28.18",
     "expo-web-browser": "~14.2.0",
     "firebase": "^11.9.0",
     "mime": "^4.0.7",

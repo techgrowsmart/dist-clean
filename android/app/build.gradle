@@ -87,13 +87,13 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.growsmart.app'
+    namespace 'com.gogrowsmart.app.mobile'
     defaultConfig {
-        applicationId 'com.growsmart.app'
+        applicationId 'com.gogrowsmart.app.mobile'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 11
-        versionName "2.0.7"
+        versionCode 13
+        versionName "2.0.9"
     }
     signingConfigs {
         debug {

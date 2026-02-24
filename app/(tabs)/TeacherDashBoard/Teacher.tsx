@@ -249,6 +249,7 @@ export default function TeacherDashboard() {
   const swipeAnim = React.useRef(new Animated.Value(-width)).current;
   const [currentScreenIndex, setCurrentScreenIndex] = useState(1);
   const [isSwipeActive, setIsSwipeActive] = useState(false);
+  const isSwipeLocked = useRef(false);
   const swipeVelocity = React.useRef(new Animated.Value(0)).current;
   const swipeOpacity = React.useRef(new Animated.Value(1)).current;
   const swipeScale = React.useRef(new Animated.Value(1)).current;
@@ -263,197 +264,95 @@ export default function TeacherDashboard() {
   const panResponder = React.useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
+      
       onMoveShouldSetPanResponder: (_, { dx, dy }) => {
-        // Tinder-like gesture detection - more sensitive to horizontal swipes
+        // Only set responder if horizontal swipe is significant and more horizontal than vertical
         const absDx = Math.abs(dx);
         const absDy = Math.abs(dy);
-        const gestureThreshold = 8; // Lower threshold for instant response
-        const horizontalBias = 1.8; // Less restrictive for natural swiping
-        
-        return absDx > gestureThreshold && absDx > absDy * horizontalBias && absDy < 12;
+        return absDx > 15 && absDx > absDy * 1.5;
       },
 
-      onPanResponderGrant: (_, { dx }) => {
+      onPanResponderGrant: () => {
         setIsSwipeActive(true);
         swipeAnim.stopAnimation();
-        swipeVelocity.setValue(0);
-        
-        // Tinder-like haptic feedback
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        
-        // Visual feedback - slight scale and opacity
-        Animated.parallel([
-          Animated.timing(swipeOpacity, {
-            toValue: 0.85,
-            duration: 150,
-            useNativeDriver: true,
-          }),
-          Animated.timing(swipeScale, {
-            toValue: 0.95,
-            duration: 150,
-            useNativeDriver: true,
-          })
-        ]).start();
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       },
-      
-      onPanResponderMove: (_, { dx, dy, vx }) => {
-        const basePosition = -width * currentScreenIndex;
-        const minPosition = -width * (SCREEN_COUNT - 1);
-        const maxPosition = 0;
+
+      onPanResponderMove: (_, { dx }) => {
+        // Calculate the target position based on current screen index and drag
+        let newPosition = -width * currentScreenIndex + dx;
+
+        // Apply boundaries with resistance
+        const min = -width * (SCREEN_COUNT - 1);
+        const max = 0;
         
-        // Calculate resistance at edges
-        let nextPos = basePosition + dx;
-        const resistanceFactor = 0.25; // More resistance for edge feedback
-        
-        if (nextPos > maxPosition) {
-          nextPos = maxPosition + (nextPos - maxPosition) * resistanceFactor;
-        } else if (nextPos < minPosition) {
-          nextPos = minPosition + (nextPos - minPosition) * resistanceFactor;
+        // Add resistance when trying to go beyond boundaries
+        if (currentScreenIndex === 0 && dx > 0) {
+          newPosition = dx * 0.2; // Strong resistance at first screen
+        } else if (currentScreenIndex === SCREEN_COUNT - 1 && dx < 0) {
+          newPosition = -width * (SCREEN_COUNT - 1) + dx * 0.2; // Strong resistance at last screen
         }
-        
-        swipeAnim.setValue(nextPos);
-        swipeVelocity.setValue(vx);
-        
-        // Tinder-like rotation based on swipe direction
-        const rotation = Math.max(-15, Math.min(15, dx * 0.02));
-        swipeRotation.setValue(rotation);
-        
-        // Update swipe direction for visual feedback
-        if (dx > 5) {
-          setSwipeDirection('right');
-        } else if (dx < -5) {
-          setSwipeDirection('left');
-        } else {
-          setSwipeDirection(null);
-        }
+
+        swipeAnim.setValue(Math.max(min, Math.min(max, newPosition)));
       },
-      
+
       onPanResponderRelease: (_, { dx, vx }) => {
         setIsSwipeActive(false);
-        setSwipeDirection(null);
+
+        let newIndex = currentScreenIndex;
         
-        // Restore all visual properties
-        Animated.parallel([
-          Animated.timing(swipeOpacity, {
-            toValue: 1,
-            duration: 250,
-            useNativeDriver: true,
-          }),
-          Animated.timing(swipeScale, {
-            toValue: 1,
-            duration: 250,
-            useNativeDriver: true,
-          }),
-          Animated.spring(swipeRotation, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 100,
-            friction: 8,
-          })
-        ]).start();
+        // Calculate swipe threshold based on screen width
+        const swipeThreshold = width * 0.25; // 25% of screen width
+        const velocityThreshold = 0.3;
         
-        const basePosition = -width * currentScreenIndex;
-        const finalPosition = basePosition + dx;
-        const minPosition = -width * (SCREEN_COUNT - 1);
-        const maxPosition = 0;
+        // Only change screen if swipe is decisive enough
+        const isSwipingLeft = dx < -swipeThreshold || (dx < 0 && Math.abs(vx) > velocityThreshold);
+        const isSwipingRight = dx > swipeThreshold || (dx > 0 && Math.abs(vx) > velocityThreshold);
         
-        // Tinder-like swipe detection - more forgiving
-        const swipeThreshold = width * 0.2; // 20% of screen width
-        const velocityThreshold = 0.3; // Lower velocity threshold
-        
-        let targetIndex = currentScreenIndex;
-        let shouldAnimate = true;
-        
-        // Determine swipe direction and intent
-        if (Math.abs(vx) > velocityThreshold || Math.abs(dx) > swipeThreshold) {
-          if (vx > 0 || dx > 0) {
-            // Swipe right (previous screen)
-            if (currentScreenIndex > 0) {
-              targetIndex = currentScreenIndex - 1;
-              shouldAnimate = true;
-            } else {
-              shouldAnimate = false; // At edge, bounce back
-            }
-          } else {
-            // Swipe left (next screen)
-            if (currentScreenIndex < SCREEN_COUNT - 1) {
-              targetIndex = currentScreenIndex + 1;
-              shouldAnimate = true;
-            } else {
-              shouldAnimate = false; // At edge, bounce back
-            }
-          }
+        // Handle screen transitions with proper boundaries
+        if (isSwipingLeft && currentScreenIndex < SCREEN_COUNT - 1) {
+          // Swipe left - go to next screen
+          newIndex = currentScreenIndex + 1;
+        } else if (isSwipingRight && currentScreenIndex > 0) {
+          // Swipe right - go to previous screen
+          newIndex = currentScreenIndex - 1;
         }
-        
-        const targetPosition = -width * targetIndex;
-        
-        if (shouldAnimate && targetIndex !== currentScreenIndex) {
-          // Tinder-like card swipe animation
-          Animated.spring(swipeAnim, {
-            toValue: targetPosition,
-            useNativeDriver: true,
-            tension: 100, // Tinder-like springiness
-            friction: 8,
-            velocity: vx * 0.6, // More velocity influence
-          }).start(() => {
-            setCurrentScreenIndex(targetIndex);
-            // Strong haptic feedback for successful swipe
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          });
-        } else {
-          // Bounce back animation for failed swipe or edge case
-          Animated.sequence([
-            Animated.spring(swipeAnim, {
-              toValue: targetPosition + (dx * 0.1), // Slight overshoot
-              useNativeDriver: true,
-              tension: 200,
-              friction: 6,
-            }),
-            Animated.spring(swipeAnim, {
-              toValue: targetPosition,
-              useNativeDriver: true,
-              tension: 300,
-              friction: 10,
-            })
-          ]).start(() => {
-            setCurrentScreenIndex(targetIndex);
-            // Light haptic feedback for bounce back
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          });
+
+        // Ensure index is within bounds
+        newIndex = Math.max(0, Math.min(SCREEN_COUNT - 1, newIndex));
+
+        // Lock during snap animation
+        isSwipeLocked.current = true;
+
+        // Animate to the new position
+        Animated.spring(swipeAnim, {
+          toValue: -width * newIndex,
+          useNativeDriver: true,
+          tension: 80,
+          friction: 10,
+          overshootClamping: true,
+        }).start(() => {
+          isSwipeLocked.current = false;
+          setCurrentScreenIndex(newIndex);
+        });
+
+        if (newIndex !== currentScreenIndex) {
+          Haptics.selectionAsync();
         }
       },
-      
+
       onPanResponderTerminate: () => {
         setIsSwipeActive(false);
-        setSwipeDirection(null);
-        
-        // Reset all animations
-        Animated.parallel([
+        if (!isSwipeLocked.current) {
+          // If gesture is terminated, snap back to current screen
           Animated.spring(swipeAnim, {
             toValue: -width * currentScreenIndex,
             useNativeDriver: true,
-            tension: 200,
-            friction: 8,
-          }),
-          Animated.spring(swipeScale, {
-            toValue: 1,
-            useNativeDriver: true,
-            tension: 200,
-            friction: 8,
-          }),
-          Animated.spring(swipeOpacity, {
-            toValue: 1,
-            useNativeDriver: true,
-            tension: 200,
-            friction: 8,
-          }),
-          Animated.spring(swipeRotation, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 200,
-            friction: 8,
-          })
-        ]).start();
+            tension: 80,
+            friction: 10,
+            overshootClamping: true,
+          }).start();
+        }
       },
     })
   ).current;
@@ -1662,7 +1561,7 @@ menuButton: {
 notificationButton: {
   padding: wp("2%"),
   borderRadius: wp("2.5%"),
-  backgroundColor: "rgba(255, 255, 255, 0.15)",
+  backgroundColor: "transparent", 
   shadowColor: "#000",
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.1,
@@ -1727,7 +1626,7 @@ logoTextContainer: {
   //   flex: 1,
   // },
   
-  // Notification badge - enhanced professional styling
+  // Notification badge - simple circle only
   notificationBadge: { 
     position: "absolute", 
     top: hp("-0.8%"), 
@@ -1739,13 +1638,6 @@ logoTextContainer: {
     justifyContent: "center", 
     alignItems: "center",
     paddingHorizontal: wp("1.5%"),
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
-    borderWidth: 2,
-    borderColor: "#fff",
     zIndex: 15,
   },
   

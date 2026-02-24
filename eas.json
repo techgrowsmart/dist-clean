@@ -12,19 +12,29 @@
       }
     },
     "preview": {
+      "developmentClient": false,
       "distribution": "internal",
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "developmentClient": false,
       "android": {
         "buildType": "apk"
       }
     },
     "production-aab": {
+      "developmentClient": false,
       "android": {
         "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "track": "internal"
       }
     }
   }

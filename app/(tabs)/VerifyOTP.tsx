@@ -59,7 +59,7 @@ export default function VerifyOTP() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleChange = (text, index) => {
+  const handleChange = (text: string, index: number) => {
     if (!/^\d?$/.test(text)) return;
 
     const newOtp = [...otp];
@@ -71,7 +71,7 @@ export default function VerifyOTP() {
     }
   };
 
-  const handleKeyPress = (e, index) => {
+  const handleKeyPress = (e: any, index: number) => {
     if (e.nativeEvent.key === 'Backspace') {
       if (otp[index] === "" && index > 0) {
         inputRefs.current[index - 1]?.focus();
@@ -98,9 +98,14 @@ export default function VerifyOTP() {
         body: JSON.stringify({ email, otp: enteredOtp, name, phonenumber: phone }),
       });
       
-      const responseData = await response.json();
+      const responseData = await response.json() as {
+        token?: string;
+        userId?: string;
+        role?: string;
+        message?: string;
+      };
 
-      if (response.ok) {
+      if (response.ok && responseData.token) {
         const phoneStr = Array.isArray(phone) ? phone[0] : phone;
         const tokenStr = responseData.token;
         const userIdStr = responseData.userId;
@@ -117,11 +122,11 @@ export default function VerifyOTP() {
         await AsyncStorage.setItem("userId", String(userIdStr ?? ""));
       
         if (Platform.OS === "web") {
-          localStorage.setItem("email", email ?? "");
-          localStorage.setItem("name", name ?? "");
-          localStorage.setItem("phoneNumber", phoneStr ?? "");
+          localStorage.setItem("email", String(email ?? ""));
+          localStorage.setItem("name", String(name ?? ""));
+          localStorage.setItem("phoneNumber", String(phoneStr ?? ""));
           localStorage.setItem("token", tokenStr);
-          localStorage.setItem("userId", userIdStr);
+          localStorage.setItem("userId", String(userIdStr ?? ""));
         }
       
         Alert.alert("Success", "OTP Verified!");
@@ -145,7 +150,9 @@ export default function VerifyOTP() {
         body: JSON.stringify({ email, fullName: name, phonenumber: phone }),
       });
       
-      const data = await response.json();
+      const data = await response.json() as {
+        message?: string;
+      };
       setLoading(false);
 
       if (response.ok) {
@@ -188,7 +195,7 @@ export default function VerifyOTP() {
             {otp.map((digit, index) => (
               <View key={index} style={styles.otpInputWrapper}>
                 <TextInput
-                  ref={(ref) => (inputRefs.current[index] = ref)}
+                  ref={(ref) => { inputRefs.current[index] = ref; }}
                   style={[styles.otpInput, digit ? styles.otpInputFilled : styles.otpInputEmpty]}
                   value={digit}
                   onChangeText={(text) => handleChange(text, index)}

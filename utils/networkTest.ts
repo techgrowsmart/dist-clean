@@ -1,8 +1,9 @@
 // Network connectivity test utility
 import axios from 'axios';
+import { BASE_URL } from '../config';
 
 const testUrls = [
-  'https://growsmartserver.gogrowsmart.com/api/auth/login'
+  `${BASE_URL}/api/auth/login`
 ];
 
 export const testNetworkConnectivity = async () => {

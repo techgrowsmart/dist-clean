@@ -50,66 +50,6 @@ export default function LoginScreen() {
       return;
     }
 
-    // Complete bypass for student1@example.com - direct login with real database access
-    if (email === "student1@example.com") {
-      console.log('🔓 Direct login bypass for student1@example.com - accessing REAL database');
-      
-      // Use REAL JWT token that will authenticate with backend (with correct secret)
-      const realToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN0dWRlbnQxQGV4YW1wbGUuY29tIiwicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3Njk3NDk4NjQsImV4cCI6MTgwMTI4NTg2NH0.JyWG1Sk-OTgfmT5HsFg2lYTrbHgKEoVYYClsyQKamM8";
-      
-      await storeAuthData({
-        role: "student",
-        email: email,
-        token: realToken,
-        name: "Test Student"
-      });
-      
-      await AsyncStorage.setItem("studentName", "Test Student");
-      await AsyncStorage.setItem("userEmail", email);
-      await AsyncStorage.setItem("user_role", "student");
-      
-      Toast.show({
-        type: "success",
-        text1: "Login Successful",
-        text2: "Accessing real database data!"
-      });
-      
-      setTimeout(() => {
-        router.replace("/(tabs)/StudentDashBoard/Student");
-      }, 1000);
-      return;
-    }
-
-    // Complete bypass for teacher56@example.com - direct login with real database access
-    if (email === "teacher56@example.com") {
-      console.log('🔓 Direct login bypass for teacher56@example.com - accessing REAL database');
-      
-      // Use REAL JWT token that will authenticate with backend (with correct secret)
-      const realToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRlYWNoZXI1NkBleGFtcGxlLmNvbSIsInJvbGUiOiJ0ZWFjaGVyIiwiaWF0IjoxNzY5NzQ5ODY0LCJleHAiOjE4MDEyODU4NjR9.JGUUAgtLUPecqYjRt4QK0JuhauklTtEa-i7xiDSaxaI";
-      
-      await storeAuthData({
-        role: "teacher",
-        email: email,
-        token: realToken,
-        name: "Test Teacher"
-      });
-      
-      await AsyncStorage.setItem("teacherName", "Test Teacher");
-      await AsyncStorage.setItem("userEmail", email);
-      await AsyncStorage.setItem("user_role", "teacher");
-      
-      Toast.show({
-        type: "success",
-        text1: "Login Successful",
-        text2: "Accessing real database data!"
-      });
-      
-      setTimeout(() => {
-        router.replace("/(tabs)/TeacherDashBoard/Teacher");
-      }, 1000);
-      return;
-    }
-
     try {
       const response = await fetch(`${BASE_URL}/api/auth/login`, {
         method: "POST",
@@ -117,7 +57,16 @@ export default function LoginScreen() {
         body: JSON.stringify({ email }),
       });
 
-      const data = await response.json();
+      const data = await response.json() as {
+        isRegistered?: boolean;
+        message: string;
+        status?: string;
+        otpId?: string;
+        role?: string;
+        token?: string;
+        name?: string;
+        isTestUser?: boolean;
+      };
 
       if (!response.ok) {
         if (data.isRegistered === false) {
@@ -126,6 +75,31 @@ export default function LoginScreen() {
           return;
         }
         Toast.show({ type: "error", text1: data.message });
+        return;
+      }
+
+      // Handle test users - direct login without OTP
+      if (data.isTestUser) {
+        console.log(" Test user login detected - bypassing OTP");
+        await storeAuthData({
+          role: data.role!,
+          email: email,
+          token: data.token!,
+          name: data.name!
+        });
+        
+        Toast.show({
+          type: "success",
+          text1: "Login Successful (Test User)"
+        });
+        
+        setTimeout(() => {
+          if (data.role === "teacher") {
+            router.replace("/(tabs)/TeacherDashBoard/Teacher");
+          } else {
+            router.replace("/(tabs)/StudentDashBoard/Student");
+          }
+        }, 1000);
         return;
       }
 
@@ -141,6 +115,27 @@ export default function LoginScreen() {
             },
           });
         }, 2000);
+      } else {
+        // User is active, store auth data and redirect
+        await storeAuthData({
+          role: data.role!,
+          email: email,
+          token: data.token!,
+          name: data.name!
+        });
+        
+        Toast.show({
+          type: "success",
+          text1: "Login Successful"
+        });
+        
+        setTimeout(() => {
+          if (data.role === "teacher") {
+            router.replace("/(tabs)/TeacherDashBoard/Teacher");
+          } else {
+            router.replace("/(tabs)/StudentDashBoard/Student");
+          }
+        }, 1000);
       }
     } catch (error) {
       Toast.show({

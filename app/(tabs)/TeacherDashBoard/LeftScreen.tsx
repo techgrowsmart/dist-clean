@@ -80,7 +80,9 @@ const LeftScreen: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'myReviews' | 'reviews'>('myReviews');
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [allReviews, setAllReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingAllReviews, setLoadingAllReviews] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [averageRating, setAverageRating] = useState(0);
   const [teacherData, setTeacherData] = useState<TeacherData | null>(null);
@@ -156,9 +158,66 @@ const LeftScreen: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { fetchTeacherData(); }, [fetchTeacherData]);
+  const fetchAllReviews = useCallback(async () => {
+    setLoadingAllReviews(true);
+    try {
+      const auth = await getAuthData();
+      if (!auth?.token) { throw new Error('Authentication required'); }
 
-  const onRefresh = useCallback(() => { fetchTeacherData(true); }, [fetchTeacherData]);
+      const response = await axios.get(`${BASE_URL}/api/review/all-reviews`, {
+        headers: { Authorization: `Bearer ${auth.token}` }
+      });
+
+      if (response.data.success) {
+        const processedReviews = response.data.reviews.map((review: any) => {
+          const studentName = review.student_name || 
+                           review.studentName || 
+                           review.name ||
+                           review.reviewer_name || 
+                           review.reviewerName ||
+                           (review.student_email && review.student_email.includes('@') ? 
+                             review.student_email.split('@')[0].replace('.', ' ').replace(/\d/g, '').replace(/\b\w/g, (l: string) => l.toUpperCase()) : 
+                             null) ||
+                           'Anonymous';
+          
+          return {
+            ...review,
+            studentName
+          };
+        });
+        
+        setAllReviews(processedReviews);
+        console.log('Fetched all reviews:', processedReviews.length, 'reviews');
+      } else {
+        setAllReviews([]);
+      }
+    } catch (error: any) {
+      console.error('Error fetching all reviews:', error);
+      setAllReviews([]);
+    } finally {
+      setLoadingAllReviews(false);
+    }
+  }, []);
+
+  useEffect(() => { 
+    fetchTeacherData(); 
+    if (activeTab === 'reviews') {
+      fetchAllReviews();
+    }
+  }, [fetchTeacherData, fetchAllReviews, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'reviews' && allReviews.length === 0) {
+      fetchAllReviews();
+    }
+  }, [activeTab, fetchAllReviews, allReviews.length]);
+
+  const onRefresh = useCallback(() => { 
+    fetchTeacherData(true); 
+    if (activeTab === 'reviews') {
+      fetchAllReviews();
+    }
+  }, [fetchTeacherData, fetchAllReviews, activeTab]);
 
   const formatDate = (dateString: string) => {
     try {
@@ -249,12 +308,6 @@ const LeftScreen: React.FC = () => {
       >
         {/* Header with Back Button */}
         <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          >
-            <Ionicons name="chevron-back" size={28} color="#fff" />
-          </TouchableOpacity>
           <Text style={styles.headerTitle}>My Reviews</Text>
           <View style={styles.headerRightPlaceholder} />
         </View>
@@ -310,10 +363,15 @@ const LeftScreen: React.FC = () => {
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.tabButton, activeTab === 'reviews' && styles.activeTabButton]} 
-              onPress={() => setActiveTab('reviews')}
+              onPress={() => {
+                setActiveTab('reviews');
+                if (allReviews.length === 0) {
+                  fetchAllReviews();
+                }
+              }}
             >
               <Text style={[styles.tabButtonText, activeTab === 'reviews' && styles.activeTabButtonText]}>
-                Reviews
+                All Reviews
               </Text>
             </TouchableOpacity>
           </View>
@@ -353,8 +411,16 @@ const LeftScreen: React.FC = () => {
 
           {/* Reviews List */}
           <View style={styles.reviewsSection}>
-            {reviews.length > 0 ? (
-              reviews.map((review, index) => {
+            {/* My Reviews Tab */}
+            {activeTab === 'myReviews' && (
+              <>
+                {loading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#5B7FFF" />
+                    <Text style={styles.loadingText}>Loading your reviews...</Text>
+                  </View>
+                ) : reviews.length > 0 ? (
+                  reviews.map((review, index) => {
                 const studentName = review.student_name || review.studentName || review.name || 'Anonymous';
                 const studentProfilePic = review.student_profile_pic || review.studentProfilePic || review.profilePic;
                 const reviewText = review.review_text || review.reviewText || review.review || review.message || '';
@@ -404,6 +470,70 @@ const LeftScreen: React.FC = () => {
                 </Text>
               </View>
             )}
+              </>
+            )}
+
+            {/* All Reviews Tab */}
+            {activeTab === 'reviews' && (
+              <>
+                {loadingAllReviews ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#5B7FFF" />
+                    <Text style={styles.loadingText}>Loading all reviews...</Text>
+                  </View>
+                ) : allReviews.length > 0 ? (
+                  allReviews.map((review, index) => {
+                const studentName = review.student_name || review.studentName || review.name || 'Anonymous';
+                const studentProfilePic = review.student_profile_pic || review.studentProfilePic || review.profilePic;
+                const reviewText = review.review_text || review.reviewText || review.review || review.message || '';
+                const createdAt = review.createdAt || review.created_at || review.date || new Date().toISOString();
+                return (
+                  <View key={review._id || `all-review-${index}-${Date.now()}`} style={styles.reviewCard}>
+                    <View style={styles.reviewHeader}>
+                      {getReviewerProfileImage(studentProfilePic) ? (
+                        <Image 
+                          source={getReviewerProfileImage(studentProfilePic)!} 
+                          style={styles.reviewerImage} 
+                          onError={(e) => console.log('Error loading reviewer image:', e.nativeEvent.error)} 
+                        />
+                      ) : (
+                        <View style={styles.reviewerInitialsContainer}>
+                          <Text style={styles.reviewerInitials}>
+                            {studentName.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.reviewerInfo}>
+                        <View style={styles.reviewerTopRow}>
+                          <Text style={styles.reviewerName} numberOfLines={1}>
+                            {studentName}
+                          </Text>
+                          <View style={styles.reviewStars}>
+                            {renderStars(review.rating)}
+                          </View>
+                        </View>
+                        <Text style={styles.reviewDate}>{formatDate(createdAt)}</Text>
+                      </View>
+                    </View>
+                    {reviewText && (
+                      <View style={styles.reviewContent}>
+                        <Text style={styles.reviewText}>{reviewText}</Text>
+                      </View>
+                    )}
+                  </View>
+                );
+              })
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="chatbubble-ellipses-outline" size={48} color="#CCCCCC" />
+                <Text style={styles.emptyStateText}>No reviews available</Text>
+                <Text style={styles.emptyStateSubtext}>
+                  Check back later for student reviews
+                </Text>
+              </View>
+            )}
+              </>
+            )}
           </View>
           
           {/* Bottom padding for safe area */}
@@ -435,6 +565,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center', 
     alignItems: 'center', 
     backgroundColor: '#5B7FFF' 
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontFamily: 'OpenSans-Regular',
   },
   header: { 
     flexDirection: 'row',

@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:144030897819:android:d6a67aef85b159e12bd83e",
         "android_client_info": {
-          "package_name": "com.gogrowsmart.app"
+          "package_name": "com.gogrowsmart.app.mobile"
         }
       },
       "oauth_client": [],

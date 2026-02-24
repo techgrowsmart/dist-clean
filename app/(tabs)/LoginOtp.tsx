@@ -100,9 +100,14 @@ export default function LoginOtp() {
         body: JSON.stringify({ email, otp: otpCode, otpId }),
       });
 
-      const data = await response.json();
+      const data = await response.json() as {
+        role?: string;
+        token?: string;
+        name?: string;
+        message?: string;
+      };
 
-      if (response.ok) {
+      if (response.ok && data.token) {
         await storeAuthData({
           role: data.role || "student",
           email: email as string,
@@ -110,11 +115,15 @@ export default function LoginOtp() {
           name: data.name || "",
         });
 
-        if (data.role === "teacher") {
-          router.replace("/(tabs)/TeacherDashBoard/Teacher");
-        } else {
-          router.replace("/(tabs)/StudentDashBoard/Student");
-        }
+        Alert.alert("Success", "Login successful!");
+        
+        setTimeout(() => {
+          if (data.role === "teacher") {
+            router.replace("/(tabs)/TeacherDashBoard/Teacher");
+          } else {
+            router.replace("/(tabs)/StudentDashBoard/Student");
+          }
+        }, 1000);
       } else {
         Alert.alert("Error", data.message || "Invalid OTP");
       }
@@ -134,7 +143,10 @@ export default function LoginOtp() {
         body: JSON.stringify({ email }),
       });
 
-      const data = await response.json();
+      const data = await response.json() as {
+        otpId?: string;
+        message?: string;
+      };
       setLoading(false);
 
       if (response.ok) {

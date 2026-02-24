@@ -1,5 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
+import { useFonts, Inter_400Regular } from '@expo-google-fonts/inter';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -19,12 +19,14 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+  const [loaded, fontError] = useFonts({
+    Inter_400Regular,
   });
 
+  const fontsReady = loaded || fontError;
+
   useEffect(() => {
-    if (loaded) {
+    if (fontsReady) {
       SplashScreen.hideAsync();
     }
 
@@ -89,11 +91,11 @@ export default function RootLayout() {
 
 
 
-  }, [loaded]);
+  }, [fontsReady]);
 
-
-  if (!loaded) {
-    return null;
+  // Don't return null: render minimal view so the app doesn't close; show app once fonts load or fail
+  if (!fontsReady) {
+    return <View style={{ flex: 1, backgroundColor: '#ffffff' }} />;
   }
 
 
