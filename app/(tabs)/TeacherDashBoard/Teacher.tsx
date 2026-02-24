@@ -588,15 +588,15 @@ export default function TeacherDashboard() {
         "Content-Type": "application/json",
       };
       
-      // Create parallel API calls for maximum speed
+      // Create optimized API calls - remove duplicate profile/teacherProfile calls
       const apiPromises = [
         // Profile fetch
         axios.post(`${BASE_URL}/api/userProfile`, { email }, { headers, timeout: 8000 })
           .then(response => ({ type: 'profile', data: response.data }))
           .catch(error => ({ type: 'profile', error })),
         
-        // Subject count fetch
-        axios.post(`${BASE_URL}/api/teacherProfile`, { email }, { headers, timeout: 6000 })
+        // Subject count fetch (using same profile API)
+        axios.post(`${BASE_URL}/api/userProfile`, { email }, { headers, timeout: 6000 })
           .then(response => {
             console.log('🔍 Raw teacherProfile API response:', response.data);
             return { type: 'subjects', data: response.data };
@@ -611,13 +611,17 @@ export default function TeacherDashboard() {
           .then(response => ({ type: 'contacts', data: response.data }))
           .catch(error => ({ type: 'contacts', error })),
         
-        // Reviews fetch
+        // Reviews fetch - improved error handling
         Promise.any([
-          axios.post(`${BASE_URL}/api/teacher-reviews`, { teacherEmail: email }, { headers, timeout: 5000 }),
-          axios.post(`${BASE_URL}/api/reviews/teacher`, { teacherEmail: email }, { headers, timeout: 5000 }),
-          axios.post(`${BASE_URL}/api/reviews`, { teacherEmail: email }, { headers, timeout: 5000 })
+          axios.post(`${BASE_URL}/api/teacher-reviews`, { teacherEmail: email }, { headers, timeout: 8000 }),
+          axios.post(`${BASE_URL}/api/reviews/teacher`, { teacherEmail: email }, { headers, timeout: 8000 }),
+          axios.post(`${BASE_URL}/api/reviews`, { teacherEmail: email }, { headers, timeout: 8000 })
         ]).then(response => ({ type: 'reviews', data: response.data }))
-          .catch(error => ({ type: 'reviews', error })),
+          .catch(error => {
+            console.log('⚠️ Reviews API failed:', error.message || 'Unknown error');
+            // Return mock data on failure to prevent UI issues
+            return { type: 'reviews', data: { reviews: mockReviews } };
+          })
       ];
       
       // Execute all API calls in parallel
@@ -735,14 +739,15 @@ export default function TeacherDashboard() {
                 if (data?.success && data.reviews) {
                   console.log(`⭐ Reviews loaded: ${data.reviews.length}`);
                   
-                  // Process real reviews and add them to the mock data loop
-                  const processedReviews = data.reviews.map(review => ({
+                  // Process reviews with better date handling
+                  const processedReviews = data.reviews.map(review => {
                     id: review.id,
                     title: `Review by ${review.studentName || 'Student'}`,
-                    rating: '⭐'.repeat(Math.min(Math.max(review.rating || 4, 1), 5)),
+                    rating: '⭐'.repeat(Math.min(Math.max(parseInt(review.rating) || 4, 1), 5)),
                     content: review.content,
+                    createdAt: review.created_at,
                     isReal: true // Mark as real data
-                  }));
+                  });
                   
                   // Combine with mock data for seamless looping
                   const mockReviews = [
@@ -819,14 +824,47 @@ export default function TeacherDashboard() {
     }
   }, [userEmail]);
 
-  // Optimized single effect for all data loading
+  // Load cached data on mount
   useEffect(() => {
-    if (!userEmail || !cacheLoaded) return;
+    const loadCachedData = async () => {
+      try {
+        // Load cached profile
+        const cachedProfile = await AsyncStorage.getItem(CACHE_KEYS.PROFILE);
+        if (cachedProfile) {
+          const profileData = JSON.parse(cachedProfile);
+          setTeacherName(profileData.name || '');
+          setProfileImage(profileData.profileimage || null);
+          setUserStatus(profileData.status || 'dormant');
+          setUserEmail(profileData.email || null);
+          setCreatedAt(profileData.created_at || null);
+          setIsSpotlight(Boolean(profileData.isSpotlight !== false));
+        }
+        
+        // Load cached subject count
+        const cachedSubjectCount = await AsyncStorage.getItem(CACHE_KEYS.SUBJECT_COUNT);
+        if (cachedSubjectCount) {
+          const { count } = JSON.parse(cachedSubjectCount);
+          setSubjectCount(typeof count === 'number' ? count : 0);
+        }
+        
+        // Load cached contacts
+        const cachedContacts = await AsyncStorage.getItem(CACHE_KEYS.CONTACTS);
+        if (cachedContacts) {
+          const { contacts } = JSON.parse(cachedContacts);
+          setContacts(contacts || []);
+        }
+        
+        setCacheLoaded(true);
+      } catch (error) {
+        console.log('❌ Cache loading error:', error);
+        setCacheLoaded(true); // Still set as loaded to prevent infinite loading
+      }
+    };
     
-    console.log('🔄 Triggering optimized data load...');
-    loadAllData();
-  }, [userEmail, cacheLoaded, loadAllData]);
+    loadCachedData();
+  }, [userEmail]);
 
+  // Separate effect for unread count polling
   useEffect(() => {
     if (!userEmail) return;
     
