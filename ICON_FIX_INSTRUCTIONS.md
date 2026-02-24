@@ -85,7 +85,7 @@ When you run `expo run:android` or `expo prebuild`, Expo automatically:
 
 2. **Uninstall old app from device:**
    ```bash
-   adb uninstall com.gogrowsmart.app
+   adb uninstall com.gogrowsmart.app.mobile
    ```
 
 3. **Rebuild and reinstall:**
