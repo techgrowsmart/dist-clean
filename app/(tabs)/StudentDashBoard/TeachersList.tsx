@@ -2,15 +2,15 @@ import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   Text,
-  FlatList,
   StyleSheet,
-  ActivityIndicator,
-  Image,
-  Dimensions,
+  FlatList,
   TouchableOpacity,
   ScrollView,
+  Image,
+  ActivityIndicator,
+  Dimensions,
 } from "react-native";
-import BackArrowIcon from "../../../assets/svgIcons/BackArrow";
+import BackButton from "../../../components/BackButton";
 import { BASE_URL } from "../../../config";
 import { useRouter } from "expo-router";
 import { getAuthData } from "../../../utils/authStorage";
@@ -300,9 +300,10 @@ const renderPagination = () => (
         disabled={currentPage === 1}
         style={styles.arrows}
       >
-        <BackArrowIcon
+        <BackButton
           size={24}
-          color={currentPage === 1 ? "#ccc" : "#000"}
+          color="#4255ff"
+          onPress={() => handlePageChange(currentPage - 1)}
         />
       </TouchableOpacity>
 
@@ -333,10 +334,10 @@ const renderPagination = () => (
         disabled={currentPage === totalPages}
         style={styles.rightArrow}
       >
-        <BackArrowIcon
+        <BackButton
           size={24}
-          color={currentPage === totalPages ? "#ccc" : "#000"}
-          style={styles.rightArrowIcon}
+          color="#4255ff"
+          onPress={() => handlePageChange(currentPage + 1)}
         />
       </TouchableOpacity>
     </ScrollView>
@@ -464,9 +465,11 @@ return (
   <View style={styles.container}>
     <View style={styles.header}>
       <View style={styles.back}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <BackArrowIcon size={24} color="#000" />
-        </TouchableOpacity>
+        <BackButton 
+          size={24} 
+          color="#4255ff" 
+          onPress={onBack}
+        />
         <Text style={styles.title}>
           {selectedClass} {selectedSubject} teacher
         </Text>

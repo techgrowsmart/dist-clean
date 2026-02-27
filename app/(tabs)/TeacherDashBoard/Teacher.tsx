@@ -740,14 +740,14 @@ export default function TeacherDashboard() {
                   console.log(`⭐ Reviews loaded: ${data.reviews.length}`);
                   
                   // Process reviews with better date handling
-                  const processedReviews = data.reviews.map(review => {
+                  const processedReviews = data.reviews.map(review => ({
                     id: review.id,
                     title: `Review by ${review.studentName || 'Student'}`,
                     rating: '⭐'.repeat(Math.min(Math.max(parseInt(review.rating) || 4, 1), 5)),
                     content: review.content,
                     createdAt: review.created_at,
                     isReal: true // Mark as real data
-                  });
+                  }));
                   
                   // Combine with mock data for seamless looping
                   const mockReviews = [

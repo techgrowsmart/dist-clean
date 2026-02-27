@@ -12,7 +12,6 @@ import {
   Alert,
 } from "react-native";
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
-import NotificationBellIcon from "../../../assets/svgIcons/NotificationBell";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
 import { 
@@ -32,10 +31,12 @@ import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import BottomNavigation from "../BottomNavigation";
 import Sidebar from "./Sidebar";
+import NotificationBellIcon from "../../../assets/svgIcons/NotificationBell";
 import axios from "axios";
 import { getFavoriteTeachers } from '../../../services/favoriteTeachers' 
 import { AntDesign } from '@expo/vector-icons';
 import { favoritesEvents, FAVORITES_CHANGED_EVENT } from '../../../utils/favoritesEvents';
+import BackButton from '../../../components/BackButton';
 
 const ITEMS_PER_PAGE = 6;
 
@@ -72,7 +73,7 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
   // ADD UNREAD COUNT STATE
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Fetch unread notification count
+  // Fetch unread notification count - FIXED HEADER IMPLEMENTATION
   const fetchUnreadCount = useCallback(async () => {
     try {
       console.log('🔍 [Favourite] Fetching unread count...');
@@ -82,14 +83,15 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
         return;
       }
 
+      // CORRECT HEADER IMPLEMENTATION - Same as AllBoardsPage
+      const headers = {
+        Authorization: `Bearer ${auth?.token}`,
+        "Content-Type": "application/json",
+      };
+
       const response = await axios.get(
         `${BASE_URL}/api/notifications/unread-count`,
-        {
-          headers: {
-            'Authorization': `Bearer ${auth.token}`,
-            'Content-Type': 'application/json',
-          },
-        }
+        { headers } // Using headers object exactly like AllBoardsPage
       );
       
       if (response.data && typeof response.data.count === 'number') {
@@ -137,15 +139,16 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
         const auth = await getAuthData();
         if (!auth?.token) return;
 
+        // CORRECT HEADER IMPLEMENTATION - Same as AllBoardsPage
         const headers = {
-          Authorization: `Bearer ${auth.token}`,
+          Authorization: `Bearer ${auth?.token}`,
           "Content-Type": "application/json",
         };
 
         const profileResponse = await axios.post(
           `${BASE_URL}/api/userProfile`,
           { email: auth.email },
-          { headers }
+          { headers } // Using headers object exactly like AllBoardsPage
         );
 
         const profileData = profileResponse.data;
@@ -340,15 +343,12 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
 
   return (
     <View style={styles.container}>
-      {/* Header Section - Exactly like Student Dashboard */}
       <View style={styles.headerContainer}>
-        {/* Logo Container with Text - Same as Student.tsx */}
         <View style={styles.logoContainer}>
           <Text style={styles.logoText}>GROWSMART</Text>
         </View>
 
         <View style={styles.topRow}>
-          {/* Profile - UPDATED WITH ONPRESS */}
           <TouchableOpacity 
             onPress={() => setIsSidebarVisible(true)}
             style={styles.profileContainer}
@@ -363,8 +363,7 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
             />
           </TouchableOpacity>
 
-          {/* Search Bar - Same logic as Student.tsx */}
-          <View style={styles.searchRow}>
+          <View style={styles.centerSection}>
             <View style={styles.searchInputContainer}>
               <Image
                 style={styles.searchIcon}
@@ -389,11 +388,11 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
             </View>
           </View>
 
-          {/* Notification Bell - WITH UNREAD COUNT */}
           <TouchableOpacity
             onPress={() =>
               router.push("/(tabs)/StudentDashBoard/StudentNotification")
             }
+            style={styles.notificationButton}
           >
             <View style={{ position: "relative" }}>
               <NotificationBellIcon size={wp("6.4%")} />
@@ -409,13 +408,7 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
         </View>
       </View>
 
-      {/* Content Section */}
       <View style={styles.contentContainer}>
-        <View style={styles.header}>
-            <Text style={styles.title}>Favourites</Text>
-          <Text style={styles.totalCount}>{favouritesWithDetails.length} Found</Text>
-        </View>
-
         <FlatList
           data={paginatedData}
           numColumns={1}
@@ -485,10 +478,9 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
           }
         />
 
-        {favouritesWithDetails.length > -1 && renderPagination()}
+        {favouritesWithDetails.length > 0 && renderPagination()}
       </View>
 
-      {/* ADDED SIDEBAR COMPONENT */}
       <Sidebar
         visible={isSidebarVisible}
         onClose={() => setIsSidebarVisible(false)}
@@ -542,47 +534,44 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
     </View>
   );
 };
-
 export default Favourite;
-
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
     backgroundColor: "#fff" 
   },
-headerContainer: { 
-  backgroundColor: "#5f5fff", 
-  paddingHorizontal: wp("4.8%"), 
-  paddingTop: hp("5%"), // Should match Student.tsx
-  paddingBottom: hp("2%"), // Should match Student.tsx
-  borderBottomLeftRadius: wp("4.53%"), 
-  borderBottomRightRadius: wp("4.53%") 
-},
-logoContainer: {
-  alignItems: 'center',
-  width: '100%',
-  marginBottom: hp('1%'), // Add margin for spacing
-},
-logoText: {
-  color: '#e5e7eb',
-  fontSize: wp('4%'),
-  fontFamily: 'Poppins_400Regular',
-  fontWeight: '500',
-  lineHeight: hp('1.6%'), // Match Student.tsx
-  textAlign: 'center',
-  letterSpacing: wp('0.2%'),
-  top: hp('2%'), // Match Student.tsx
-  bottom: hp('3%'), // Match Student.tsx
-  marginBottom: hp('1%'),
-},
-topRow: { 
-  flexDirection: "row", 
-  alignItems: "center", 
-  justifyContent: "space-between", 
-  width: "100%", 
-  paddingHorizontal: wp("4%"),
-  marginTop: hp('0.5%'), // Add small margin for better spacing
-},
+  headerContainer: { 
+    backgroundColor: "#5f5fff", 
+    paddingHorizontal: wp("4.8%"), 
+    paddingTop: hp("5%"), 
+    paddingBottom: hp("2%"), 
+    borderBottomLeftRadius: wp("4.53%"), 
+    borderBottomRightRadius: wp("4.53%") 
+  },
+  logoContainer: {
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: hp('1%'),
+  },
+  logoText: {
+    color: '#e5e7eb',
+    fontSize: wp('4%'),
+    fontWeight: '500',
+    lineHeight: hp('1.6%'),
+    textAlign: 'center',
+    letterSpacing: wp('0.2%'),
+    top: hp('2%'),
+    bottom: hp('3%'),
+    marginBottom: hp('1%'),
+  },
+  topRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    width: "100%", 
+    paddingHorizontal: wp("4%"),
+    marginTop: hp('0.5%'),
+  },
   profileContainer: { 
     justifyContent: "center", 
     alignItems: "center", 
@@ -596,89 +585,98 @@ topRow: {
     height: wp("12%"), 
     borderRadius: wp("6%") 
   },
-  searchRow: { 
+  centerSection: { 
     flex: 1, 
     marginHorizontal: wp("2%") 
   },
- searchInputContainer: { 
-  flexDirection: "row", 
-  alignItems: "center", 
-  backgroundColor: "#f1f1f1", 
-  paddingHorizontal: wp("2%"), // Reduced padding
-  borderRadius: wp("4.27%"), 
-  height: wp("10%") 
-},
+  searchInputContainer: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    backgroundColor: "#f1f1f1", 
+    paddingHorizontal: wp("2%"), 
+    borderRadius: wp("4.27%"), 
+    height: wp("10%") 
+  },
   searchIcon: { 
     width: wp("4%"), 
     height: wp("4%"), 
     marginRight: wp("2%"), 
     tintColor: "#000" 
   },
-searchInput: { 
-  flex: 1, 
-  fontFamily: "Montserrat_400Regular", 
-  fontSize: wp("3.73%"), 
-  color: "#7d7d7d", 
-  overflowX: "hidden", 
-  height: "100%", 
-  borderWidth: 0, 
-  outlineWidth: 0, 
-  width: "100%", 
-  paddingVertical: 0, 
-  textAlignVertical: "center",
-  paddingHorizontal: wp("1%"), // Added padding
-},
-  clearButton: {
-    padding: wp("1%"),
-    marginLeft: wp("1%"),
+  searchInput: { 
+    flex: 1, 
+    fontSize: wp("3.73%"), 
+    color: "#000", 
+    height: "100%", 
+    borderWidth: 0, 
+    outlineWidth: 0, 
+    width: "100%", 
+    paddingVertical: 0, 
+    paddingRight: wp("2%"), 
+    borderRadius: wp("4.27%"), 
+    textAlign: "left", 
+    backgroundColor: "transparent"
   },
-  clearButtonText: {
-    fontSize: wp("4%"),
-    color: "#666",
+  clearButton: { 
+    padding: wp("1%"), 
+    borderRadius: wp("2%") 
+  },
+  clearButtonText: { 
+    fontSize: wp("3.2%"), 
+    color: "#82878F", 
+    fontWeight: "bold" 
+  },
+  notificationButton: { 
+    justifyContent: "center", 
+    alignItems: "center", 
+    marginLeft: wp("2%") 
   },
   notificationBadge: { 
     position: "absolute", 
-    top: hp("-0.538%"), 
-    right: wp("-1.066%"), 
-    backgroundColor: "red", 
-    borderRadius: wp("2.666%"), 
-    minWidth: wp("4.8%"), 
-    height: wp("4.8%"), 
+    top: -hp("0.5%"), 
+    right: -wp("1%"), 
+    backgroundColor: "#ff3b30", 
+    borderRadius: wp("3%"), 
+    minWidth: wp("5%"), 
+    height: wp("5%"), 
     justifyContent: "center", 
-    alignItems: "center", 
-    paddingHorizontal: wp("1.065%"), 
-    zIndex: 1 
+    alignItems: "center" 
   },
   notificationText: { 
-    color: "white", 
-    fontSize: wp("3.2%"), 
-    fontWeight: "bold" 
+    color: "#fff", 
+    fontSize: wp("2.67%"), 
+    fontWeight: "bold", 
+    textAlign: "center" 
   },
   contentContainer: { 
     flex: 1, 
-    backgroundColor: "#fff", 
-    paddingHorizontal: wp('4.27%'), 
-    paddingTop: hp('2.69%'), 
+    paddingHorizontal: wp("4.27%"), 
+    paddingTop: hp("2.69%"), 
     paddingBottom: 0 
   },
   header: { 
     flexDirection: "row", 
     alignItems: "center", 
-    marginBottom: hp('2.15%'), 
-    justifyContent: "space-between" 
+    marginBottom: hp("2.15%"), 
+    justifyContent: "space-between", 
+    paddingHorizontal: wp("4.27%"), 
+    paddingTop: hp("2.69%") 
   },
-  title: { 
-    fontSize: wp('4.27%'), 
-    fontWeight: "bold", 
-    marginLeft: wp('2.4%'), 
+  back: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+  },
+  title: {
+    fontSize: wp("4.27%"),
+    fontWeight: "bold",
+    marginLeft: wp("2.4%"),
     color: "#0d0c12",
-    fontFamily: "Poppins_600SemiBold"
   },
-  totalCount: { 
-    fontSize: wp('3.73%'), 
-    color: "#4255ff", 
+  totalCount: {
+    fontSize: wp("3.73%"),
+    color: "#4255ff",
     textAlign: "right",
-    fontFamily: "Poppins_400Regular"
   },
   grid: { 
     paddingBottom: hp('20%')

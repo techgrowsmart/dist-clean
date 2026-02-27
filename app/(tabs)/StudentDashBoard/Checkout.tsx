@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { BASE_URL } from "../../../config";
 import { Ionicons } from "@expo/vector-icons";
-import BackArrowIcon from "../../../assets/svgIcons/BackArrow";
+import BackButton from "../../../components/BackButton";
 import { getAuthData } from "../../../utils/authStorage";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import { OpenSans_400Regular, useFonts } from '@expo-google-fonts/open-sans'
@@ -53,7 +53,7 @@ export default function Checkout() {
   return (
     <View style={styles.container}>
       <View style={styles.topContainer}>
-        <TouchableOpacity onPress={() => router.back()}><BackArrowIcon width={wp("5.33%")} height={wp("5.33%")} /></TouchableOpacity>
+        <BackButton size={20} color="#000" onPress={() => router.back()} />
         <Text style={styles.heading}>Confirm class</Text>
       </View>
 

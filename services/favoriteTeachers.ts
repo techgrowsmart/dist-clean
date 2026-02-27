@@ -19,12 +19,15 @@ export const addFavoriteTeacher = async (teacherEmail: string) => {
 
         const data = await response.json();
         if (!response.ok) {
+            // Handle specific case of already favorited teacher
+            if (response.status === 400 && data.message?.includes('already in favorites')) {
+                return { success: true, message: 'Teacher already in favorites', alreadyFavorited: true };
+            }
             throw new Error(data.message || 'Failed to add favorite');
         }
 
         return data;
     } catch (error) {
-        console.error('Error adding favorite:', error);
         throw error;
     }
 };
@@ -52,7 +55,6 @@ export const removeFavoriteTeacher = async (teacherEmail: string) => {
 
         return data;
     } catch (error) {
-        console.error('Error removing favorite:', error);
         throw error;
     }
 };
@@ -80,7 +82,6 @@ export const getFavoriteTeachers = async () => {
         // So just return the favorites array as-is
         return data.favorites || [];
     } catch (error) {
-        console.error('Error fetching favorites:', error);
         throw error;
     }
 };
@@ -106,7 +107,6 @@ export const checkFavoriteStatus = async (teacherEmail: string) => {
 
         return data.isFavorited || false;
     } catch (error) {
-        console.error('Error checking favorite status:', error);
         return false;
     }
 };

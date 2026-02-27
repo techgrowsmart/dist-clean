@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
-import BackArrowIcon from "../../../assets/svgIcons/BackArrow";
+import BackButton from "../../../components/BackButton";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
 import { OpenSans_600SemiBold } from '@expo-google-fonts/open-sans';
@@ -149,10 +149,7 @@ const renderPagination = () => (
     <View style={styles.container}>
         <View style={styles.header}>
   <View style={styles.back}>
-    <TouchableOpacity onPress={onBack} style={styles.backButton}>
-      <BackArrowIcon  width={wp('6.4%')}
-            height={wp('6.4')} color="#000" />
-    </TouchableOpacity>
+    <BackButton size={24} color="#000" onPress={onBack} style={styles.backButton} />
     <Text style={styles.title}>All Boards</Text>
   </View>
   <Text style={styles.totalCount}>{boardsWithDetails.length} Boards Found</Text>

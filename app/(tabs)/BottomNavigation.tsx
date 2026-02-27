@@ -1,7 +1,7 @@
 import * as NavigationBar from "expo-navigation-bar";
 import { router, usePathname } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useState, useRef } from "react";
+import { Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View, Animated } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Entypo, AntDesign } from '@expo/vector-icons';
 
@@ -18,6 +18,43 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
   const [pressedIndex, setPressedIndex] = useState<number | null>(null);
   const [favoritesCount, setFavoritesCount] = useState(0);
   const [isLoadingFavorites, setIsLoadingFavorites] = useState(true);
+  const [hasFavorites, setHasFavorites] = useState(false);
+  
+  // Animation values
+  const starScale = useRef(new Animated.Value(1)).current;
+  const starOpacity = useRef(new Animated.Value(1)).current;
+
+  // Animation function for star when favorite is added
+  const animateStarAddition = () => {
+    Animated.sequence([
+      // Quick scale up
+      Animated.timing(starScale, {
+        toValue: 1.4,
+        duration: 100, // Reduced from 200ms
+        useNativeDriver: true,
+      }),
+      // Quick spring back
+      Animated.spring(starScale, {
+        toValue: 1,
+        friction: 4, // Increased for faster bounce
+        tension: 100, // Increased for quicker response
+        useNativeDriver: true,
+      }),
+      // Very quick flash
+      Animated.sequence([
+        Animated.timing(starOpacity, {
+          toValue: 0.5,
+          duration: 50, // Reduced from 100ms
+          useNativeDriver: true,
+        }),
+        Animated.timing(starOpacity, {
+          toValue: 1,
+          duration: 50, // Reduced from 100ms
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  };
 
   useEffect(() => {
     if (Platform.OS === "android") {
@@ -27,26 +64,17 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
 
   // Fetch actual favorites count
   useEffect(() => {
-    const fetchFavoritesCount = async () => {
-      try {
-        setIsLoadingFavorites(true);
-        const favorites = await getFavoriteTeachers();
-        setFavoritesCount(Array.isArray(favorites) ? favorites.length : 0);
-      } catch (error) {
-        console.error("Error fetching favorites count:", error);
-        setFavoritesCount(0);
-      } finally {
-        setIsLoadingFavorites(false);
-      }
-    };
-
-    fetchFavoritesCount();
+    fetchFavoritesCount(); // Don't pass previousHasFavorites to avoid animation on initial load
   }, [currentPath]); // Refetch when path changes to catch updates
 
   // Listen for favorites changes
   useEffect(() => {
     const handleFavoritesChange = () => {
-      fetchFavoritesCount();
+      // Store previous state
+      const previousHasFavorites = hasFavorites;
+      
+      // Fetch new state and trigger animation if needed
+      fetchFavoritesCount(previousHasFavorites);
     };
 
     favoritesEvents.on(FAVORITES_CHANGED_EVENT, handleFavoritesChange);
@@ -54,16 +82,26 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
     return () => {
       favoritesEvents.off(FAVORITES_CHANGED_EVENT, handleFavoritesChange);
     };
-  }, []);
+  }, [hasFavorites]); // Include hasFavorites to track previous state
 
-  const fetchFavoritesCount = async () => {
+  const fetchFavoritesCount = async (previousHasFavorites?: boolean) => {
     try {
       setIsLoadingFavorites(true);
       const favorites = await getFavoriteTeachers();
-      setFavoritesCount(Array.isArray(favorites) ? favorites.length : 0);
+      const count = Array.isArray(favorites) ? favorites.length : 0;
+      const newHasFavorites = count > 0;
+      
+      setFavoritesCount(count);
+      setHasFavorites(newHasFavorites);
+      
+      // Trigger animation only if star changed from empty to filled
+      if (newHasFavorites && previousHasFavorites === false) {
+        animateStarAddition();
+      }
     } catch (error) {
       console.error("Error fetching favorites count:", error);
       setFavoritesCount(0);
+      setHasFavorites(false);
     } finally {
       setIsLoadingFavorites(false);
     }
@@ -94,27 +132,23 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
 
   const getStarIcon = () => {
     const isActive = isTabActive("Favourite");
-    const hasFavorites = favoritesCount > 0;
     
     if (isActive) {
       return "star"; // Filled star when tab is active
     } else if (hasFavorites) {
       return "star"; // Filled star when has favorites
     } else {
-      return "star-outlined"; // Outlined star when no favorites
+      return "staro"; // Outlined star when no favorites
     }
   };
 
   const getStarStyle = () => {
     const isActive = isTabActive("Favourite");
-    const hasFavorites = favoritesCount > 0;
     
     if (isActive) {
       return "#ffffff"; // White when tab is active
-    } else if (hasFavorites) {
-      return "#82878F"; // Blue when has favorites
     } else {
-      return "#82878F"; // Gray when no favorites
+      return "#82878F"; // Always gray when not active (same as original)
     }
   };
 
@@ -131,7 +165,7 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
       },
       { 
         name: "Favourite", 
-        icon: <AntDesign name={favoritesCount > 0 ? "star" : "staro"} size={36} color={getStarStyle()} />,
+        icon: <AntDesign name={hasFavorites ? "star" : "staro"} size={36} color={getStarStyle()} />,
         path: "/StudentDashBoard/Favourite",
         exactPath: "/StudentDashBoard/Favourite"
       },
@@ -215,7 +249,16 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
                 { width: iconContainerSize, height: iconContainerSize, borderRadius: iconContainerSize / 2 }
               ]}>
                 {isFavouriteTab ? (
-                    <AntDesign name={favoritesCount > 0 ? "star" : "staro"} size={32} color={getStarStyle()} />
+                  <Animated.View style={{
+                    transform: [{ scale: starScale }],
+                    opacity: starOpacity,
+                  }}>
+                    <AntDesign 
+                      name={hasFavorites ? "star" : "staro"} 
+                      size={32} 
+                      color={getStarStyle()} 
+                    />
+                  </Animated.View>
                 ) : React.isValidElement(tab.icon) 
                   ? React.cloneElement(tab.icon as React.ReactElement<any>, {
                       color: isActive ? '#ffffff' : '#82878F'

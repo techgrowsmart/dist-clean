@@ -14,7 +14,7 @@ import {
   heightPercentageToDP as hp,
   widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
-import BackArrowIcon from "../../../assets/svgIcons/BackArrow";
+import BackButton from "../../../components/BackButton";
 import BookOpenReaderIcon from "../../../assets/svgIcons/BookOpenReader";
 import CakeIcon from "../../../assets/svgIcons/CakeIcon";
 import DangerousIcon from "../../../assets/svgIcons/Dangerous";
@@ -496,15 +496,11 @@ export default function Profile() {
             keyboardDismissMode="on-drag"
           >
             <View style={styles.header}>
-              <TouchableOpacity
-                style={styles.backIconContainer}
-                onPress={() => router.push("/(tabs)/StudentDashBoard/Student")}
-              >
-                <BackArrowIcon
-                  width={wp("6.4%")}
-                  height={wp("6.4%")}
-                />
-              </TouchableOpacity>
+              <BackButton 
+  size={wp("6.4%")} 
+  color="#4255ff" 
+  onPress={() => router.push("/(tabs)/StudentDashBoard/Student")}
+/>
               <Text style={styles.headerTitle}>Edit profile</Text>
             </View>
 
@@ -824,15 +820,10 @@ export default function Profile() {
           <SafeAreaView style={styles.previewMainContainer}>
             <View style={styles.previewContainer}>
               <View style={styles.previewTopSection}>
-                <TouchableOpacity
-                  style={styles.crossPreviewButton}
-                  onPress={() => {
+                <BackButton size={wp("7%")} color="white" onPress={() => {
                     setPreviewModalVisible(false);
                     router.push("/(tabs)/StudentDashBoard/Student");
-                  }}
-                >
-                  <Entypo name="cross" size={wp("7%")} color="white" />
-                </TouchableOpacity>
+                  }} style={styles.crossPreviewButton} />
                 
                 <Text style={styles.previewHeaderText}>PROFILE</Text>
                 

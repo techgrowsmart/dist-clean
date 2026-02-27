@@ -9,7 +9,7 @@ import {
   Dimensions,
   ScrollView,
 } from "react-native";
-import BackArrowIcon from "../../../assets/svgIcons/BackArrow";
+import BackButton from "../../../components/BackButton";
 import axios from "axios";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
@@ -124,9 +124,7 @@ const renderPagination = () => (
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.back}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <BackArrowIcon width={wp('6.4%')} height={wp('6.4%')} color="#000" />
-          </TouchableOpacity>
+          <BackButton size={24} color="#000" onPress={onBack} style={styles.backButton} />
           <Text style={styles.title}>Classes</Text>
         </View>
         <Text style={styles.totalCount}>{paginatedData.length} Classes Found</Text>

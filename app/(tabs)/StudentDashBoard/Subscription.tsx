@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Dimensions, Alert } from 'react-native';
-import { Fontisto, Ionicons } from '@expo/vector-icons';
+import { Fontisto } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 import { RedHatDisplay_400Regular } from '@expo-google-fonts/red-hat-display';
 import { Poppins_400Regular, Poppins_600SemiBold } from '@expo-google-fonts/poppins';
@@ -11,6 +11,7 @@ import RazorpayCheckout from 'react-native-razorpay';
 import { getAuthData} from '../../../utils/authStorage';
 import { BASE_URL, RAZOR_PAY_KEY } from '../../../config';
 import axios from 'axios';
+import BackButton from '../../../components/BackButton';
 
 const { width, height } = Dimensions.get('window');
 
@@ -233,9 +234,7 @@ export default function Subscription() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.closeButton} activeOpacity={0.7} onPress={() => navigation.goBack()}>
-          <Ionicons name="close" size={scale(28)} color="#0d368c" />
-        </TouchableOpacity>
+        <BackButton size={scale(28)} color="#0d368c" onPress={() => navigation.goBack()} style={styles.closeButton} />
         <Text style={styles.headerTitle}>Get Subscribed</Text>
         <View style={styles.placeholderView} />
       </View>

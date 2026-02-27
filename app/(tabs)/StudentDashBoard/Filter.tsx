@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, Dimensions } from "react-native";
 import { useRouter } from "expo-router";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
+import BackButton from "../../../components/BackButton";
 
 const { width } = Dimensions.get("window");
 
@@ -38,9 +39,7 @@ const Filter = () => {
         <View style={styles.container}>
             {/* Top Navigation Bar */}
             <View style={styles.topBar}>
-                <TouchableOpacity onPress={() => router.back()}>
-                    <Image source={require("../../../assets/images/Back.png")} style={styles.backIcon} />
-                </TouchableOpacity>
+                <BackButton size={24} color="#000" onPress={() => router.back()} />
                 <Text style={styles.title}>Filter</Text>
                 <View style={{ width: 30 }} />
             </View>

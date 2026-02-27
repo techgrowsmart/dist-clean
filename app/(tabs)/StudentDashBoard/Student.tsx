@@ -990,7 +990,7 @@ const panResponder = useRef(
 
     const ContainerComponent = isSearching ? View : ScrollView;
     const containerProps = isSearching ? {} : {
-      contentContainerStyle: { paddingBottom: hp("13.45%") },
+      contentContainerStyle: { paddingBottom: hp("20%") },
       showsVerticalScrollIndicator: false
     };
 
@@ -1015,8 +1015,8 @@ const panResponder = useRef(
 
           {!isSearching && (
             <>
+            <TouchableOpacity onPress={() => setCurrentSection("boards")}>
               <View style={styles.mytutorsContainer}>
-                <TouchableOpacity onPress={() => setCurrentSection("boards")}>
                   <View style={styles.mytutorsContainerTitle}>
                     <BookOpenReaderIcon
                       width={wp("13.33%")}
@@ -1025,8 +1025,8 @@ const panResponder = useRef(
                     />
                     <Text style={styles.titleText}>My Tutors</Text>
                   </View>
-                </TouchableOpacity>
               </View>
+              </TouchableOpacity>
             </>
           )}
           
@@ -1114,15 +1114,15 @@ const panResponder = useRef(
                 style={{ width: '100%', height: 200 }}
                 resizeMode="cover"
               />
+                <TouchableOpacity onPress={() => setCurrentSection("skill")}>
 
               <View style={styles.mytutorsContainer}>
-                <TouchableOpacity onPress={() => setCurrentSection("skill")}>
                   <View style={styles.mytutorsContainerTitle}>
                     <BookOpenReaderIcon width={50} height={50} color="#ffffff" />
                     <Text style={styles.titleText}>Skill Classes</Text>
                   </View>
-                </TouchableOpacity>
               </View>
+                </TouchableOpacity>
             </>
           )}
 
@@ -1241,24 +1241,20 @@ const panResponder = useRef(
               </View>
 
               <View style={styles.topRow}>
-                {/* Left: Profile */}
-                <View style={styles.leftSection}>
-                  <TouchableOpacity
-                    onPress={() => setIsSidebarVisible(true)}
-                    style={styles.profileContainer}
-                  >
-                    <Image
-                      style={styles.profileImage}
-                      source={
-                        profileImage
-                          ? { uri: profileImage }
-                          : require("../../../assets/image/Person1.jpeg")
-                      }
-                    />
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity 
+                  onPress={() => setIsSidebarVisible(true)}
+                  style={styles.profileContainer}
+                >
+                  <Image
+                    style={styles.profileImage}
+                    source={
+                      profileImage
+                        ? { uri: profileImage }
+                        : require("../../../assets/images/Profile.png")
+                    }
+                  />
+                </TouchableOpacity>
 
-                {/* Center: Search Bar with full width */}
                 <View style={styles.centerSection}>
                   <View style={styles.searchInputContainer}>
                     <Image
@@ -1291,47 +1287,41 @@ const panResponder = useRef(
                         }
                       }}
                     />
-                    
                     {searchQuery.length > 0 && (
                       <TouchableOpacity 
                         onPress={() => {
-                          if (searchQuery.trim() !== "") {
-                            setShowAiText(true);
-                            setIsSearching(true);
-                            setPage(1);
-                            setHasMoreData(true);
-                            fetchTeachers(false);
-                            
-                            const randomIndex = Math.floor(Math.random() * aiTexts.length);
-                            setSelectedAiTextIndex(randomIndex);
-                          }
-                        }}
-                        style={styles.questionButton}
+                          setSearchQuery("");
+                          setIsSearching(false);
+                          setShowAiText(false);
+                          setPage(1);
+                          setHasMoreData(true);
+                          fetchTeachers(false);
+                        }} 
+                        style={styles.clearButton}
                       >
-                        <AntDesign name="question" size={wp("4.5%")} color="#5f5fff" />
+                        <Text style={styles.clearButtonText}>✕</Text>
                       </TouchableOpacity>
                     )}
                   </View>
                 </View>
 
-                {/* Right: Notification */}
-                <View style={styles.rightSection}>
-                  <TouchableOpacity 
-                    style={styles.notificationButton}
-                    onPress={() => {
-                      console.log('Notification button pressed');
-                    }}
-                  >
-                    <NotificationBellIcon width={wp("6%")} height={wp("6%")} color="#fff" />
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push("/(tabs)/StudentDashBoard/StudentNotification")
+                  }
+                  style={styles.notificationButton}
+                >
+                  <View style={{ position: "relative" }}>
+                    <NotificationBellIcon size={wp("6.4%")} />
                     {unreadCount > 0 && (
                       <View style={styles.notificationBadge}>
                         <Text style={styles.notificationText}>
-                          {unreadCount > 99 ? '99+' : unreadCount}
+                          {unreadCount > 9 ? '9+' : unreadCount}
                         </Text>
                       </View>
                     )}
-                  </TouchableOpacity>
-                </View>
+                  </View>
+                </TouchableOpacity>
               </View>
             </View>
             
@@ -1500,17 +1490,14 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'flex-start',
   },
-  centerSection: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: wp('2%'),
+  centerSection: { 
+    flex: 1, 
+    marginHorizontal: wp("2%") 
   },
   centerContent: {
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: SCREEN_HEIGHT * 0.005,
   },
   rightSection: {
     width: wp('12%'),
@@ -1538,7 +1525,14 @@ export const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   
-  headerContainer: { backgroundColor: "#5f5fff", paddingHorizontal: wp("4.8%"), paddingTop: hp("5%"), paddingBottom: hp("2%"), borderBottomLeftRadius: wp("4.53%"), borderBottomRightRadius: wp("4.53%") },
+  headerContainer: { 
+    backgroundColor: "#5f5fff", 
+    paddingHorizontal: wp("4.8%"), 
+    paddingTop: hp("5%"), 
+    paddingBottom: hp("3%"), 
+    borderBottomLeftRadius: wp("4.53%"), 
+    borderBottomRightRadius: wp("4.53%") 
+  },
   screenContainer: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, width: "100%", height: "100%" },
   carouselContainer: { height: wp("55%"), marginBottom: hp("2%") },
   carouselWrapper: { flex: 1, justifyContent: "center" },
@@ -1563,13 +1557,73 @@ export const styles = StyleSheet.create({
   searchTeacherCard: { width: "100%", flexDirection: "row", alignItems: "center", marginRight: 0, marginBottom: hp("1%"), padding: wp("3%"), backgroundColor: "#f8f9fa", borderRadius: wp("2%") },
   noResultsContainer: { padding: wp("5%"), alignItems: "center" },
   noResultsText: { fontSize: wp("4%"), fontFamily: "Poppins_400Regular", color: "#6c757d", textAlign: "center" },
-  logoContainer: { alignItems: "center", marginBottom: hp("1.5%") },
-  logoText: { color: '#e5e7eb', fontSize: wp('3.7%%'), fontFamily: 'Poppins_400Regular' },
-  profileContainer: { justifyContent: "center", alignItems: "center", marginRight: wp("2%"), borderWidth: 1, borderColor: "white", borderRadius: 100 },
+  logoContainer: { 
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: hp('1%'),
+  },
+  logoText: {
+    color: '#e5e7eb',
+    fontSize: wp('4%'),
+    fontWeight: '500',
+    lineHeight: hp('1.6%'),
+    textAlign: 'center',
+    letterSpacing: wp('0.2%'),
+    top: hp('2%'),
+    bottom: hp('3%'),
+    marginBottom: hp('1%'),
+  },
+  profileContainer: { 
+    justifyContent: "center", 
+    alignItems: "center", 
+    marginRight: wp("2%"), 
+    borderWidth: 1, 
+    borderColor: 'white', 
+    borderRadius: 100 
+  },
+  profileImage: { 
+    width: wp("12%"), 
+    height: wp("12%"), 
+    borderRadius: wp("6%") 
+  },
   searchRow: { flex: 1, marginHorizontal: wp("2%") },
-  searchInputContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#f1f1f1", paddingHorizontal: wp("3%"), borderRadius: wp("4.27%"), height: wp("10%") },
-  searchIcon: { width: wp("6%"), height: wp("6%"), marginRight: wp("2%"), tintColor: "#000" },
-  searchInput: { flex: 1, fontFamily: "Montserrat_400Regular", fontSize: wp("3.73%"), color: "#7d7d7d", overflow: "hidden", height: "100%", borderWidth: 0, outlineWidth: 0, width: "100%", paddingVertical: -wp("1%"), textAlignVertical: "center", paddingHorizontal: wp("1%") },
+  searchInputContainer: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    backgroundColor: "#f1f1f1", 
+    paddingHorizontal: wp("2%"), 
+    borderRadius: wp("4.27%"), 
+    height: wp("10%") 
+  },
+  searchIcon: { 
+    width: wp("4%"), 
+    height: wp("4%"), 
+    marginRight: wp("2%"), 
+    tintColor: "#000" 
+  },
+  searchInput: { 
+    flex: 1, 
+    fontSize: wp("3.73%"), 
+    color: "#000", 
+    height: "100%", 
+    borderWidth: 0, 
+    outlineWidth: 0, 
+    width: "100%", 
+    paddingVertical: 0, 
+    paddingRight: wp("2%"), 
+    borderRadius: wp("4.27%"), 
+    textAlign: "left", 
+    backgroundColor: "transparent"
+  },
+  clearButton: { 
+    padding: wp("1%"), 
+    borderRadius: wp("2%") 
+  },
+  clearButtonText: { 
+    fontSize: wp("3.2%"), 
+    color: "#82878F", 
+    fontWeight: "bold" 
+  },
   questionButton: { padding: wp("1%"), marginLeft: wp("1%") },
   notificationButton: { padding: wp("1.5%"), borderRadius: wp("2%"), backgroundColor: "rgba(255,255,255,0.1)", position: "relative" },
   notificationBadge: { position: "absolute", top: -3, right: -3, backgroundColor: "#FF3B30", borderRadius: 10, minWidth: 20, height: 20, justifyContent: "center", alignItems: "center", paddingHorizontal: 4, zIndex: 1000, elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
@@ -1598,13 +1652,19 @@ export const styles = StyleSheet.create({
   thanksDescription: { fontSize: wp('3.5%'), fontFamily: 'Poppins_400Regular', color: '#fff', lineHeight: hp('2.5%') },
   offerBanner: { width: '100%', height: hp('15%'), backgroundColor: '#f8f9fa', borderRadius: wp('2%'), marginBottom: hp('2%'), overflow: 'hidden' },
   offerImage: { width: '100%', height: '150%', resizeMode: 'cover' },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  profileImage: { width: wp('10%'), height: wp('10%'), borderRadius: wp('4%') },
+  topRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    width: "100%", 
+    paddingHorizontal: wp("4%"),
+    marginTop: hp('0.5%'),
+  },
   
   // Swipe Indicators
   swipeIndicators: { 
     position: 'absolute', 
-    bottom: hp('2%'), 
+    bottom: hp('2%'),
     left: 0, 
     right: 0, 
     alignItems: 'center',

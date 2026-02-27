@@ -16,8 +16,9 @@ import axios from "axios";
 import { BASE_URL } from "../../../config";
 import BottomNavigation from "../../../app/(tabs)/BottomNavigation";
 import Building from "../../../assets/svgIcons/Building";
-import BackArrowIcon from "../../../assets/svgIcons/BackArrow";
+import BackButton from "../../../components/BackButton";
 import { getAuthData } from "../../../utils/authStorage";
+import { favoritesEvents, FAVORITES_CHANGED_EVENT } from "../../../utils/favoritesEvents";
 import { KronaOne_400Regular, useFonts } from "@expo-google-fonts/krona-one";
 import { RedHatDisplay_300Light } from "@expo-google-fonts/red-hat-display";
 import Menubook from "../../../assets/svgIcons/MenuBook";
@@ -199,14 +200,28 @@ const handleLikePress = async () => {
     setIsLiked(newLikedStatus);
     
     if (newLikedStatus) {
-      await addFavoriteTeacher(teacher.email);
+      const result = await addFavoriteTeacher(teacher.email);
+      if (result.alreadyFavorited) {
+        // Teacher was already favorited, just show a subtle message
+        console.log('Teacher already in favorites');
+        // Keep the liked state since it's actually favorited
+        setIsLiked(true);
+      } else {
+        // Successfully added to favorites - emit event to update bottom navigation
+        favoritesEvents.emit(FAVORITES_CHANGED_EVENT);
+      }
     } else {
       await removeFavoriteTeacher(teacher.email);
+      // Successfully removed from favorites - emit event to update bottom navigation
+      favoritesEvents.emit(FAVORITES_CHANGED_EVENT);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error liking teacher:', error);
     setIsLiked(!isLiked); // Revert on error
-    Alert.alert('Error', 'Failed to update favorite status');
+    // Only show alert for actual errors, not for "already favorited" case
+    if (!error.message?.includes('already in favorites')) {
+      Alert.alert('Error', 'Failed to update favorite status');
+    }
   }
 };
 
@@ -367,12 +382,11 @@ useEffect(() => {
         showsVerticalScrollIndicator={false}
       >
    <View style={styles.headerSection}>
-  <TouchableOpacity
-    onPress={() => router.push("/(tabs)/StudentDashBoard/Student")}
-    style={styles.backButton}
-  >
-    <BackArrowIcon name="arrow-back" size={30} color="#000" />
-  </TouchableOpacity>
+  <BackButton 
+  size={30} 
+  color="#4255ff" 
+  style={styles.backButton}
+/>
 
   <View style={styles.profileContent}>
     <Image

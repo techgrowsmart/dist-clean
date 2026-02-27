@@ -1,4 +1,4 @@
-import BackArrowIcon from "../../../assets/svgIcons/BackArrow";
+import BackButton from "../../../components/BackButton";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
 import axios from "axios";
@@ -91,7 +91,7 @@ const MyTeacher = ({ onBack }) => {
           disabled={currentPage === 1}
           style={styles.arrows}
         >
-          <BackArrowIcon size={24} color={currentPage === 1 ? "#ccc" : "#000"} />
+          <BackButton size={24} color={currentPage === 1 ? "#ccc" : "#000"} onPress={() => handlePageChange(currentPage - 1)} />
         </TouchableOpacity>
 
         {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
@@ -110,7 +110,7 @@ const MyTeacher = ({ onBack }) => {
           disabled={currentPage === totalPages}
           style={styles.rightArrow}
         >
-          <BackArrowIcon size={24} color={currentPage === totalPages ? "#ccc" : "#000"} />
+          <BackButton size={24} color={currentPage === totalPages ? "#ccc" : "#000"} onPress={() => handlePageChange(currentPage + 1)} />
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -188,9 +188,7 @@ const MyTeacher = ({ onBack }) => {
      
     <View style={styles.header}>
         <View style={styles.back}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <BackArrowIcon size={24}  color="#000" />
-          </TouchableOpacity>
+          <BackButton size={24} color="#000" onPress={onBack} style={styles.backButton} />
           <Text style={styles.title}>My Teachers</Text>
         </View>
         <Text style={styles.totalCount}>{allTeachers.length} Found</Text>

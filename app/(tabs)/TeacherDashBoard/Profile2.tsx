@@ -22,7 +22,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Calendar } from "react-native-calendars";
-import BackArrowIcon from "../../../assets/svgIcons/BackArrow";
+import BackButton from "../../../components/BackButton";
 import Building from "../../../assets/svgIcons/Building";
 import Menubook from "../../../assets/svgIcons/MenuBook";
 import Pencil from "../../../assets/svgIcons/Pencil";
@@ -1135,6 +1135,7 @@ const validateTimeRange = () => {
       cropImage(result.assets[0].uri);
     }
   };
+    // Update the renderPickerField function to return a proper element
   const renderPickerField = (
     label: string,
     value: string,
@@ -1151,7 +1152,12 @@ const validateTimeRange = () => {
 
   return (
     <View style={styles.container}>
-      {isLoading ? (
+      {!fontsLoaded ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#5B7FFF" />
+          <Text style={styles.loadingText}>Loading fonts...</Text>
+        </View>
+      ) : isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#5B7FFF" />
           <Text style={styles.loadingText}>Loading profile...</Text>
@@ -1162,12 +1168,7 @@ const validateTimeRange = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.profileContainer}>
-          <TouchableOpacity
-            onPress={() => router.push("/(tabs)/TeacherDashBoard/Teacher")}
-            style={styles.backButton}
-          >
-            <BackArrowIcon width={wp("2.4%")} height={hp("2.23%")} />
-          </TouchableOpacity>
+          <BackButton size={24} color="#000" onPress={() => router.push("/(tabs)/TeacherDashBoard/Teacher")} style={styles.backButton} />
           <TouchableOpacity
             onPress={handleImagePicker}
             style={styles.imageContainer}
@@ -1234,7 +1235,7 @@ const validateTimeRange = () => {
     </TouchableOpacity>
   )}
 </View>
-{errors.introduction?.trim() && (
+{errors.introduction && (
   <Text style={[styles.errorText, styles.introError]}>{errors.introduction}</Text>
 )}
 
@@ -1317,13 +1318,13 @@ const validateTimeRange = () => {
   
   {/* First Qualification Errors */}
   <View style={styles.qualificationErrors}>
-    {errors.qualification_subject_0?.trim() && (
+    {errors.qualification_subject_0 && (
       <Text style={[styles.errorText, styles.qualificationError]}>{errors.qualification_subject_0}</Text>
     )}
-    {errors.qualification_college_0?.trim() && (
+    {errors.qualification_college_0 && (
       <Text style={[styles.errorText, styles.qualificationError]}>{errors.qualification_college_0}</Text>
     )}
-    {errors.qualification_year_0?.trim() && (
+    {errors.qualification_year_0 && (
       <Text style={[styles.errorText, styles.qualificationError]}>{errors.qualification_year_0}</Text>
     )}
   </View>
@@ -1461,7 +1462,7 @@ const validateTimeRange = () => {
     </Picker>
   </View>
 </View>
-{errors.selectedCategory?.trim() && (
+{errors.selectedCategory && (
   <Text style={[styles.errorText, styles.categoryError]}>{errors.selectedCategory}</Text>
 )}        
 
@@ -1543,12 +1544,12 @@ const validateTimeRange = () => {
                   )}
                 </View>
 
-                {errors[`tuition_${index}_skill`]?.trim() && (
+                {errors[`tuition_${index}_skill`] && (
                   <Text style={styles.errorText}>
                     {errors[`tuition_${index}_skill`]}
                   </Text>
                 )}
-                {errors[`tuition_${index}_class`]?.trim() && (
+                {errors[`tuition_${index}_class`] && (
                   <Text style={styles.errorText}>
                     {errors[`tuition_${index}_class`]}
                   </Text>
@@ -1606,7 +1607,7 @@ const validateTimeRange = () => {
                     </Text>
                   </TouchableOpacity>
                 </View>
-                {errors[`tuition_${index}_timeFrom`]?.trim() && (
+                {errors[`tuition_${index}_timeFrom`] && (
                   <Text style={styles.errorText}>
                     {errors[`tuition_${index}_timeFrom`]}
                   </Text>
@@ -1676,12 +1677,12 @@ const validateTimeRange = () => {
 </View>
 </View>
     
-                {errors[`tuition_${index}_charge`]?.trim() && (
+                {errors[`tuition_${index}_charge`] && (
                   <Text style={styles.errorText}>
                     {errors[`tuition_${index}_charge`]}
                   </Text>
                 )}
-                {errors[`tuition_${index}_day`]?.trim() && (
+                {errors[`tuition_${index}_day`] && (
                   <Text style={styles.errorText}>
                     {errors[`tuition_${index}_day`]}
                   </Text>
@@ -1706,7 +1707,7 @@ const validateTimeRange = () => {
     </View>
   </View>
 )}
-{errors[`tuition_${index}_board`]?.trim() && (
+{errors[`tuition_${index}_board`] && (
   <Text style={[styles.errorText, styles.boardError]}>{errors[`tuition_${index}_board`]}</Text>
 )}
                     {index === tuitionCount - 1 && tuitionCount < 100 && (
@@ -1756,7 +1757,7 @@ const validateTimeRange = () => {
     })}
   </View>
 </View>
-{errors.teachingMode?.trim() && (
+{errors.teachingMode && (
   <Text style={[styles.errorText, styles.modeError]}>{errors.teachingMode}</Text>
 )}
           <View style={styles.workExperienceContainer}>
@@ -1825,12 +1826,7 @@ const validateTimeRange = () => {
   >
     <View style={styles.modalFullScreen}>
       {/* Back Arrow */}
-      <TouchableOpacity
-        onPress={() => setTimingModalVisible(false)}
-        style={styles.modalBackButton}
-      >
-        <BackArrowIcon />
-      </TouchableOpacity>
+      <BackButton size={24} color="#000" onPress={() => setTimingModalVisible(false)} style={styles.modalBackButton} />
 
       {/* Teacher Name */}
       <Text style={styles.modalHeaderTitle}>{teacherName}</Text>
@@ -2090,7 +2086,7 @@ const validateTimeRange = () => {
             <View style={styles.centeredView}>
               <View style={styles.modalView}>
                 <Text style={styles.modalTitle}>Choose Profile Picture</Text>
-                <>
+                {/* Removed the fragment <> and replaced with direct children */}
                 <TouchableOpacity style={styles.modalButton} onPress={handleCamera}>
                   <Text style={styles.modalButtonText}>Take Photo</Text>
                 </TouchableOpacity>
@@ -2108,7 +2104,6 @@ const validateTimeRange = () => {
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
-                </>
               </View>
             </View>
           </Modal>
@@ -2118,6 +2113,7 @@ const validateTimeRange = () => {
     </View>
   );
 }
+// ... rest of your styles remain exactly the same
 const styles = StyleSheet.create({
   selectedDaysDisplay: {
   flex: 1,

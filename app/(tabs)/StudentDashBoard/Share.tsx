@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet, TouchableOpacity, Image, SafeAreaView, Dimensions } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, Image, SafeAreaView, Dimensions, Alert, Share as RNShare, Linking } from 'react-native'
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from "react-native-responsive-screen"
 import React from 'react'
 import { Feather, FontAwesome, FontAwesome6 } from '@expo/vector-icons'
-import { Entypo } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
+import * as Clipboard from 'expo-clipboard'
+import BackButton from "../../../components/BackButton";
 
 const { width } = Dimensions.get('window')
 const ICON_SIZE = wp(16)
@@ -20,11 +21,67 @@ const items = [
 const Share = () => {
   const navigation = useNavigation()
 
-  const handleShare = (item) => {
-    console.log(`Sharing via ${item.title}`)
+  const handleShare = (item: any) => {
+    const playStoreLink = "https://play.google.com/store/apps/details?id=com.gogrowsmart.app"
+    const email = "contact@gogrowsmart.com"
+    const shareText = `Check out GoGrowSmart app! Download: ${playStoreLink} Contact: ${email}`
+
+    switch (item.title) {
+      case "Copy":
+        Clipboard.setStringAsync(shareText)
+          .then(() => {
+            Alert.alert("Copied!", "Play Store link and contact email copied to clipboard")
+          })
+          .catch(() => {
+            Alert.alert("Error", "Failed to copy to clipboard")
+          })
+        break
+      
+      case "Mail":
+        Linking.openURL(`mailto:${email}?subject=GoGrowSmart App&body=Check out this amazing app: ${playStoreLink}`)
+          .catch(() => {
+            Alert.alert("Error", "Could not open mail app")
+          })
+        break
+      
+      case "WhatsApp":
+        Linking.openURL(`whatsapp://send?text=${encodeURIComponent(shareText)}`)
+          .catch(() => {
+            Alert.alert("Error", "Could not open WhatsApp")
+          })
+        break
+      
+      case "Facebook":
+        Linking.openURL(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(playStoreLink)}`)
+          .catch(() => {
+            Alert.alert("Error", "Could not open Facebook")
+          })
+        break
+      
+      case "Linkedin":
+        Linking.openURL(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(playStoreLink)}`)
+          .catch(() => {
+            Alert.alert("Error", "Could not open LinkedIn")
+          })
+        break
+      
+      case "Messenger":
+        Linking.openURL(`fb-messenger://share/?link=${encodeURIComponent(playStoreLink)}`)
+          .catch(() => {
+            Alert.alert("Error", "Could not open Messenger")
+          })
+        break
+      
+      default:
+        RNShare.share({
+          message: shareText,
+          title: "GoGrowSmart App"
+        })
+        break
+    }
   }
 
-  const renderIcon = (item) => {
+  const renderIcon = (item: any) => {
     const IconComponent = item.iconType === "Feather" ? Feather : item.iconType === "FontAwesome6" ? FontAwesome6 : FontAwesome
     return <IconComponent name={item.icon} size={ICON_SIZE * 0.5} color="#FFFFFF" />
   }
@@ -33,12 +90,7 @@ const Share = () => {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         {/* Cross Icon in top right corner */}
-        <TouchableOpacity 
-          style={styles.crossButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Entypo name="cross" size={wp(8)} color="black" />
-        </TouchableOpacity>
+        <BackButton size={24} color="#000" onPress={() => navigation.goBack()} style={styles.crossButton} />
         
         <Image source={require('../../../assets/image/share.png')} style={styles.shareImage} resizeMode="contain" />
         

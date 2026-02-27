@@ -7,6 +7,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import { router } from 'expo-router';
 import { FontAwesome6 } from '@expo/vector-icons';
+import BackButton from '../../../components/BackButton';
 
 const {height,width}=Dimensions.get('window')
 
@@ -190,11 +191,11 @@ const StudentNotification = () => {
             <View style={{marginTop: hp('4%')}}>
                 <View style={styles.topContent}>
                     <Text style={styles.title}>Notifications</Text>
-                    <TouchableOpacity 
-                        onPress={() => router.push('/(tabs)/StudentDashBoard/Student')}
-                    >
-                        <FontAwesome6 name="x" size={24} color="black" style={styles.crossIcon} />
-                    </TouchableOpacity>
+                    <BackButton 
+                        size={24} 
+                        color="#4255ff" 
+                        style={styles.backButton}
+                    />
                 </View>
                 
                 {error ? (
@@ -280,9 +281,10 @@ const StudentNotification = () => {
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Notification</Text>
                             <TouchableOpacity onPress={closePreview} style={styles.closeButton}>
-                                <Image 
-                                    source={require("../../../assets/images/cross-working.png")}
-                                    style={styles.modalCloseIcon}
+                                <BackButton 
+                                    size={20} 
+                                    color="#4255ff" 
+                                    onPress={closePreview}
                                 />
                             </TouchableOpacity>
                         </View>
@@ -343,6 +345,9 @@ const styles = StyleSheet.create({
         width: wp("7%"), 
         height: wp("7%"),
         resizeMode: 'contain',
+    },
+    backButton: {
+        backgroundColor: 'transparent',
     },
     title: { 
         fontSize: wp("6%"), 

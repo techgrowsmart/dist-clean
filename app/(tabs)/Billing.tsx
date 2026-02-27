@@ -8,12 +8,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
-import ArrowBack from "../../assets/svgIcons/ArrowBack";
 import Pdf from "../../assets/svgIcons/Pdf";
 import BottomNavigation from "./BottomNavigation";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import DownloadIcon from "../../assets/svgIcons/Downlode";
+import BackButton from "../../components/BackButton";
 
 const { width, height } = Dimensions.get("window");
 
@@ -61,13 +61,7 @@ const Billing = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => {
-            router.back();
-          }}
-        >
-          <ArrowBack size={30} />
-        </TouchableOpacity>
+        <BackButton size={30} color="#000" onPress={() => router.back()} />
         <Text style={styles.headerText}>Billing</Text>
       </View>
 

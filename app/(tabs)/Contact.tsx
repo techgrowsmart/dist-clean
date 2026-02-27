@@ -9,10 +9,11 @@ import {
   TouchableOpacity,
   ScrollView,
 } from "react-native";
-import { Ionicons, FontAwesome, MaterialCommunityIcons, FontAwesome6, Entypo } from '@expo/vector-icons';
+import { Ionicons, FontAwesome, MaterialCommunityIcons, FontAwesome6 } from '@expo/vector-icons';
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 import { useNavigation } from '@react-navigation/native';
+import BackButton from "../../components/BackButton";
 
 const Contact = () => {
   const [message, setMessage] = useState("");
@@ -51,9 +52,7 @@ const Contact = () => {
     <Text style={styles.headerTitle}>Get in Touch !</Text>
     <Text style={styles.headerSubtitle}>We'd love to hear from you .</Text>
   </View>
-  <TouchableOpacity onPress={() => navigation.goBack()}>
-  <Entypo name="cross" size={hp('3.8%')} color="black" style={styles.crossIcon} />
-</TouchableOpacity>
+  <BackButton size={hp('3.8%')} color="black" onPress={() => navigation.goBack()} style={styles.crossIcon} />
         </View>
 
         {/* Input Card */}
