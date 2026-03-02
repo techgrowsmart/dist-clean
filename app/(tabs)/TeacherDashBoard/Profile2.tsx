@@ -1235,9 +1235,11 @@ const validateTimeRange = () => {
     </TouchableOpacity>
   )}
 </View>
-{errors.introduction && (
-  <Text style={[styles.errorText, styles.introError]}>{errors.introduction}</Text>
-)}
+<View>
+  {errors.introduction && (
+    <Text style={[styles.errorText, styles.introError]}>{errors.introduction}</Text>
+  )}
+</View>
 
               <View style={styles.feildsContainer}>
             <TextInput
@@ -1367,7 +1369,7 @@ const validateTimeRange = () => {
   </View>
 
   {/* Third Qualification */}
-<View style={styles.educationItem}>
+  <View style={styles.educationItem}>
   <View style={{ flexDirection: "row", gap: wp("2.4%") }}>
     <View style={[styles.buldingIcon, { backgroundColor: "#f3e9ff" }]}> {/* Blueish */}
       <Building size={wp("4.533%")} color="#A855F7" />
@@ -1404,7 +1406,7 @@ const validateTimeRange = () => {
 </View>
 
 {/* Fourth Qualification */}
-<View style={styles.educationItem}>
+  <View style={styles.educationItem}>
   <View style={{ flexDirection: "row", gap: wp("2.4%") }}>
     <View style={[styles.buldingIcon, { backgroundColor: "#daeafe" }]}> {/* Blueish */}
       <Building size={wp("4.533%")} color="#3a82f6" />
@@ -1439,10 +1441,10 @@ const validateTimeRange = () => {
     />
   </View>
 </View>
-</View>
               </View>
             </View>
-<View style={styles.categoryRow}>
+      </View>
+            <View style={styles.categoryRow}>
   <Text style={styles.categoryLabel}>Category</Text>
   <View style={styles.categoryContainer}>
     <Picker
@@ -1462,10 +1464,13 @@ const validateTimeRange = () => {
     </Picker>
   </View>
 </View>
-{errors.selectedCategory && (
-  <Text style={[styles.errorText, styles.categoryError]}>{errors.selectedCategory}</Text>
-)}        
+<View>
+  {errors.selectedCategory && (
+    <Text style={[styles.errorText, styles.categoryError]}>{errors.selectedCategory}</Text>
+  )}
+</View>        
 
+            <View>
               {tuitions.slice(0, tuitionCount).map((tuition, index) => (
                 <View key={index} style={styles.subjects}>
                   <View style={styles.educationDetailsTitle}>
@@ -1544,16 +1549,20 @@ const validateTimeRange = () => {
                   )}
                 </View>
 
+                <View>
                 {errors[`tuition_${index}_skill`] && (
                   <Text style={styles.errorText}>
                     {errors[`tuition_${index}_skill`]}
                   </Text>
                 )}
+</View>
+                <View>
                 {errors[`tuition_${index}_class`] && (
                   <Text style={styles.errorText}>
                     {errors[`tuition_${index}_class`]}
                   </Text>
                 )}
+</View>
 
                 {/* Timing */}
                 <View style={styles.timecontainer} pointerEvents="box-none">
@@ -1607,14 +1616,16 @@ const validateTimeRange = () => {
                     </Text>
                   </TouchableOpacity>
                 </View>
+                <View>
                 {errors[`tuition_${index}_timeFrom`] && (
                   <Text style={styles.errorText}>
                     {errors[`tuition_${index}_timeFrom`]}
                   </Text>
                 )}
+</View>
 
 {/* Charge & Day */}
-<View style={styles.dateContainer}>
+            <View style={styles.dateContainer}>
   <View style={styles.feesContainer}>
     <View style={styles.chargeInputContainer}>
       <Text style={styles.currencySymbol}>₹</Text>
@@ -1677,16 +1688,20 @@ const validateTimeRange = () => {
 </View>
 </View>
     
+                <View>
                 {errors[`tuition_${index}_charge`] && (
                   <Text style={styles.errorText}>
                     {errors[`tuition_${index}_charge`]}
                   </Text>
                 )}
+</View>
+                <View>
                 {errors[`tuition_${index}_day`] && (
                   <Text style={styles.errorText}>
                     {errors[`tuition_${index}_day`]}
                   </Text>
                 )}
+</View>
               {selectedCategory === "Subject teacher" && (
   <View style={styles.boardContainer}>
     <Text style={styles.boardTitle}>Board</Text>
@@ -1707,9 +1722,11 @@ const validateTimeRange = () => {
     </View>
   </View>
 )}
-{errors[`tuition_${index}_board`] && (
-  <Text style={[styles.errorText, styles.boardError]}>{errors[`tuition_${index}_board`]}</Text>
-)}
+                  <View>
+                    {errors[`tuition_${index}_board`] && (
+                      <Text style={[styles.errorText, styles.boardError]}>{errors[`tuition_${index}_board`]}</Text>
+                    )}
+                  </View>
                     {index === tuitionCount - 1 && tuitionCount < 100 && (
                       <TouchableOpacity onPress={addTuition} style={styles.addButton}>
                         <Text style={styles.addButtonText}>+ Add Another Tuition</Text>
@@ -1717,6 +1734,7 @@ const validateTimeRange = () => {
                     )}
               </View>
             ))}
+            </View>
           <View style={styles.noticeContainer}>
             <Text style={styles.noticeText}>
               Once you register, you will not be allowed to change the timing
@@ -1757,9 +1775,11 @@ const validateTimeRange = () => {
     })}
   </View>
 </View>
-{errors.teachingMode && (
-  <Text style={[styles.errorText, styles.modeError]}>{errors.teachingMode}</Text>
-)}
+<View>
+  {errors.teachingMode && (
+    <Text style={[styles.errorText, styles.modeError]}>{errors.teachingMode}</Text>
+  )}
+</View>
           <View style={styles.workExperienceContainer}>
             <Text style={styles.workExperienceTitle}>
               Work Experience (optional)

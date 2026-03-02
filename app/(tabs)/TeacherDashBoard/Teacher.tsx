@@ -52,6 +52,12 @@ import SubjectsList from "./SubjectsList";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Ionicons } from "@expo/vector-icons";
 
+interface ApiResponse {
+  type: string;
+  data?: any;
+  error?: any;
+}
+
 interface Contact {
   name: string;
   profilePic: string;
@@ -73,7 +79,7 @@ interface Review {
 const InfiniteReviewScroll = ({ reviews }: { reviews: Review[] }) => {
   const scrollViewRef = React.useRef<ScrollView>(null);
   const scrollX = React.useRef(0);
-  const scrollInterval = React.useRef<number | null>(null);
+  const scrollInterval = React.useRef<NodeJS.Timeout | null>(null);
   const [isPaused, setIsPaused] = React.useState(false);
 
   const SCROLL_SPEED = 1.8; // You can change this value
@@ -266,10 +272,20 @@ export default function TeacherDashboard() {
       onStartShouldSetPanResponder: () => false,
       
       onMoveShouldSetPanResponder: (_, { dx, dy }) => {
-        // Only set responder if horizontal swipe is significant and more horizontal than vertical
+        // EXTREMELY strict criteria - almost no accidental swipes
         const absDx = Math.abs(dx);
         const absDy = Math.abs(dy);
-        return absDx > 15 && absDx > absDy * 1.5;
+        
+        // Very high threshold and extremely strict horizontal dominance
+        const horizontalThreshold = 40; // Increased from 25
+        const horizontalDominance = 4.0; // Increased from 2.5 (much more strict)
+        
+        // Additional check: vertical movement must be minimal
+        const maxVerticalMovement = 10; // Max 10px vertical movement allowed
+        
+        return absDx > horizontalThreshold && 
+               absDx > absDy * horizontalDominance && 
+               absDy < maxVerticalMovement;
       },
 
       onPanResponderGrant: () => {
@@ -282,18 +298,32 @@ export default function TeacherDashboard() {
         // Calculate the target position based on current screen index and drag
         let newPosition = -width * currentScreenIndex + dx;
 
-        // Apply boundaries with resistance
-        const min = -width * (SCREEN_COUNT - 1);
-        const max = 0;
-        
-        // Add resistance when trying to go beyond boundaries
-        if (currentScreenIndex === 0 && dx > 0) {
-          newPosition = dx * 0.2; // Strong resistance at first screen
-        } else if (currentScreenIndex === SCREEN_COUNT - 1 && dx < 0) {
-          newPosition = -width * (SCREEN_COUNT - 1) + dx * 0.2; // Strong resistance at last screen
+        // Define allowed range based on current screen (only adjacent screens)
+        let minAllowed, maxAllowed;
+        if (currentScreenIndex === 0) {
+          // On left screen: can only drag left to reveal center (more negative)
+          minAllowed = -width;          // center position
+          maxAllowed = 0;               // left screen position
+        } else if (currentScreenIndex === SCREEN_COUNT - 1) {
+          // On right screen: can only drag right to reveal center (more positive)
+          minAllowed = -width * (SCREEN_COUNT - 1); // right screen position
+          maxAllowed = -width * (SCREEN_COUNT - 2); // center position
+        } else {
+          // On center: can drag both directions
+          minAllowed = -width * (SCREEN_COUNT - 1); // right screen position
+          maxAllowed = 0;                           // left screen position
         }
 
-        swipeAnim.setValue(Math.max(min, Math.min(max, newPosition)));
+        // Apply resistance when trying to go beyond allowed adjacent boundaries
+        if (newPosition < minAllowed) {
+          // Overshoot left (trying to go beyond adjacent right screen)
+          newPosition = minAllowed + (newPosition - minAllowed) * 0.2;
+        } else if (newPosition > maxAllowed) {
+          // Overshoot right (trying to go beyond adjacent left screen)
+          newPosition = maxAllowed + (newPosition - maxAllowed) * 0.2;
+        }
+
+        swipeAnim.setValue(newPosition);
       },
 
       onPanResponderRelease: (_, { dx, vx }) => {
@@ -301,21 +331,39 @@ export default function TeacherDashboard() {
 
         let newIndex = currentScreenIndex;
         
-        // Calculate swipe threshold based on screen width
-        const swipeThreshold = width * 0.25; // 25% of screen width
-        const velocityThreshold = 0.3;
+        // Calculate swipe threshold - make it extremely high for very deliberate swipes only
+        const swipeThreshold = width * 0.5; // Increased from 0.4 (50% of screen width!)
+        const velocityThreshold = 0.7; // Increased from 0.5 (require very fast swipe)
         
         // Only change screen if swipe is decisive enough
         const isSwipingLeft = dx < -swipeThreshold || (dx < 0 && Math.abs(vx) > velocityThreshold);
         const isSwipingRight = dx > swipeThreshold || (dx > 0 && Math.abs(vx) > velocityThreshold);
         
-        // Handle screen transitions with proper boundaries
+        // Handle screen transitions - ONLY allow adjacent screen navigation with extra validation
         if (isSwipingLeft && currentScreenIndex < SCREEN_COUNT - 1) {
-          // Swipe left - go to next screen
-          newIndex = currentScreenIndex + 1;
+          // Swipe left - go to next screen (only one step at a time)
+          // Additional check: ensure we're not trying to skip screens
+          if (currentScreenIndex === 0 || currentScreenIndex === 1) {
+            newIndex = currentScreenIndex + 1;
+            console.log(`👆 Swipe Left: Screen ${currentScreenIndex} → ${newIndex}`);
+          } else {
+            console.log(`🚫 Invalid Skip Attempt: Cannot go from Screen ${currentScreenIndex} further left`);
+            newIndex = currentScreenIndex;
+          }
         } else if (isSwipingRight && currentScreenIndex > 0) {
-          // Swipe right - go to previous screen
-          newIndex = currentScreenIndex - 1;
+          // Swipe right - go to previous screen (only one step at a time)
+          // Additional check: ensure we're not trying to skip screens
+          if (currentScreenIndex === 1 || currentScreenIndex === 2) {
+            newIndex = currentScreenIndex - 1;
+            console.log(`👇 Swipe Right: Screen ${currentScreenIndex} → ${newIndex}`);
+          } else {
+            console.log(`🚫 Invalid Skip Attempt: Cannot go from Screen ${currentScreenIndex} further right`);
+            newIndex = currentScreenIndex;
+          }
+        } else {
+          // No valid swipe - stay on current screen
+          newIndex = currentScreenIndex;
+          console.log(`🚫 Invalid Swipe: Staying on Screen ${currentScreenIndex} (TOO WEAK OR WRONG DIRECTION)`);
         }
 
         // Ensure index is within bounds
@@ -324,12 +372,12 @@ export default function TeacherDashboard() {
         // Lock during snap animation
         isSwipeLocked.current = true;
 
-        // Animate to the new position
+        // Animate to the new position with extremely slow, rigid animation
         Animated.spring(swipeAnim, {
           toValue: -width * newIndex,
           useNativeDriver: true,
-          tension: 80,
-          friction: 10,
+          tension: 20, // Reduced from 40 for extremely slow animation
+          friction: 30, // Increased from 20 for maximum damping (very slow)
           overshootClamping: true,
         }).start(() => {
           isSwipeLocked.current = false;
@@ -344,12 +392,12 @@ export default function TeacherDashboard() {
       onPanResponderTerminate: () => {
         setIsSwipeActive(false);
         if (!isSwipeLocked.current) {
-          // If gesture is terminated, snap back to current screen
+          // If gesture is terminated, snap back to current screen with extremely slow animation
           Animated.spring(swipeAnim, {
             toValue: -width * currentScreenIndex,
             useNativeDriver: true,
-            tension: 80,
-            friction: 10,
+            tension: 20, // Reduced from 40 for extremely slow animation
+            friction: 30, // Increased from 20 for maximum damping
             overshootClamping: true,
           }).start();
         }
@@ -557,7 +605,7 @@ export default function TeacherDashboard() {
     }
   };
 
-  // Consolidated data loading with optimized performance
+  // Consolidated data loading with optimized performance - FIXED VERSION
   const loadAllData = useCallback(async () => {
     if (!userEmail) return;
     
@@ -588,22 +636,17 @@ export default function TeacherDashboard() {
         "Content-Type": "application/json",
       };
       
-      // Create optimized API calls - remove duplicate profile/teacherProfile calls
+      // Create optimized API calls - SINGLE PROFILE CALL for both profile and subjects
       const apiPromises = [
-        // Profile fetch
+        // Single profile fetch that includes both profile data and subject count
         axios.post(`${BASE_URL}/api/userProfile`, { email }, { headers, timeout: 8000 })
-          .then(response => ({ type: 'profile', data: response.data }))
-          .catch(error => ({ type: 'profile', error })),
-        
-        // Subject count fetch (using same profile API)
-        axios.post(`${BASE_URL}/api/userProfile`, { email }, { headers, timeout: 6000 })
           .then(response => {
             console.log('🔍 Raw teacherProfile API response:', response.data);
-            return { type: 'subjects', data: response.data };
+            return { type: 'profile', data: response.data };
           })
           .catch(error => {
             console.log('❌ teacherProfile API error:', error.response?.data || error.message);
-            return { type: 'subjects', error };
+            return { type: 'profile', error };
           }),
         
         // Contacts fetch
@@ -612,15 +655,15 @@ export default function TeacherDashboard() {
           .catch(error => ({ type: 'contacts', error })),
         
         // Reviews fetch - improved error handling
-        Promise.any([
+        Promise.race([
           axios.post(`${BASE_URL}/api/teacher-reviews`, { teacherEmail: email }, { headers, timeout: 8000 }),
           axios.post(`${BASE_URL}/api/reviews/teacher`, { teacherEmail: email }, { headers, timeout: 8000 }),
           axios.post(`${BASE_URL}/api/reviews`, { teacherEmail: email }, { headers, timeout: 8000 })
-        ]).then(response => ({ type: 'reviews', data: response.data }))
-          .catch(error => {
+        ]).then((response: any) => ({ type: 'reviews', data: response.data }))
+          .catch((error: any) => {
             console.log('⚠️ Reviews API failed:', error.message || 'Unknown error');
             // Return mock data on failure to prevent UI issues
-            return { type: 'reviews', data: { reviews: mockReviews } };
+            return { type: 'reviews', data: { reviews: [] } };
           })
       ];
       
@@ -631,14 +674,11 @@ export default function TeacherDashboard() {
       requestAnimationFrame(() => {
         results.forEach((result) => {
           if (result.status === 'fulfilled' && result.value) {
-            const { type, data, error } = result.value;
+            const { type, data, error } = result.value as ApiResponse;
             
             if (error) {
               console.log(`⚠️ ${type} API failed:`, error.message || error);
-              if (type === 'subjects') {
-                console.log('📚 Subjects API failed, preserving existing count:', subjectCount);
-                // Don't update subjectCount on error, preserve existing value
-              }
+              // IMPORTANT: Don't reset states on error, preserve existing values
               return;
             }
             
@@ -657,60 +697,54 @@ export default function TeacherDashboard() {
                     updates.push(setProfileImage(data.profileimage));
                   }
                   
-                  // Handle spotlight
+                  // Handle spotlight - preserve existing state if API doesn't provide it
                   if (data.isSpotlight !== undefined) {
                     const spotlightStatus = Boolean(data.isSpotlight);
-                    console.log('🔦 Spotlight status:', spotlightStatus);
+                    console.log('🔦 Spotlight status from API:', spotlightStatus);
                     setIsSpotlight(spotlightStatus);
                   } else {
-                    setIsSpotlight(true); // Fallback for testing
+                    console.log('🔦 No spotlight data from API, preserving existing state');
+                    // Don't change isSpotlight if API doesn't provide it
                   }
+                  
+                  // Process subject count from the same API response
+                  let count = subjectCount; // Preserve current count as default
+                  
+                  if (data?.tuitions && Array.isArray(data.tuitions)) {
+                    const uniqueSubjects = new Set();
+                    data.tuitions.forEach((tuition: any) => {
+                      if (tuition?.subject) uniqueSubjects.add(tuition.subject);
+                      else if (tuition?.skill) uniqueSubjects.add(tuition.skill);
+                    });
+                    count = uniqueSubjects.size;
+                    console.log('📚 Using teacherProfile tuitions array, unique subjects:', count);
+                  } else {
+                    console.log('⚠️ No tuitions found in teacherProfile response, preserving existing count');
+                    // Don't reset to 0, preserve existing count
+                  }
+                  
+                  console.log(`✅ Final subjects count: ${count}`);
+                  setSubjectCount(count);
                   
                   Promise.all(updates);
                   
-                  // Cache profile
+                  // Cache profile and subject count together
                   AsyncStorage.setItem(CACHE_KEYS.PROFILE, JSON.stringify({
                     name: data.name,
                     email: data.email,
                     profileimage: data.profileimage,
                     status: data.status || 'dormant',
                     created_at: data.created_at,
-                    isSpotlight: Boolean(data.isSpotlight || true),
+                    isSpotlight: Boolean(data.isSpotlight !== undefined ? data.isSpotlight : isSpotlight),
                   })).catch(() => {});
-                }
-                break;
-                
-              case 'subjects':
-                console.log('📚 Processing subjects data...', JSON.stringify(data, null, 2));
-                let count = subjectCount; // Preserve current count as default
-                
-                // Process the teacherProfile API response structure
-                if (data?.tuitions && Array.isArray(data.tuitions)) {
-                  const uniqueSubjects = new Set();
-                  data.tuitions.forEach((tuition: any) => {
-                    if (tuition?.subject) uniqueSubjects.add(tuition.subject);
-                    else if (tuition?.skill) uniqueSubjects.add(tuition.skill);
-                  });
-                  count = uniqueSubjects.size;
-                  console.log('📚 Using teacherProfile tuitions array, unique subjects:', count);
-                } else {
-                  console.log('⚠️ No tuitions found in teacherProfile response');
-                  // If current count is 0, set a reasonable fallback
-                  if (subjectCount === 0) {
-                    count = 3; // Reasonable fallback for a teacher
-                    console.log('📚 Setting fallback count for teacher:', count);
+                  
+                  // Cache subjects only if we got a valid count
+                  if (count !== subjectCount) {
+                    AsyncStorage.setItem(CACHE_KEYS.SUBJECT_COUNT, JSON.stringify({
+                      count,
+                      timestamp: Date.now()
+                    })).catch(() => {});
                   }
-                }
-                
-                console.log(`✅ Final subjects count: ${count}`);
-                setSubjectCount(count);
-                
-                // Cache subjects only if we got a valid count
-                if (count !== subjectCount) {
-                  AsyncStorage.setItem(CACHE_KEYS.SUBJECT_COUNT, JSON.stringify({
-                    count,
-                    timestamp: Date.now()
-                  })).catch(() => {});
                 }
                 break;
                 
@@ -740,7 +774,7 @@ export default function TeacherDashboard() {
                   console.log(`⭐ Reviews loaded: ${data.reviews.length}`);
                   
                   // Process reviews with better date handling
-                  const processedReviews = data.reviews.map(review => ({
+                  const processedReviews = data.reviews.map((review: any) => ({
                     id: review.id,
                     title: `Review by ${review.studentName || 'Student'}`,
                     rating: '⭐'.repeat(Math.min(Math.max(parseInt(review.rating) || 4, 1), 5)),
@@ -822,62 +856,17 @@ export default function TeacherDashboard() {
       setContactsLoading(false);
       setProfileLoading(false);
     }
-  }, [userEmail]);
+  }, [userEmail, subjectCount, isSpotlight]); // Add subjectCount and isSpotlight to dependencies
 
-  // Load cached data on mount
+  // Single consolidated effect for data loading - TRIGGERED ONLY WHEN userEmail CHANGES
   useEffect(() => {
-    const loadCachedData = async () => {
-      try {
-        // Load cached profile
-        const cachedProfile = await AsyncStorage.getItem(CACHE_KEYS.PROFILE);
-        if (cachedProfile) {
-          const profileData = JSON.parse(cachedProfile);
-          setTeacherName(profileData.name || '');
-          setProfileImage(profileData.profileimage || null);
-          setUserStatus(profileData.status || 'dormant');
-          setUserEmail(profileData.email || null);
-          setCreatedAt(profileData.created_at || null);
-          setIsSpotlight(Boolean(profileData.isSpotlight !== false));
-        }
-        
-        // Load cached subject count
-        const cachedSubjectCount = await AsyncStorage.getItem(CACHE_KEYS.SUBJECT_COUNT);
-        if (cachedSubjectCount) {
-          const { count } = JSON.parse(cachedSubjectCount);
-          setSubjectCount(typeof count === 'number' ? count : 0);
-        }
-        
-        // Load cached contacts
-        const cachedContacts = await AsyncStorage.getItem(CACHE_KEYS.CONTACTS);
-        if (cachedContacts) {
-          const { contacts } = JSON.parse(cachedContacts);
-          setContacts(contacts || []);
-        }
-        
-        setCacheLoaded(true);
-      } catch (error) {
-        console.log('❌ Cache loading error:', error);
-        setCacheLoaded(true); // Still set as loaded to prevent infinite loading
-      }
-    };
-    
-    loadCachedData();
-  }, [userEmail]);
+    if (userEmail && cacheLoaded) {
+      console.log('📧 userEmail changed, loading data for:', userEmail);
+      loadAllData();
+    }
+  }, [userEmail, cacheLoaded, loadAllData]);
 
-  // Separate effect for unread count polling
-  useEffect(() => {
-    if (!userEmail) return;
-    
-    // Initial fetch
-    fetchUnreadCount();
-    
-    // Set up polling every 30 seconds
-    const interval = setInterval(fetchUnreadCount, 30000);
-    
-    // Clean up interval on component unmount
-    return () => clearInterval(interval);
-  }, [userEmail, fetchUnreadCount]);
-
+  // Fetch unread count function - moved before useEffect
   const fetchUnreadCount = useCallback(async () => {
     try {
       const auth = await getAuthData();
@@ -904,6 +893,20 @@ export default function TeacherDashboard() {
       // Silent unread count fetch error
     }
   }, []);
+
+  // Separate effect for unread count polling
+  useEffect(() => {
+    if (!userEmail) return;
+    
+    // Initial fetch
+    fetchUnreadCount();
+    
+    // Set up polling every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+    
+    // Clean up interval on component unmount
+    return () => clearInterval(interval);
+  }, [userEmail, fetchUnreadCount]);
 
   let [fontsLoaded] = useFonts({
     Poppins_Regular: Poppins_400Regular,
@@ -1180,15 +1183,19 @@ return (
           <View style={styles.indicatorWithLabel}>
             <TouchableOpacity
               onPress={() => {
-                if (0 !== currentScreenIndex) {
+                // Only allow navigation to adjacent screen (from center to left)
+                if (currentScreenIndex === 1) {
+                  console.log(`🔘 Reviews Button: Screen ${currentScreenIndex} → 0`);
                   setCurrentScreenIndex(0);
                   Animated.spring(swipeAnim, {
                     toValue: 0,
                     useNativeDriver: true,
-                    tension: 100,
-                    friction: 8,
+                    tension: 20, // Reduced from 40 for extremely slow animation
+                    friction: 30, // Increased from 20 for maximum damping
                   }).start();
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                } else {
+                  console.log(`🚫 Reviews Button: Cannot navigate from Screen ${currentScreenIndex}`);
                 }
               }}
               style={[
@@ -1205,15 +1212,19 @@ return (
           <View style={styles.indicatorWithLabel}>
             <TouchableOpacity
               onPress={() => {
-                if (1 !== currentScreenIndex) {
+                // Allow navigation to center from either left or right
+                if (currentScreenIndex === 0 || currentScreenIndex === 2) {
+                  console.log(`🏠 Home Button: Screen ${currentScreenIndex} → 1`);
                   setCurrentScreenIndex(1);
                   Animated.spring(swipeAnim, {
                     toValue: -width,
                     useNativeDriver: true,
-                    tension: 100,
-                    friction: 8,
+                    tension: 20, // Reduced from 40 for extremely slow animation
+                    friction: 30, // Increased from 20 for maximum damping
                   }).start();
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                } else {
+                  console.log(`🚫 Home Button: Already on Screen ${currentScreenIndex}`);
                 }
               }}
               style={[
@@ -1230,15 +1241,19 @@ return (
           <View style={styles.indicatorWithLabel}>
             <TouchableOpacity
               onPress={() => {
-                if (2 !== currentScreenIndex) {
+                // Only allow navigation to adjacent screen (from center to right)
+                if (currentScreenIndex === 1) {
+                  console.log(`💬 Activity Button: Screen ${currentScreenIndex} → 2`);
                   setCurrentScreenIndex(2);
                   Animated.spring(swipeAnim, {
                     toValue: -width * 2,
                     useNativeDriver: true,
-                    tension: 100,
-                    friction: 8,
+                    tension: 20, // Reduced from 40 for extremely slow animation
+                    friction: 30, // Increased from 20 for maximum damping
                   }).start();
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                } else {
+                  console.log(`🚫 Activity Button: Cannot navigate from Screen ${currentScreenIndex}`);
                 }
               }}
               style={[
@@ -1762,23 +1777,10 @@ swipeOverlay: {
   swipeHintArrows: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    paddingHorizontal: wp('4%'),
-    paddingVertical: hp('1%'),
-    borderRadius: wp('5%'),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    justifyContent: 'center',
+    gap: wp('2%'),
   },
-  swipeHint: {
-    fontSize: wp('3%'),
-    color: '#5f5fff',
-    marginHorizontal: wp('2%'),
-    fontFamily: 'Poppins_400Regular',
-  },
-
+  
   // New professional swipe indicators
   swipeIndicators: {
     position: 'absolute',
@@ -1846,12 +1848,6 @@ swipeOverlay: {
   swipeRightIndicator: {
     right: wp('5%'),
     backgroundColor: 'rgba(76, 175, 80, 0.8)',
-  },
-  swipeHintArrows: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: wp('2%'),
   },
   
   swipeHintOverlay: {

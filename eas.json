@@ -26,15 +26,19 @@
     },
     "production-aab": {
       "developmentClient": false,
+      "distribution": "store",
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "releaseTrack": "internal"
       }
     }
   },
   "submit": {
     "production": {
       "android": {
-        "track": "internal"
+        "track": "internal",
+        "releaseStatus": "completed",
+        "changesNotSentForReview": true
       }
     }
   }
