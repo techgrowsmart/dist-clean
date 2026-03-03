@@ -33,7 +33,11 @@ jobs:
       run: npm install
       
     - name: Authenticate with Expo
-      run: eas whoami
+      env:
+        EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      run: |
+        echo "EXPO_TOKEN=$EXPO_TOKEN" >> $GITHUB_ENV
+        eas whoami
       
     - name: Build Production AAB
       env:
@@ -44,6 +48,8 @@ jobs:
         --message "${{ github.event.inputs.release_notes || 'Automated production build' }}"
         
     - name: Download build artifact
+      env:
+        EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       run: |
         # Find the most recent build
         BUILD_PATH=$(eas build:list --platform=android --limit=1 --status=finished --json | jq -r '.[0].artifacts[0].path')
