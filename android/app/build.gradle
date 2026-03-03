@@ -92,7 +92,7 @@ android {
         applicationId 'com.gogrowsmart.app.mobile'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 14
+        versionCode 15
         versionName "2.0.10"
     }
     signingConfigs {
