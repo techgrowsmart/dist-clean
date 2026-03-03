@@ -36,8 +36,12 @@ jobs:
       env:
         EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       run: |
+        if [ -z "$EXPO_TOKEN" ]; then
+          echo "EXPO_TOKEN is not set"
+          exit 1
+        fi
         echo "EXPO_TOKEN=$EXPO_TOKEN" >> $GITHUB_ENV
-        eas whoami
+        eas whoami || exit 1
       
     - name: Build Production AAB
       env:
