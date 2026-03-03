@@ -48,7 +48,6 @@ jobs:
         EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       run: |
         eas build --platform android --profile production-aab --non-interactive \
-        --version-scheme bump \
         --message "${{ github.event.inputs.release_notes || 'Automated production build' }}"
         
     - name: Download build artifact
