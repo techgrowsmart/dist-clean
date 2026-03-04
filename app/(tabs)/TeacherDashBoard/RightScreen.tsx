@@ -368,8 +368,8 @@ const RightScreen: React.FC = () => {
       console.error('❌ Error response:', error.response?.data);
       console.error('❌ Error status:', error.response?.status);
       
-      // Only show error alert if it's not just empty posts
-      if (error.response?.status !== 404) {
+      // Only show error alert if it's not just empty posts or auth error
+      if (error.response?.status !== 404 && error.response?.status !== 403) {
         Alert.alert('Error', `Failed to fetch posts: ${error.response?.data?.message || error.message}`);
       }
     } finally {

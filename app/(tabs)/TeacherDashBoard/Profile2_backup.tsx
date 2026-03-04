@@ -187,7 +187,7 @@ const validateForm = () => {
   // }
 
   if (!selectedCategory || selectedCategory === "") {
-    newErrors.selectedCategory = "Please select category.";
+    newErrors.selectedCategory = "Please select the category.";
   }
 
   if (selectedCategory === "Subject teacher") {
@@ -348,10 +348,7 @@ useEffect(() => {
 const fetchUserStatus = async () => {
   try {
     const auth = await getAuthData();
-    if (!auth?.token) {
-      console.log("No auth token found for user status fetch");
-      return;
-    }
+    if (!auth?.token) return;
 
     const headers = {
       Authorization: "Bearer " + auth.token,
@@ -367,12 +364,8 @@ const fetchUserStatus = async () => {
     if (response.data && response.data.status) {
       setUserStatus(response.data.status);
     }
-  } catch (error: any) {
-    console.error("Error fetching user status:", error?.response?.status || error?.message || error);
-    // Don't show alert for auth errors, just log them
-    if (error?.response?.status !== 403) {
-      console.error("Non-auth error in fetchUserStatus:", error);
-    }
+  } catch (error) {
+    console.error("Error fetching user status:", error);
   }
 };
 
@@ -501,12 +494,8 @@ useEffect(() => {
           console.log("💾 Saved to AsyncStorage as backup");
           return; // Successfully loaded from backend
         }
-      } catch (apiError: any) {
-        console.log("⚠️ Backend API failed, trying AsyncStorage fallback:", apiError?.response?.status || apiError?.message || String(apiError));
-        // Don't show alert for 403 errors, just use fallback
-        if (apiError?.response?.status !== 403) {
-          console.error("Non-auth API error:", apiError);
-        }
+      } catch (apiError) {
+        console.log("⚠️ Backend API failed, trying AsyncStorage fallback:", apiError instanceof Error ? apiError.message : String(apiError));
       }
 
       // Fallback to AsyncStorage if backend fails
@@ -671,12 +660,8 @@ useEffect(() => {
         });
         
         setRatingsCount(countByStars);
-      } catch (error: any) {
-        console.error("❌ Failed to fetch reviews:", error?.response?.status || error?.message || error);
-        // Don't show alert for auth errors, just log them
-        if (error?.response?.status !== 403) {
-          console.error("Non-auth error in fetchReviews:", error);
-        }
+      } catch (error) {
+        console.error("❌ Failed to fetch reviews:", error);
       } finally {
         setReviewsLoading(false);
       }
@@ -1518,29 +1503,29 @@ const validateTimeRange = () => {
                   {selectedCategory === "Subject teacher" ? (
                       <View style={styles.classSubjectContainerInner}>
                     <Picker
-  selectedValue={
-    tuitions[index].subject && tuitions[index].class
-      ? tuitions[index].subject + "__" + tuitions[index].class
-      : ""
-  }
-  onValueChange={(itemValue) => {
-    const [subject, className] = itemValue.split("__");
-    const updatedTuition = [...tuitions];
-    updatedTuition[index].subject = subject;
-    updatedTuition[index].class = className;
-    setTuitions(updatedTuition);
-  }}
-  style={styles.classSubject}
->
-  <Picker.Item label="Select Subject-Class" value="" />
-  {subjectClassItems.map((item, i) => (
-    <Picker.Item
-      key={i}
-      label={item.label}
-      value={item.value}
-    />
-  ))}
-</Picker>
+                      selectedValue={
+                        tuitions[index].subject && tuitions[index].class
+                          ? tuitions[index].subject + "__" + tuitions[index].class
+                          : ""
+                      }
+                      onValueChange={(itemValue) => {
+                        const [subject, className] = itemValue.split("__");
+                        const updatedTuition = [...tuitions];
+                        updatedTuition[index].subject = subject;
+                        updatedTuition[index].class = className;
+                        setTuitions(updatedTuition);
+                      }}
+                      style={styles.classSubject}
+                    >
+                      <Picker.Item label="Select Subject-Class" value="" />
+                      {subjectClassItems.map((item, i) => (
+                        <Picker.Item
+                          key={i}
+                          label={item.label}
+                          value={item.value}
+                        />
+                      ))}
+                    </Picker>
                       </View>
                   ) : (
                       <View style={styles.classSubjectContainerInner}>
