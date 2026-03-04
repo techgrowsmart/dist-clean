@@ -28,8 +28,7 @@
       "developmentClient": false,
       "distribution": "store",
       "android": {
-        "buildType": "app-bundle",
-        "releaseTrack": "internal"
+        "buildType": "app-bundle"
       }
     }
   },

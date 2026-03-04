@@ -27,7 +27,7 @@ jobs:
         cache: 'npm'
         
     - name: Setup Expo CLI
-      run: npm install -g @expo/cli eas-cli
+      run: npm install -g @expo/cli eas-cli@18.1.0
       
     - name: Install dependencies
       run: npm install
@@ -92,7 +92,7 @@ jobs:
         cache: 'npm'
         
     - name: Setup Expo CLI
-      run: npm install -g @expo/cli eas-cli
+      run: npm install -g @expo/cli eas-cli@18.1.0
       
     - name: Install dependencies
       run: npm install
