@@ -28,7 +28,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.gogrowsmart.app.mobile",
-      "versionCode": 16,
+      "versionCode": 17,
       "plugins": [
         "expo-notifications",
         "expo-notifications"
