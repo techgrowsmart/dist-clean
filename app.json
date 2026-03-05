@@ -14,6 +14,9 @@
       "jsEngine": "jsc",
       "runtimeVersion": {
         "policy": "appVersion"
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -25,7 +28,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.gogrowsmart.app.mobile",
-      "versionCode": 15,
+      "versionCode": 16,
       "plugins": [
         "expo-notifications",
         "expo-notifications"

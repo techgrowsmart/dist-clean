@@ -18,7 +18,7 @@
         "buildType": "apk"
       }
     },
-    "production": {
+    "production-apk": {
       "developmentClient": false,
       "android": {
         "buildType": "apk"
@@ -29,6 +29,13 @@
       "distribution": "store",
       "android": {
         "buildType": "app-bundle"
+      }
+    },
+    "production": {
+      "developmentClient": false,
+      "distribution": "store",
+      "ios": {
+        "buildConfiguration": "Release"
       }
     }
   },
