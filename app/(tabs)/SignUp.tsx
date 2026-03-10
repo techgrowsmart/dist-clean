@@ -7,6 +7,7 @@ import {
     Alert,
     Dimensions,
     Image,
+    ImageBackground,
     Keyboard,
     KeyboardAvoidingView,
     Platform,
@@ -32,6 +33,11 @@ export default function SignUpScreen() {
     const [phone, setPhone] = useState("");
     const [loading, setLoading] = useState(false);
     const router = useRouter();
+
+    // Responsive design: split layout for larger screens, centered for mobile
+    const isWeb = Platform.OS === 'web';
+    const isLargeScreen = isWeb && width >= 600; // Lower breakpoint for better responsiveness
+    const isMobile = !isLargeScreen; // Mobile phones
 
     let [fontsLoaded] = useFonts({
         Mulish_Regular: Mulish_400Regular,
@@ -80,27 +86,33 @@ export default function SignUpScreen() {
 
     if (!fontsLoaded) return <Text>Loading...</Text>;
 
-    return (
-        <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                <View style={styles.contentContainer}>
-                    <Image source={require("../../assets/image/Signup.png")} style={styles.image} resizeMode="contain" />
+    if (isLargeScreen) {
+        return (
+            <View style={styles.container}>
+                {/* Left Column - Background Image */}
+                <View style={styles.leftColumn}>
+                    <ImageBackground
+                        source={require('../../assets/images/login-background.jpeg')}
+                        style={styles.backgroundImage}
+                        resizeMode="cover"
+                    />
+                </View>
 
-                    <Text style={styles.title}>Sign up</Text>
-                    <Text style={styles.subtitle}>
-                        {`By signing up, you agree to our${' '}${'\n'}`}
-                        <Text 
-                            style={styles.link}
-                            onPress={() => Linking.openURL("https://gogrowsmart.com/terms-and-conditions")}
-                        >Terms & Conditions</Text> and{" "}
-                        <Text 
-                            style={styles.link}
-                            onPress={() => Linking.openURL("https://gogrowsmart.com/privacy-policy")}
-                        >Privacy Policy</Text>.
-                    </Text>
+                {/* Right Column - Content */}
+                <View style={styles.rightColumn}>
+                    <View style={styles.content}>
+                        {/* Welcome Title */}
+                        <Text style={styles.welcomeTitle}>
+                            Create your account {'\n'}& get started
+                        </Text>
 
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Full Name</Text>
+                        {/* Description */}
+                        <Text style={styles.description}>
+                            Join the best learning platform.{'\n'}Sign up and start your journey today.
+                        </Text>
+
+                        {/* Full Name Input */}
+                        <Text style={styles.inputLabel}>Full Name</Text>
                         <TextInput
                             style={[styles.input, errorName ? styles.inputError : null]}
                             placeholder="Enter your full name"
@@ -109,10 +121,9 @@ export default function SignUpScreen() {
                             onChangeText={(text) => { setName(text); if (text.trim()) setErrorName(""); }}
                         />
                         {errorName ? <Text style={styles.errorText}>{errorName}</Text> : null}
-                    </View>
 
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Phone Number</Text>
+                        {/* Phone Number Input */}
+                        <Text style={styles.inputLabel}>Phone Number</Text>
                         <TextInput
                             style={[styles.input, errorPhone ? styles.inputError : null]}
                             placeholder="Enter your phone number"
@@ -122,10 +133,9 @@ export default function SignUpScreen() {
                             onChangeText={(text) => { setPhone(text); if (text.trim()) setErrorPhone(""); }}
                         />
                         {errorPhone ? <Text style={styles.errorText}>{errorPhone}</Text> : null}
-                    </View>
 
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Email Address</Text>
+                        {/* Email Input */}
+                        <Text style={styles.inputLabel}>Email Address</Text>
                         <TextInput
                             style={[styles.input, errorEmail ? styles.inputError : null]}
                             placeholder="Enter your email"
@@ -136,18 +146,114 @@ export default function SignUpScreen() {
                             onChangeText={(text) => { setEmail(text); if (text.trim()) setErrorEmail(""); }}
                         />
                         {errorEmail ? <Text style={styles.errorText}>{errorEmail}</Text> : null}
-                    </View>
 
-                    <TouchableOpacity style={styles.button} onPress={handleSignUp} disabled={loading}>
-                        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Register</Text>}
+                        {/* Sign Up Button */}
+                        <TouchableOpacity style={styles.signupButton} onPress={handleSignUp} disabled={loading}>
+                            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.signupButtonText}>Sign up</Text>}
+                        </TouchableOpacity>
+
+                        {/* Login Link */}
+                        <View style={styles.loginContainer}>
+                            <Text style={styles.loginText}>Already have an account?</Text>
+                            <TouchableOpacity onPress={() => router.push("/Login")}>
+                                <Text style={styles.loginLink}> Log in</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Terms and Conditions */}
+                        <Text style={styles.termsText}>
+                            By signing up, I agree to the{' '}
+                            <Text 
+                                style={styles.termsLink}
+                                onPress={() => Linking.openURL("https://gogrowsmart.com/terms-and-conditions")}
+                            >Terms & Conditions</Text> and{' '}
+                            <Text 
+                                style={styles.termsLink}
+                                onPress={() => Linking.openURL("https://gogrowsmart.com/privacy-policy")}
+                            >Privacy Policy</Text>.
+                        </Text>
+                    </View>
+                </View>
+            </View>
+        );
+    }
+
+    // Mobile fallback
+    return (
+        <KeyboardAvoidingView style={styles.mobileContainer} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                <View style={styles.mobileContent}>
+                    {/* Welcome Title */}
+                    <Text style={styles.mobileWelcomeTitle}>
+                        Create your account {'\n'}& get started
+                    </Text>
+
+                    {/* Description */}
+                    <Text style={styles.mobileDescription}>
+                        Join the best learning platform.{'\n'}Sign up and start your journey today.
+                    </Text>
+
+                    {/* Full Name Input */}
+                    <Text style={styles.inputLabel}>Full Name</Text>
+                    <TextInput
+                        style={[styles.input, errorName ? styles.inputError : null]}
+                        placeholder="Enter your full name"
+                        placeholderTextColor="#94a3b8"
+                        value={name}
+                        onChangeText={(text) => { setName(text); if (text.trim()) setErrorName(""); }}
+                    />
+                    {errorName ? <Text style={styles.errorText}>{errorName}</Text> : null}
+
+                    {/* Phone Number Input */}
+                    <Text style={styles.inputLabel}>Phone Number</Text>
+                    <TextInput
+                        style={[styles.input, errorPhone ? styles.inputError : null]}
+                        placeholder="Enter your phone number"
+                        placeholderTextColor="#94a3b8"
+                        keyboardType="phone-pad"
+                        value={phone}
+                        onChangeText={(text) => { setPhone(text); if (text.trim()) setErrorPhone(""); }}
+                    />
+                    {errorPhone ? <Text style={styles.errorText}>{errorPhone}</Text> : null}
+
+                    {/* Email Input */}
+                    <Text style={styles.inputLabel}>Email Address</Text>
+                    <TextInput
+                        style={[styles.input, errorEmail ? styles.inputError : null]}
+                        placeholder="Enter your email"
+                        placeholderTextColor="#94a3b8"
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        value={email}
+                        onChangeText={(text) => { setEmail(text); if (text.trim()) setErrorEmail(""); }}
+                    />
+                    {errorEmail ? <Text style={styles.errorText}>{errorEmail}</Text> : null}
+
+                    {/* Sign Up Button */}
+                    <TouchableOpacity style={styles.signupButton} onPress={handleSignUp} disabled={loading}>
+                        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.signupButtonText}>Sign up</Text>}
                     </TouchableOpacity>
 
+                    {/* Login Link */}
                     <View style={styles.loginContainer}>
-                        <Text style={styles.loginText}>Already have an account!</Text>
+                        <Text style={styles.loginText}>Already have an account?</Text>
                         <TouchableOpacity onPress={() => router.push("/Login")}>
-                            <Text style={styles.loginLink}> Login</Text>
+                            <Text style={styles.loginLink}> Log in</Text>
                         </TouchableOpacity>
                     </View>
+
+                    {/* Terms and Conditions */}
+                    <Text style={styles.mobileTermsText}>
+                        By signing up, I agree to the{' '}
+                        <Text 
+                            style={styles.termsLink}
+                            onPress={() => Linking.openURL("https://gogrowsmart.com/terms-and-conditions")}
+                        >Terms & Conditions</Text> and{' '}
+                        <Text 
+                            style={styles.termsLink}
+                            onPress={() => Linking.openURL("https://gogrowsmart.com/privacy-policy")}
+                        >Privacy Policy</Text>.
+                    </Text>
                 </View>
             </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
@@ -155,20 +261,155 @@ export default function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: "#fff" },
-    contentContainer: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: wp("6.4%"), paddingVertical: hp("2%") },
-    image: { width: "200%", height: hp("30%"), marginBottom: -hp("1.5%") },
-    title: { fontSize: wp("6.5%"), color: "#03070E", marginBottom: hp("1%"), fontFamily: "Mulish_Bold" },
-    subtitle: { fontSize: wp("3.7%"), color: "#82878F", textAlign: "center", marginBottom: hp("3%"), fontFamily: "Mulish_Regular", lineHeight: hp("2.8%") },
-    link: { color: "#107eff", fontFamily: "Mulish_SemiBold" },
-    inputGroup: { width: "100%", marginBottom: hp("1.5%") },
-    label: { textAlign: "left", color: "#6a6a6a", fontSize: wp("3.5%"), fontFamily: "Mulish_Regular" },
-    input: { width: "100%", height: hp("6.5%"), backgroundColor: "#ffffff", borderRadius: wp("3%"), paddingHorizontal: wp("4%"), color: "#03070E", marginTop: hp("0.5%"), fontSize: wp("4%"), fontFamily: "Mulish_Regular", borderColor: "#4e504e0", borderWidth: wp("0.35") },
-    inputError: { borderColor: "red", borderWidth: 1 },
-    errorText: { color: "red", fontSize: wp("3.2%"), marginTop: 4, fontFamily: "Mulish_Regular" },
-    button: { width: "100%", height: hp("6%"), backgroundColor: "#5f5fff", borderRadius: wp("2.5%"), justifyContent: "center", alignItems: "center", marginTop: hp("2%") },
-    buttonText: { color: "#fff", fontSize: wp("4.2%"), fontFamily: "Mulish_Bold" },
-    loginContainer: { flexDirection: "row", alignItems: "center", marginTop: hp("2.5%") },
-    loginText: { color: "#82878F", fontSize: wp("3.8%"), fontFamily: "Mulish_Regular" },
-    loginLink: { color: "#107eff", fontSize: wp("3.8%"), fontFamily: "Mulish_SemiBold", marginLeft: wp("1%") },
+  container: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  leftColumn: {
+    width: width * 0.5,
+    backgroundColor: '#F5F5F5',
+  },
+  backgroundImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  rightColumn: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 60,
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 500,
+  },
+  welcomeTitle: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#000000',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 44,
+  },
+  description: {
+    fontSize: 16,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 40,
+    lineHeight: 24,
+    paddingHorizontal: 20,
+  },
+  signupButton: {
+    backgroundColor: '#7C4DDB',
+    paddingVertical: 18,
+    paddingHorizontal: 60,
+    borderRadius: 50,
+    marginBottom: 12,
+    width: '100%',
+    maxWidth: 300,
+    alignItems: 'center',
+  },
+  signupButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  loginContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  loginText: {
+    color: '#666666',
+    fontSize: 16,
+  },
+  loginLink: {
+    color: '#7C4DDB',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 5,
+  },
+  termsText: {
+    fontSize: 13,
+    color: '#555555',
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 40,
+  },
+  termsLink: {
+    color: '#7C4DDB',
+    textDecorationLine: 'underline',
+  },
+  // Mobile styles
+  mobileContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  mobileContent: {
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  mobileWelcomeTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#000000',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 36,
+  },
+  mobileDescription: {
+    fontSize: 14,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 30,
+    lineHeight: 20,
+  },
+  mobileTermsText: {
+    fontSize: 13,
+    color: '#555555',
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 20,
+  },
+  // Input styles
+  inputLabel: {
+    alignSelf: 'flex-start',
+    color: '#606060',
+    fontSize: 14,
+    marginBottom: 8,
+    paddingLeft: 5,
+    width: '100%',
+  },
+  input: {
+    width: '100%',
+    height: 50,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    color: '#03070E',
+    marginBottom: 8,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#5d674e',
+  },
+  inputError: {
+    borderColor: 'red',
+    borderWidth: 1,
+  },
+  errorText: {
+    alignSelf: 'flex-start',
+    color: 'red',
+    fontSize: 14,
+    marginBottom: 16,
+  },
 });

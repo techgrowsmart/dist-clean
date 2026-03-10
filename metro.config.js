@@ -8,5 +8,23 @@ module.exports = (async () => {
     server: {
       port: 8082,
     },
+    resolver: {
+      ...config.resolver,
+      alias: {
+        ...config.resolver.alias,
+        // Redirect expo-notifications to our conditional import on web
+        'expo-notifications': require.resolve('./utils/notifications.js'),
+      },
+      platformExtensions: ['ios', 'android', 'native', 'web', 'js', 'ts', 'tsx', 'jsx', 'json'],
+    },
+    transformer: {
+      ...config.transformer,
+      getTransformOptions: async () => ({
+        transform: {
+          experimentalImportSupport: false,
+          inlineRequires: true,
+        },
+      }),
+    },
   };
 });

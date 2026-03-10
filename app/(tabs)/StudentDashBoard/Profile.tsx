@@ -41,6 +41,12 @@ interface FormErrors {
 }
 
 const { width, height } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isWeb = Platform.OS === 'web';
+const isLargeScreen = isWeb && width >= 768;
+const isMobile = !isLargeScreen;
+
 export default function Profile() {
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -482,43 +488,354 @@ export default function Profile() {
   
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-      >
-        {!previewModalVisible ? (
-          <ScrollView
-            style={styles.contentContainer}
-            contentContainerStyle={styles.scrollContentContainer}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-          >
-            <View style={styles.header}>
-              <BackButton 
-  size={wp("6.4%")} 
-  color="#4255ff" 
-  onPress={() => router.push("/(tabs)/StudentDashBoard/Student")}
-/>
-              <Text style={styles.headerTitle}>Edit profile</Text>
-            </View>
+      {isLargeScreen ? (
+        // Web/Desktop Layout
+        <View style={styles.webContainer}>
+          <View style={styles.webHeader}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => router.push("/(tabs)/StudentDashBoard/Student")}
+            >
+              <Text style={styles.backButtonText}>← Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.webHeaderTitle}>Edit Profile</Text>
+            <View style={styles.placeholder} />
+          </View>
 
-            <View style={styles.imageContainer}>
-              <Image
-                style={styles.profileImage}
-                source={{ uri: profileImage || DEFAULT_PROFILE_IMAGE }}
-              />
-              <View style={styles.upload}>
-                <DriverUpload size={32} />
+          <View style={styles.webContent}>
+            <View style={styles.webLeftColumn}>
+              {/* Profile Image Section */}
+              <View style={styles.webImageSection}>
+                <Image
+                  style={styles.webProfileImage}
+                  source={{ uri: profileImage || DEFAULT_PROFILE_IMAGE }}
+                />
                 <TouchableOpacity
                   onPress={handleImagePicker}
-                  style={styles.uploadBtn}
+                  style={styles.webUploadButton}
                 >
-                  <Text style={styles.uploadBtnText}>Upload</Text>
+                  <Text style={styles.webUploadButtonText}>Upload Photo</Text>
                 </TouchableOpacity>
               </View>
             </View>
+
+            <View style={styles.webRightColumn}>
+              <ScrollView style={styles.webFormContainer} showsVerticalScrollIndicator={false}>
+                {/* Form Fields */}
+                <View style={styles.webFormRow}>
+                  <View style={styles.webFormField}>
+                    <Text style={styles.webLabel}>
+                      Full Name <Text style={styles.asterisk}>*</Text>
+                    </Text>
+                    <TextInput
+                      style={styles.webInput}
+                      value={studentName}
+                      onChangeText={setStudentName}
+                      placeholder="Enter your name"
+                      placeholderTextColor={"#afb3c1"}
+                    />
+                    {errors.studentName && (
+                      <Text style={styles.errorText}>{errors.studentName}</Text>
+                    )}
+                  </View>
+
+                  <View style={styles.webFormField}>
+                    <Text style={styles.webLabel}>
+                      Email <Text style={styles.asterisk}>*</Text>
+                    </Text>
+                    <TextInput
+                      style={styles.webInput}
+                      value={email}
+                      onChangeText={setEmail}
+                      placeholder="Enter your email"
+                      keyboardType="email-address"
+                      placeholderTextColor={"#afb3c1"}
+                    />
+                    {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+                  </View>
+                </View>
+
+                <View style={styles.webFormRow}>
+                  <View style={styles.webFormField}>
+                    <Text style={styles.webLabel}>
+                      Date of Birth <Text style={styles.asterisk}>*</Text>
+                    </Text>
+                    <TouchableOpacity onPress={() => setShowPicker(true)}>
+                      <TextInput
+                        style={styles.webInput}
+                        value={dateOfBirth}
+                        editable={false}
+                        placeholder="DD/MM/YYYY"
+                        placeholderTextColor={"#afb3c1"}
+                      />
+                    </TouchableOpacity>
+                    {errors.dateOfBirth && (
+                      <Text style={styles.errorText}>{errors.dateOfBirth}</Text>
+                    )}
+                  </View>
+
+                  <View style={styles.webFormField}>
+                    <Text style={styles.webLabel}>
+                      Phone Number <Text style={styles.asterisk}>*</Text>
+                    </Text>
+                    <TextInput
+                      style={styles.webInput}
+                      value={phone}
+                      onChangeText={setPhone}
+                      placeholder="Enter your phone number"
+                      keyboardType="phone-pad"
+                      placeholderTextColor={"#afb3c1"}
+                    />
+                    {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+                  </View>
+                </View>
+
+                <View style={styles.webFormRow}>
+                  <View style={styles.webFormField}>
+                    <Text style={styles.webLabel}>
+                      Education Board <Text style={styles.asterisk}>*</Text>
+                    </Text>
+                    <View style={[styles.webInput, !educationBoard && { justifyContent: 'center' }]}>
+                      <Picker
+                        selectedValue={educationBoard}
+                        dropdownIconColor="#5f5fff"
+                        onValueChange={(itemValue: string) => setEducationBoard(itemValue)}
+                        style={educationBoard ? { color: '#000' } : { color: '#afb3c1' }}
+                        mode="dropdown"
+                      >
+                        <Picker.Item label="Select Education Board" value="" />
+                        {boards.map((board, index) => (
+                          <Picker.Item key={index} label={board.boardName} value={board.boardName} />
+                        ))}
+                      </Picker>
+                    </View>
+                    {errors.educationBoard && (
+                      <Text style={styles.errorText}>{errors.educationBoard}</Text>
+                    )}
+                  </View>
+
+                  <View style={styles.webFormField}>
+                    <Text style={styles.webLabel}>
+                      Class/Year <Text style={styles.asterisk}>*</Text>
+                    </Text>
+                    <View style={styles.webInput}>
+                      <Picker
+                        selectedValue={classYear}
+                        onValueChange={(itemValue) => setClassYear(itemValue)}
+                        style={classYear ? { color: "#000" } : { color: "#afb3c1" }}
+                        mode="dropdown"
+                        dropdownIconColor="#5f5fff"
+                      >
+                        <Picker.Item label="Enter your Class" value="" />
+                        <Picker.Item label="Class 6" value="Class 6" />
+                        <Picker.Item label="Class 7" value="Class 7" />
+                        <Picker.Item label="Class 8" value="Class 8" />
+                        <Picker.Item label="Class 9" value="Class 9" />
+                        <Picker.Item label="Class 10" value="Class 10" />
+                        <Picker.Item label="Class 11" value="Class 11" />
+                        <Picker.Item label="Class 12" value="Class 12" />
+                        <Picker.Item label="1st Year" value="1st Year" />
+                        <Picker.Item label="2nd Year" value="2nd Year" />
+                        <Picker.Item label="3rd Year" value="3rd Year" />
+                        <Picker.Item label="4th Year" value="4th Year" />
+                        <Picker.Item label="5th Year" value="5th Year" />
+                      </Picker>
+                    </View>
+                    {errors.classYear && (
+                      <Text style={styles.errorText}>{errors.classYear}</Text>
+                    )}
+                  </View>
+                </View>
+
+                <View style={styles.webFormRow}>
+                  <View style={styles.webFormFieldFull}>
+                    <Text style={styles.webLabel}>
+                      School/College/University <Text style={styles.asterisk}>*</Text>
+                    </Text>
+                    <TextInput
+                      style={styles.webInput}
+                      value={instituteName}
+                      onChangeText={setInstituteName}
+                      placeholder="Enter your institution"
+                      placeholderTextColor={"#afb3c1"}
+                    />
+                    {errors.instituteName && (
+                      <Text style={styles.errorText}>{errors.instituteName}</Text>
+                    )}
+                  </View>
+                </View>
+
+                <View style={styles.webFormRow}>
+                  <View style={styles.webFormField}>
+                    <Text style={styles.webLabel}>
+                      Preferred Medium <Text style={styles.asterisk}>*</Text>
+                    </Text>
+                    <View style={styles.webInput}>
+                      <Picker
+                        selectedValue={preferredMedium}
+                        onValueChange={(itemValue) => setPreferredMedium(itemValue)}
+                        style={preferredMedium ? { color: "#000" } : { color: "#afb3c1" }}
+                        mode="dropdown"
+                        dropdownIconColor="#5f5fff"
+                      >
+                        <Picker.Item label="Select Medium" value="" />
+                        <Picker.Item label="English" value="English" />
+                        <Picker.Item label="Bengali" value="Bengali" />
+                        <Picker.Item label="Hindi" value="Hindi" />
+                      </Picker>
+                    </View>
+                    {errors.preferredMedium && <Text style={styles.errorText}>{errors.preferredMedium}</Text>}
+                  </View>
+
+                  <View style={styles.webFormField}>
+                    <Text style={styles.webLabel}>State</Text>
+                    <View style={styles.webInput}>
+                      <Picker
+                        selectedValue={stateName}
+                        onValueChange={(itemValue) => setStateName(itemValue)}
+                        style={stateName ? { color: "#000" } : { color: "#afb3c1" }}
+                        mode="dropdown"
+                      >
+                        <Picker.Item label="Select your State/UT" value="" />
+                        <Picker.Item label="Andhra Pradesh" value="Andhra Pradesh" />
+                        <Picker.Item label="Arunachal Pradesh" value="Arunachal Pradesh" />
+                        <Picker.Item label="Assam" value="Assam" />
+                        <Picker.Item label="Bihar" value="Bihar" />
+                        <Picker.Item label="Chhattisgarh" value="Chhattisgarh" />
+                        <Picker.Item label="Goa" value="Goa" />
+                        <Picker.Item label="Gujarat" value="Gujarat" />
+                        <Picker.Item label="Haryana" value="Haryana" />
+                        <Picker.Item label="Himachal Pradesh" value="Himachal Pradesh" />
+                        <Picker.Item label="Jharkhand" value="Jharkhand" />
+                        <Picker.Item label="Karnataka" value="Karnataka" />
+                        <Picker.Item label="Kerala" value="Kerala" />
+                        <Picker.Item label="Madhya Pradesh" value="Madhya Pradesh" />
+                        <Picker.Item label="Maharashtra" value="Maharashtra" />
+                        <Picker.Item label="Manipur" value="Manipur" />
+                        <Picker.Item label="Meghalaya" value="Meghalaya" />
+                        <Picker.Item label="Mizoram" value="Mizoram" />
+                        <Picker.Item label="Nagaland" value="Nagaland" />
+                        <Picker.Item label="Odisha" value="Odisha" />
+                        <Picker.Item label="Punjab" value="Punjab" />
+                        <Picker.Item label="Rajasthan" value="Rajasthan" />
+                        <Picker.Item label="Sikkim" value="Sikkim" />
+                        <Picker.Item label="Tamil Nadu" value="Tamil Nadu" />
+                        <Picker.Item label="Telangana" value="Telangana" />
+                        <Picker.Item label="Tripura" value="Tripura" />
+                        <Picker.Item label="Uttar Pradesh" value="Uttar Pradesh" />
+                        <Picker.Item label="Uttarakhand" value="Uttarakhand" />
+                        <Picker.Item label="West Bengal" value="West Bengal" />
+                        <Picker.Item label="Andaman and Nicobar Islands" value="Andaman and Nicobar Islands" />
+                        <Picker.Item label="Chandigarh" value="Chandigarh" />
+                        <Picker.Item label="Dadra and Nagar Haveli and Daman and Diu" value="Dadra and Nagar Haveli and Daman and Diu" />
+                        <Picker.Item label="Delhi" value="Delhi" />
+                        <Picker.Item label="Jammu and Kashmir" value="Jammu and Kashmir" />
+                        <Picker.Item label="Ladakh" value="Ladakh" />
+                        <Picker.Item label="Lakshadweep" value="Lakshadweep" />
+                        <Picker.Item label="Puducherry" value="Puducherry" />
+                      </Picker>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.webFormRow}>
+                  <View style={styles.webFormField}>
+                    <Text style={styles.webLabel}>Full Address</Text>
+                    <TextInput
+                      style={styles.webInput}
+                      value={fullAddress}
+                      onChangeText={setFullAddress}
+                      placeholder="Street No | State | Pin Code"
+                      placeholderTextColor={"#afb3c1"}
+                    />
+                  </View>
+
+                  <View style={styles.webFormField}>
+                    <Text style={styles.webLabel}>Pincode</Text>
+                    <TextInput
+                      style={styles.webInput}
+                      value={pincode}
+                      onChangeText={setPincode}
+                      placeholder="Enter pin code"
+                      keyboardType="numeric"
+                      maxLength={6}
+                      placeholderTextColor={"#afb3c1"}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.webFormRow}>
+                  <View style={styles.webFormField}>
+                    <Text style={styles.webLabel}>Country</Text>
+                    <View style={styles.webInput}>
+                      <Picker
+                        selectedValue={country}
+                        onValueChange={(itemValue) => setCountry(itemValue)}
+                        style={country ? { color: "#000" } : { color: "#afb3c1" }}
+                        mode="dropdown"
+                      >
+                        <Picker.Item label="Select your Country" value="" />
+                        <Picker.Item label="India" value="India" />
+                      </Picker>
+                    </View>
+                  </View>
+                  <View style={styles.webFormField} />
+                </View>
+
+                <View style={styles.webButtonRow}>
+                  <TouchableOpacity style={styles.webButton} onPress={handleSave}>
+                    <Text style={styles.webButtonText}>Save</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.webButtonSecondary}
+                    onPress={() => setPreviewModalVisible(true)}
+                  >
+                    <Text style={styles.webButtonTextSecondary}>Preview</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </View>
+      ) : (
+        // Mobile Layout (existing)
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+        >
+          {!previewModalVisible ? (
+            <ScrollView
+              style={styles.contentContainer}
+              contentContainerStyle={styles.scrollContentContainer}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
+              <View style={styles.header}>
+                <BackButton 
+      size={wp("6.4%")} 
+      color="#4255ff" 
+      onPress={() => router.push("/(tabs)/StudentDashBoard/Student")}
+/>
+                <Text style={styles.headerTitle}>Edit profile</Text>
+              </View>
+
+              <View style={styles.imageContainer}>
+                <Image
+                  style={styles.profileImage}
+                  source={{ uri: profileImage || DEFAULT_PROFILE_IMAGE }}
+                />
+                <View style={styles.upload}>
+                  <DriverUpload size={32} />
+                  <TouchableOpacity
+                    onPress={handleImagePicker}
+                    style={styles.uploadBtn}
+                  >
+                    <Text style={styles.uploadBtnText}>Upload</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
 
             <Text style={styles.label}>
               Full Name <Text style={styles.asterisk}>*</Text>
@@ -810,97 +1127,8 @@ export default function Profile() {
         ) : (
           <View style={{ flex: 1 }} />
         )}
-        
-        <Modal
-          visible={previewModalVisible}
-          animationType="none"
-          transparent={false}
-          onRequestClose={() => setPreviewModalVisible(false)}
-        >
-          <SafeAreaView style={styles.previewMainContainer}>
-            <View style={styles.previewContainer}>
-              <View style={styles.previewTopSection}>
-                <BackButton size={wp("7%")} color="white" onPress={() => {
-                    setPreviewModalVisible(false);
-                    router.push("/(tabs)/StudentDashBoard/Student");
-                  }} style={styles.crossPreviewButton} />
-                
-                <Text style={styles.previewHeaderText}>PROFILE</Text>
-                
-                <TouchableOpacity
-                  onPress={() => setPreviewModalVisible(false)}
-                  style={styles.editPreviewButton}
-                >
-                  <Pencil color="#fff" width={wp("5%")} height={wp("5%")} />
-                </TouchableOpacity>
-                
-                <Image
-                  style={styles.profileImagePreview}
-                  source={{ uri: profileImage || DEFAULT_PROFILE_IMAGE }}
-                />
-                
-                <Text style={styles.studentName} numberOfLines={1} ellipsizeMode="tail">
-                  {studentName || "Full Name"}
-                </Text>
-              </View>
-
-              <View style={styles.previewCardsContainer}>
-                <View style={styles.previewCardRow}>
-                  <View style={styles.previewCard}>
-                    <Text style={styles.previewCardLabel}>CLASS</Text>
-                    <Text style={styles.previewCardValue}>
-                      {classYear ? classYear.replace(/Class |Year |st |nd |rd |th /g, '') : '8'}<Text style={styles.previewCardSuperscript}>th</Text>
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.previewCard}>
-                    <Text style={styles.previewCardLabel}>MEDIUM</Text>
-                    <Text style={styles.previewCardValue}>{preferredMedium || "Hindi"}</Text>
-                  </View>
-                </View>
-                
-                <View style={styles.previewCardRow}>
-                  <View style={styles.previewCard}>
-                    <Ionicons name="calendar-sharp" size={wp("6%")} color="#808080" />
-                    <Text style={styles.previewCardLabel}>DOB</Text>
-                    <Text style={styles.previewCardValueSmall} numberOfLines={1}>
-                      {dateOfBirth || "11 Nov, 1991"}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.previewCard}>
-                    <FontAwesome6 name="graduation-cap" size={wp("6%")} color="#808080" />
-                    <Text style={styles.previewCardLabel}>Board</Text>
-                    <Text style={styles.previewCardValueSmall} numberOfLines={1}>
-                      {educationBoard || "WBHSE"}
-                    </Text>
-                  </View>
-                </View>
-                
-                <View style={styles.previewFullWidthCard}>
-                  <FontAwesome6 name="school" size={wp("6%")} color="#808080" />
-                  <View style={styles.previewFullWidthCardText}>
-                    <Text style={styles.previewFullWidthCardLabel}>INSTITUTION</Text>
-                    <Text style={styles.previewFullWidthCardValue} numberOfLines={1}>
-                      {instituteName || "Delhi University"}
-                    </Text>
-                  </View>
-                </View>
-                
-                <View style={styles.previewFullWidthCard}>
-                  <FontAwesome name="map" size={wp("6%")} color="#808080" />
-                  <View style={styles.previewFullWidthCardText}>
-                    <Text style={styles.previewFullWidthCardLabel}>ADDRESS</Text>
-                    <Text style={styles.previewFullWidthCardValue} numberOfLines={1}>
-                      {fullAddress || pincode || stateName ? `${fullAddress || ''}, ${pincode || ''}, ${country || 'India'}` : "abcd, xyz, 20013, India"}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-          </SafeAreaView>
-        </Modal>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      )}
     </SafeAreaView>
   );
 }
@@ -911,7 +1139,6 @@ const styles = StyleSheet.create({
   errorText: { color: "red", fontSize: wp("3%"), marginBottom: 6, marginTop: -6 },
   contentContainer: { paddingVertical: 10, paddingHorizontal: 16, paddingBottom: 20 },
   upload: { flex: 1, alignItems: "center", justifyContent: "center", gap: wp("1.3%"), flexDirection: "row", width: 98, height: 40 },
-  backButton: { position: "absolute", top: 40, left: 20 },
   backText: { fontSize: 18, color: "blue" },
   title: { fontSize: 22, fontWeight: "bold", marginBottom: 10 },
   imageContainer: { alignItems: "center", marginBottom: hp("1.345%"), justifyContent: "center" },
@@ -925,7 +1152,6 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: wp("6%"), fontWeight: "300", lineHeight: hp("8.36%"), color: "#21242d", fontFamily: "Poppins_600SemiBold", includeFontPadding: false, textAlignVertical: "center" },
   uploadBtnText: { color: "#fff", fontWeight: "500" },
   label: { fontSize: wp("3.2%"), fontWeight: "700", marginTop: hp("1.1%"), color: "#353945", lineHeight: hp("1.61%") },
-  asterisk: { color: "red" },
   input: { width: wp("87.2%"), height: hp("6.46%"), backgroundColor: "rgba(255,255,255,0)", borderRadius: wp("24%"), paddingHorizontal: wp("2.13%"), marginTop: hp("0.504%"), marginBottom: hp("2.01%"), borderWidth: wp("0.53%"), borderColor: "#e4e6ea", elevation: 0, fontSize: wp("4.27%"), lineHeight: hp("3.23%"), color: "#000000", paddingVertical: Platform.OS === "ios" ? hp("1%") : 0 },
   buttonRow: { flexDirection: "row", justifyContent: "space-between", marginTop: hp("2.69%") },
   button: { backgroundColor: "#5f5fff", padding: 8, borderRadius: 50, flex: 1, alignItems: "center", justifyContent: "center", marginRight: 10, borderColor: "#26cb63", width: wp("37.06%"), height: hp("4.84%") },
@@ -1096,5 +1322,139 @@ const styles = StyleSheet.create({
     fontSize: wp("3.5%"),
     fontWeight: "500",
     fontFamily: "Poppins_600SemiBold"
+  },
+  // Web-specific styles
+  webContainer: {
+    flex: 1,
+    backgroundColor: "#f8f9fa",
+  },
+  webHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 40,
+    paddingVertical: 20,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  backButton: {
+    padding: 10,
+  },
+  backButtonText: {
+    fontSize: 16,
+    color: '#5f5fff',
+    fontWeight: '600',
+  },
+  webHeaderTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#333',
+  },
+  placeholder: {
+    width: 60,
+  },
+  webContent: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  webLeftColumn: {
+    width: '35%',
+    backgroundColor: '#ffffff',
+    borderRightWidth: 1,
+    borderRightColor: '#e0e0e0',
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  webImageSection: {
+    alignItems: 'center',
+  },
+  webProfileImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    marginBottom: 20,
+  },
+  webUploadButton: {
+    backgroundColor: '#5f5fff',
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 25,
+  },
+  webUploadButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  webRightColumn: {
+    flex: 1,
+    padding: 40,
+  },
+  webFormContainer: {
+    flex: 1,
+  },
+  webFormRow: {
+    flexDirection: 'row',
+    gap: 20,
+    marginBottom: 20,
+  },
+  webFormField: {
+    flex: 1,
+  },
+  webFormFieldFull: {
+    width: '100%',
+  },
+  webLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  asterisk: {
+    color: '#ff0000',
+  },
+  webInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: '#ffffff',
+    color: '#333',
+  },
+  webButtonRow: {
+    flexDirection: 'row',
+    gap: 20,
+    marginTop: 30,
+  },
+  webButton: {
+    backgroundColor: '#5f5fff',
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    borderRadius: 8,
+    flex: 1,
+  },
+  webButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  webButtonSecondary: {
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#5f5fff',
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    borderRadius: 8,
+    flex: 1,
+  },
+  webButtonTextSecondary: {
+    color: '#5f5fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

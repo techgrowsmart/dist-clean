@@ -53,7 +53,21 @@
         }
       ],
       "expo-font",
-      "./app.plugin.js"
+      "./app.plugin.js",
+      [
+        "expo-notifications",
+        {
+          "icon": {
+            "light": "./assets/images/growsmart-icon.png",
+            "dark": "./assets/images/growsmart-icon.png"
+          },
+          "color": "#000000",
+          "sounds": [
+            "./assets/audio/notification.wav"
+          ],
+          "defaultChannel": "default"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

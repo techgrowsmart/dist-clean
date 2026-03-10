@@ -14,6 +14,9 @@ import { View ,Text} from 'react-native';
 import { TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+// Import polyfills for web environment
+import '../polyfills';
+
 
 SplashScreen.preventAutoHideAsync();
 
@@ -67,7 +70,7 @@ export default function RootLayout() {
       }
 
       try {
-        const response = await origFetch(...args);
+        const response = await origFetch(url, options);
         const cloned = response.clone();
 
         try {
@@ -102,6 +105,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>

@@ -13,6 +13,7 @@ import {
     TouchableOpacity,
     TouchableWithoutFeedback,
     View,
+    Dimensions,
 } from "react-native";
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import { BASE_URL } from "../../config";
@@ -25,6 +26,13 @@ import {
   useFonts,
 } from "@expo-google-fonts/work-sans";
 import { Feather } from "@expo/vector-icons";
+
+const { width, height } = Dimensions.get("window");
+
+// Responsive breakpoints
+const isWeb = Platform.OS === 'web';
+const isLargeScreen = isWeb && width >= 768;
+const isMobile = !isLargeScreen;
 
 export default function LoginOtp() {
   const router = useRouter();
@@ -177,55 +185,119 @@ export default function LoginOtp() {
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.innerContainer}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Feather name="arrow-left" size={wp("8%")} color="#727070" />
-          </TouchableOpacity>
-
-          <Image source={require("../../assets/image/otp.png")} style={styles.image} />
-
-          <Text style={styles.title}>Enter OTP</Text>
-          <Text style={styles.subtitle}>
-            {`4 digit code sent to your mobile. Please check and confirm the code to \n continue.`}
-          </Text>
-
-          <View style={styles.otpContainer}>
-            {otp.map((digit, index) => (
-              <View key={index} style={styles.otpInputWrapper}>
-                <TextInput
-                  ref={(ref) => {
-                    inputRefs.current[index] = ref;
-                  }}
-                  style={[styles.otpInput, digit ? styles.otpInputFilled : styles.otpInputEmpty]}
-                  value={digit}
-                  onChangeText={(text) => handleChange(text, index)}
-                  onKeyPress={(e) => handleKeyPress(e, index)}
-                  keyboardType="number-pad"
-                  maxLength={1}
-                  textAlign="center"
-                  selectTextOnFocus
-                  caretHidden={true}
-                />
-                {!digit && <Text style={styles.dashPlaceholder}>-</Text>}
+          {isLargeScreen ? (
+            // Web/Desktop Layout
+            <View style={styles.webContainer}>
+              <View style={styles.webHeader}>
+                <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                  <Feather name="arrow-left" size={24} color="#727070" />
+                </TouchableOpacity>
+                <Text style={styles.webTitle}>Enter OTP</Text>
+                <View style={styles.placeholder} />
               </View>
-            ))}
-          </View>
 
-          <TouchableOpacity 
-            style={[styles.button, (!isOtpComplete || loading) && styles.buttonDisabled]} 
-            onPress={verifyOtp} 
-            disabled={!isOtpComplete || loading}
-          >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Submit</Text>}
-          </TouchableOpacity>
+              <View style={styles.webContent}>
+                <Image source={require("../../assets/image/otp.png")} style={styles.webImage} />
 
-          {resendVisible ? (
-            <TouchableOpacity onPress={handleResendOTP} disabled={loading}>
-              <Text style={styles.resendText}>Didn't get OTP? <Text style={styles.resendLink}>Resend</Text></Text>
-            </TouchableOpacity>
+                <Text style={styles.webSubtitle}>
+                  4 digit code sent to your mobile. Please check and confirm the code to continue.
+                </Text>
+
+                <View style={styles.otpContainer}>
+                  {otp.map((digit, index) => (
+                    <View key={index} style={styles.otpInputWrapper}>
+                      <TextInput
+                        ref={(ref) => {
+                          inputRefs.current[index] = ref;
+                        }}
+                        style={[styles.otpInput, digit ? styles.otpInputFilled : styles.otpInputEmpty]}
+                        value={digit}
+                        onChangeText={(text) => handleChange(text, index)}
+                        onKeyPress={(e) => handleKeyPress(e, index)}
+                        keyboardType="number-pad"
+                        maxLength={1}
+                        textAlign="center"
+                        selectTextOnFocus
+                        caretHidden={true}
+                      />
+                      {!digit && <Text style={styles.dashPlaceholder}>-</Text>}
+                    </View>
+                  ))}
+                </View>
+
+                <TouchableOpacity 
+                  style={[styles.button, (!isOtpComplete || loading) && styles.buttonDisabled]} 
+                  onPress={verifyOtp} 
+                  disabled={!isOtpComplete || loading}
+                >
+                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Submit</Text>}
+                </TouchableOpacity>
+
+                {resendVisible ? (
+                  <TouchableOpacity onPress={handleResendOTP} disabled={loading}>
+                    <Text style={styles.resendText}>Didn't get OTP? <Text style={styles.resendLink}>Resend</Text></Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.timerText}>
+                    Didn't get OTP? Resend in <Text style={styles.timerHighlight}>{String(Math.floor(timer / 60)).padStart(2, "0")}:{String(timer % 60).padStart(2, "0")}</Text>
+                  </Text>
+                )}
+              </View>
+            </View>
           ) : (
-            <Text style={styles.timerText}>
-              Didn't get OTP? Resend in <Text style={styles.timerHighlight}>{String(Math.floor(timer / 60)).padStart(2, "0")}:{String(timer % 60).padStart(2, "0")}</Text>
-            </Text>
+            // Mobile Layout (existing)
+            <>
+              <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                <Feather name="arrow-left" size={wp("8%")} color="#727070" />
+              </TouchableOpacity>
+
+              <Image source={require("../../assets/image/otp.png")} style={styles.image} />
+
+              <Text style={styles.title}>Enter OTP</Text>
+              <Text style={styles.subtitle}>
+                {`4 digit code sent to your mobile. Please check and confirm the code to \n continue.`}
+              </Text>
+
+              <View style={styles.otpContainer}>
+                {otp.map((digit, index) => (
+                  <View key={index} style={styles.otpInputWrapper}>
+                    <TextInput
+                      ref={(ref) => {
+                        inputRefs.current[index] = ref;
+                      }}
+                      style={[styles.otpInput, digit ? styles.otpInputFilled : styles.otpInputEmpty]}
+                      value={digit}
+                      onChangeText={(text) => handleChange(text, index)}
+                      onKeyPress={(e) => handleKeyPress(e, index)}
+                      keyboardType="number-pad"
+                      maxLength={1}
+                      textAlign="center"
+                      selectTextOnFocus
+                      caretHidden={true}
+                    />
+                    {!digit && <Text style={styles.dashPlaceholder}>-</Text>}
+                  </View>
+                ))}
+              </View>
+
+              <TouchableOpacity 
+                style={[styles.button, (!isOtpComplete || loading) && styles.buttonDisabled]} 
+                onPress={verifyOtp} 
+                disabled={!isOtpComplete || loading}
+              >
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Submit</Text>}
+              </TouchableOpacity>
+
+              {resendVisible ? (
+                <TouchableOpacity onPress={handleResendOTP} disabled={loading}>
+                  <Text style={styles.resendText}>Didn't get OTP? <Text style={styles.resendLink}>Resend</Text></Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.timerText}>
+                  Didn't get OTP? Resend in <Text style={styles.timerHighlight}>{String(Math.floor(timer / 60)).padStart(2, "0")}:{String(timer % 60).padStart(2, "0")}</Text>
+                </Text>
+              )}
+            </>
           )}
         </View>
       </TouchableWithoutFeedback>
@@ -253,4 +325,49 @@ const styles = StyleSheet.create({
   timerHighlight: { color: "#2288ff", fontFamily: "WorkSans_Regular" },
   resendText: { fontSize: wp("3.5%"), fontFamily: "WorkSans_Regular", color: "#666666", marginTop: hp("2%") },
   resendLink: { color: "#5f5fff", fontFamily: "WorkSans_SemiBold" },
+  // Web-specific styles
+  webContainer: {
+    flex: 1,
+    backgroundColor: "#f8f9fa",
+  },
+  webHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 40,
+    paddingVertical: 20,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  webTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#333',
+    fontFamily: "WorkSans_Bold",
+  },
+  placeholder: {
+    width: 60,
+  },
+  webContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+    paddingVertical: 60,
+  },
+  webImage: {
+    width: 200,
+    height: 150,
+    resizeMode: 'contain',
+    marginBottom: 40,
+  },
+  webSubtitle: {
+    fontSize: 18,
+    fontFamily: "WorkSans_Regular",
+    textAlign: 'center',
+    color: '#656565',
+    marginBottom: 40,
+    lineHeight: 24,
+  },
 });
