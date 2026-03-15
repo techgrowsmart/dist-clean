@@ -1,8 +1,7 @@
-import { getAuthData } from "../../utils/authStorage";
 import { useRouter } from "expo-router";
-import React from "react";
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Dimensions, StyleSheet, View, Image } from "react-native";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, Dimensions, Image, StyleSheet, View } from "react-native";
+import { getAuthData } from "../../utils/authStorage";
 
 export default function SplashScreen() {
     const router = useRouter();
