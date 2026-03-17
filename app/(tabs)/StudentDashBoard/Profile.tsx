@@ -47,6 +47,25 @@ const isWeb = Platform.OS === 'web';
 const isLargeScreen = isWeb && width >= 768;
 const isMobile = !isLargeScreen;
 
+const calculateAge = (dateOfBirth: string): string => {
+  try {
+    const [day, month, year] = dateOfBirth.split('/');
+    const birthDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    
+    return age.toString();
+  } catch (error) {
+    console.error('Error calculating age:', error);
+    return 'N/A';
+  }
+};
+
 export default function Profile() {
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -73,7 +92,7 @@ export default function Profile() {
   const [boards, setBoards] = useState<Array<{boardName: string, boardId?: string}>>([]);
   const DEFAULT_PROFILE_IMAGE = "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png";
   const [modalVisible, setModalVisible] = useState<boolean>(false);
-  const [previewModalVisible, setPreviewModalVisible] = useState(true);
+  const [previewModalVisible, setPreviewModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const navigation = useNavigation();
@@ -1129,6 +1148,114 @@ export default function Profile() {
         )}
         </KeyboardAvoidingView>
       )}
+
+      {/* Preview Modal */}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={previewModalVisible}
+        onRequestClose={() => setPreviewModalVisible(false)}
+      >
+        <SafeAreaView style={styles.previewMainContainer}>
+          <View style={styles.previewTopSection}>
+            <TouchableOpacity 
+              style={styles.crossPreviewButton}
+              onPress={() => setPreviewModalVisible(false)}
+            >
+              <Entypo name="cross" size={24} color="#ffffff" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.editPreviewButton}
+              onPress={() => setPreviewModalVisible(false)}
+            >
+              <FontAwesome6 name="pen" size={16} color="#ffffff" />
+            </TouchableOpacity>
+            
+            <Text style={styles.previewHeaderText}>PROFILE PREVIEW</Text>
+            
+            <Image
+              style={styles.profileImagePreview}
+              source={{ uri: profileImage || DEFAULT_PROFILE_IMAGE }}
+            />
+            <Text style={styles.studentName}>{studentName || "Student Name"}</Text>
+          </View>
+
+          <ScrollView style={styles.previewCardsContainer}>
+            <View style={styles.previewCardRow}>
+              <View style={styles.previewCard}>
+                <BookOpenReaderIcon size={32} color="#5f5fff" />
+                <Text style={styles.previewCardLabel}>Class</Text>
+                <Text style={styles.previewCardValue}>{classYear || "N/A"}</Text>
+              </View>
+              
+              <View style={styles.previewCard}>
+                <SchoolIcon size={32} color="#5f5fff" />
+                <Text style={styles.previewCardLabel}>Board</Text>
+                <Text style={styles.previewCardValueSmall}>{educationBoard || "N/A"}</Text>
+              </View>
+            </View>
+
+            <View style={styles.previewCardRow}>
+              <View style={styles.previewCard}>
+                <CakeIcon size={32} color="#5f5fff" />
+                <Text style={styles.previewCardLabel}>Age</Text>
+                <Text style={styles.previewCardValue}>
+                  {dateOfBirth ? calculateAge(dateOfBirth) : "N/A"}
+                  <Text style={styles.previewCardSuperscript}> yrs</Text>
+                </Text>
+              </View>
+              
+              <View style={styles.previewCard}>
+                <PhoneIcon size={32} color="#5f5fff" />
+                <Text style={styles.previewCardLabel}>Phone</Text>
+                <Text style={styles.previewCardValueSmall}>{phone || "N/A"}</Text>
+              </View>
+            </View>
+
+            <View style={styles.previewFullWidthCard}>
+              <Map size={40} color="#5f5fff" />
+              <View style={styles.previewFullWidthCardText}>
+                <Text style={styles.previewFullWidthCardLabel}>INSTITUTION</Text>
+                <Text style={styles.previewFullWidthCardValue}>{instituteName || "N/A"}</Text>
+              </View>
+            </View>
+
+            <View style={styles.previewFullWidthCard}>
+              <FontAwesome name="envelope" size={24} color="#5f5fff" />
+              <View style={styles.previewFullWidthCardText}>
+                <Text style={styles.previewFullWidthCardLabel}>EMAIL</Text>
+                <Text style={styles.previewFullWidthCardValue}>{email || "N/A"}</Text>
+              </View>
+            </View>
+
+            {(fullAddress || stateName || pincode) && (
+              <View style={styles.previewFullWidthCard}>
+                <Map size={24} color="#5f5fff" />
+                <View style={styles.previewFullWidthCardText}>
+                  <Text style={styles.previewFullWidthCardLabel}>ADDRESS</Text>
+                  <Text style={styles.previewFullWidthCardValue}>
+                    {[
+                      fullAddress,
+                      stateName,
+                      pincode,
+                      country
+                    ].filter(Boolean).join(", ") || "N/A"}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <View style={styles.previewFullWidthCard}>
+              <FontAwesome name="language" size={24} color="#5f5fff" />
+              <View style={styles.previewFullWidthCardText}>
+                <Text style={styles.previewFullWidthCardLabel}>MEDIUM</Text>
+                <Text style={styles.previewFullWidthCardValue}>{preferredMedium || "N/A"}</Text>
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
