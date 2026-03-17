@@ -1,22 +1,40 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ImageBackground, Dimensions, Platform, TextInput, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard } from 'react-native';
-import { useRouter } from 'expo-router';
-import Toast from 'react-native-toast-message';
-import { BASE_URL } from '../../config';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { storeAuthData } from '../../utils/authStorage';
+import {
+    useFonts,
+    Mulish_400Regular,
+    Mulish_500Medium,
+    Mulish_700Bold,
+} from "@expo-google-fonts/mulish";
+import { OpenSans_400Regular, OpenSans_600SemiBold } from "@expo-google-fonts/open-sans";
+import { useRouter } from "expo-router";
+import React, { useState, useEffect } from "react";
+import {
+    Dimensions,
+    Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View
+} from "react-native";
+import {
+    heightPercentageToDP as hp,
+    widthPercentageToDP as wp,
+} from "react-native-responsive-screen";
+import Toast from "react-native-toast-message";
+import { BASE_URL } from "../../config";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { storeAuthData } from "../../utils/authStorage";
 
-const { width, height } = Dimensions.get('window');
+const { width, height } = Dimensions.get("window");
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState("");
   const router = useRouter();
-
-  // Responsive design: split layout for larger screens, centered for mobile
-  const isWeb = Platform.OS === 'web';
-  const isLargeScreen = isWeb && width >= 600; // Lower breakpoint for better responsiveness
-  const isMobile = !isLargeScreen; // Mobile phones
 
   const sendOtp = async () => {
     setEmailError("");
@@ -39,7 +57,16 @@ export default function LoginScreen() {
         body: JSON.stringify({ email }),
       });
 
-      const data = await response.json();
+      const data = await response.json() as {
+        isRegistered?: boolean;
+        message: string;
+        status?: string;
+        otpId?: string;
+        role?: string;
+        token?: string;
+        name?: string;
+        isTestUser?: boolean;
+      };
 
       if (!response.ok) {
         if (data.isRegistered === false) {
@@ -55,10 +82,10 @@ export default function LoginScreen() {
       if (data.isTestUser) {
         console.log(" Test user login detected - bypassing OTP");
         await storeAuthData({
-          role: data.role,
+          role: data.role!,
           email: email,
-          token: data.token,
-          name: data.name
+          token: data.token!,
+          name: data.name!
         });
         
         Toast.show({
@@ -91,10 +118,10 @@ export default function LoginScreen() {
       } else {
         // User is active, store auth data and redirect
         await storeAuthData({
-          role: data.role,
+          role: data.role!,
           email: email,
-          token: data.token,
-          name: data.name
+          token: data.token!,
+          name: data.name!
         });
         
         Toast.show({
@@ -119,84 +146,23 @@ export default function LoginScreen() {
     }
   };
 
-  if (isLargeScreen) {
-    return (
-      <View style={styles.container}>
-        {/* Left Column - Background Image */}
-        <View style={styles.leftColumn}>
-          <ImageBackground
-            source={require('../../assets/images/login-background.jpeg')}
-            style={styles.backgroundImage}
-            resizeMode="cover"
-          />
-        </View>
+  let [fontsLoaded] = useFonts({
+    Mulish_Regular: Mulish_400Regular,
+    Mulish_Medium: Mulish_500Medium,
+    Mulish_Bold: Mulish_700Bold,
+    OpenSans_Regular: OpenSans_400Regular,
+    OpenSans_SemiBold: OpenSans_600SemiBold,
+  });
 
-        {/* Right Column - Content */}
-        <View style={styles.rightColumn}>
-          <View style={styles.content}>
-            {/* Welcome Title */}
-            <Text style={styles.welcomeTitle}>
-              Welcome to the app {'\n'}& let's get started
-            </Text>
+  if (!fontsLoaded) return <Text>Loading...</Text>;
 
-            {/* Description */}
-            <Text style={styles.description}>
-              This app is the best app, thank you for downloading it.{'\n'}You won't regret using it.
-            </Text>
-
-            {/* Email Input */}
-            <Text style={styles.inputLabel}>Login with Email</Text>
-            <TextInput
-              style={[styles.input, emailError ? styles.inputError : null]}
-              placeholder="abcd@xyz.com"
-              placeholderTextColor="#94a3b8"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                if (text.trim()) setEmailError("");
-              }}
-            />
-            {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
-
-            {/* Sign Up Button */}
-            <TouchableOpacity style={styles.signupButton} onPress={() => router.push("/SignUp")}>
-              <Text style={styles.signupButtonText}>Sign up</Text>
-            </TouchableOpacity>
-
-            {/* Login Button */}
-            <TouchableOpacity style={styles.loginButton} onPress={sendOtp}>
-              <Text style={styles.loginButtonText}>Log in</Text>
-            </TouchableOpacity>
-
-            {/* Terms and Conditions */}
-            <Text style={styles.termsText}>
-              By signing up, I agree to the{' '}
-              <Text style={styles.termsLink}>Terms and Conditions{'\n'}and Privacy Policy.</Text>
-            </Text>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  // Mobile fallback
   return (
-    <KeyboardAvoidingView style={styles.mobileContainer} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.mobileContent}>
-          {/* Welcome Title */}
-          <Text style={styles.mobileWelcomeTitle}>
-            Welcome to the app {'\n'}& let's get started
-          </Text>
-
-          {/* Description */}
-          <Text style={styles.mobileDescription}>
-            This app is the best app, thank you for downloading it.{'\n'}You won't regret using it.
-          </Text>
-
-          {/* Email Input */}
+        <View style={styles.innerContainer}>
+          <Image source={require("../../assets/image/Login-screen.png")} style={styles.logo} resizeMode="contain" />
+          <Text style={styles.head}>Log in</Text>
+          
           <Text style={styles.inputLabel}>Login with Email</Text>
           <TextInput
             style={[styles.input, emailError ? styles.inputError : null]}
@@ -212,21 +178,16 @@ export default function LoginScreen() {
           />
           {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
 
-          {/* Sign Up Button */}
-          <TouchableOpacity style={styles.signupButton} onPress={() => router.push("/SignUp")}>
-            <Text style={styles.signupButtonText}>Sign up</Text>
+          <TouchableOpacity style={styles.button} onPress={sendOtp}>
+            <Text style={styles.buttonText}>Login</Text>
           </TouchableOpacity>
 
-          {/* Login Button */}
-          <TouchableOpacity style={styles.loginButton} onPress={sendOtp}>
-            <Text style={styles.loginButtonText}>Log in</Text>
-          </TouchableOpacity>
-
-          {/* Terms and Conditions */}
-          <Text style={styles.mobileTermsText}>
-            By signing up, I agree to the{' '}
-            <Text style={styles.termsLink}>Terms and Conditions{'\n'}and Privacy Policy.</Text>
-          </Text>
+          <View style={styles.signupContainer}>
+            <Text style={styles.signupText}>New around here?</Text>
+            <TouchableOpacity onPress={() => router.push("/SignUp")}>
+              <Text style={styles.signupLink}> Sign Up</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
@@ -234,156 +195,17 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  leftColumn: {
-    width: width * 0.5,
-    backgroundColor: '#F5F5F5',
-  },
-  backgroundImage: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-  },
-  rightColumn: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 60,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 500,
-  },
-  welcomeTitle: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: '#000000',
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 44,
-  },
-  description: {
-    fontSize: 16,
-    color: '#666666',
-    textAlign: 'center',
-    marginBottom: 40,
-    lineHeight: 24,
-    paddingHorizontal: 20,
-  },
-  signupButton: {
-    backgroundColor: '#7C4DDB',
-    paddingVertical: 18,
-    paddingHorizontal: 60,
-    borderRadius: 50,
-    marginBottom: 12,
-    width: '100%',
-    maxWidth: 300,
-    alignItems: 'center',
-  },
-  signupButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  loginButton: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#7C4DDB',
-    paddingVertical: 18,
-    paddingHorizontal: 60,
-    borderRadius: 50,
-    marginBottom: 24,
-    width: '100%',
-    maxWidth: 300,
-    alignItems: 'center',
-  },
-  loginButtonText: {
-    color: '#7C4DDB',
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  termsText: {
-    fontSize: 13,
-    color: '#555555',
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 40,
-  },
-  termsLink: {
-    color: '#555555',
-  },
-  // Mobile styles
-  mobileContainer: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  mobileContent: {
-    width: '100%',
-    maxWidth: 400,
-    alignItems: 'center',
-  },
-  mobileWelcomeTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#000000',
-    textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 36,
-  },
-  mobileDescription: {
-    fontSize: 14,
-    color: '#666666',
-    textAlign: 'center',
-    marginBottom: 30,
-    lineHeight: 20,
-  },
-  mobileTermsText: {
-    fontSize: 13,
-    color: '#555555',
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 20,
-  },
-  // Input styles
-  inputLabel: {
-    alignSelf: 'flex-start',
-    color: '#606060',
-    fontSize: 14,
-    marginBottom: 8,
-    paddingLeft: 5,
-  },
-  input: {
-    width: '100%',
-    height: 50,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    color: '#03070E',
-    marginBottom: 8,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#5d674e',
-  },
-  inputError: {
-    borderColor: 'red',
-    borderWidth: 1,
-  },
-  errorText: {
-    alignSelf: 'flex-start',
-    color: 'red',
-    fontSize: 14,
-    marginBottom: 16,
-  },
+  container: { flex: 1, backgroundColor: "#fff" },
+  innerContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: wp("6%") },
+  head: {color: '#0f0f0f', fontSize: wp("6.8%"), fontFamily: "Mulish_Bold",top: -hp("2%") },
+  logo: { width: wp("200%"), height: hp("35%"), marginBottom: hp("0.1%") },
+  inputLabel: { alignSelf: "flex-start", color: "#606060", fontSize: wp("2.8%"), fontFamily: "Mulish_Regular", marginBottom: hp("1%"), paddingLeft: hp("2%") },
+  input: { width: "100%", height: hp("7%"), backgroundColor: "#fff", borderRadius: wp("2.5%"), paddingHorizontal: wp("4%"), color: "#03070E", marginBottom: hp("1%"), fontSize: wp("3.8%"), fontFamily: "Mulish_Regular", borderWidth: hp("0.16%"), borderColor: "#5d674e" },
+  inputError: { borderColor: "red", borderWidth: 1 },
+  errorText: { alignSelf: "flex-start", color: "red", fontSize: wp("3.2%"), marginBottom: hp("1%"), fontFamily: "Mulish_Regular" },
+  button: { width: "100%", height: hp("6.5%"), backgroundColor: "#5f5fff", borderRadius: wp("2.5%"), justifyContent: "center", alignItems: "center", marginTop: hp("2%") },
+  buttonText: { color: "#fff", fontSize: wp("4%"), fontFamily: "Mulish_Medium" },
+  signupContainer: { flexDirection: "row", alignItems: "center", marginTop: hp("10%") },
+  signupText: { color: "#0f0f0f", fontSize: wp("3.8%"), fontFamily: "OpenSans_Regular" },
+  signupLink: { color: "#4255ff", fontSize: wp("3.8%"), fontFamily: "OpenSans_Regular" },
 });

@@ -1,10 +1,19 @@
 import { BASE_URL } from '../config';
-import { makeAuthenticatedCall } from '../utils/authHelper';
+import { getAuthData } from '../utils/authStorage';
 
 export const addFavoriteTeacher = async (teacherEmail: string) => {
     try {
-        const response = await makeAuthenticatedCall('/api/favorites/add', {
+        const auth = await getAuthData();
+        if (!auth?.token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch(`${BASE_URL}/api/favorites/add`, {
             method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${auth.token}`,
+                'Content-Type': 'application/json',
+            },
             body: JSON.stringify({ teacherEmail })
         });
 
@@ -25,8 +34,17 @@ export const addFavoriteTeacher = async (teacherEmail: string) => {
 
 export const removeFavoriteTeacher = async (teacherEmail: string) => {
     try {
-        const response = await makeAuthenticatedCall('/api/favorites/remove', {
+        const auth = await getAuthData();
+        if (!auth?.token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch(`${BASE_URL}/api/favorites/remove`, {
             method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${auth.token}`,
+                'Content-Type': 'application/json',
+            },
             body: JSON.stringify({ teacherEmail })
         });
 
@@ -43,7 +61,17 @@ export const removeFavoriteTeacher = async (teacherEmail: string) => {
 
 export const getFavoriteTeachers = async () => {
     try {
-        const response = await makeAuthenticatedCall('/api/favorites/list');
+        const auth = await getAuthData();
+        if (!auth?.token) {
+            throw new Error('Authentication required');
+        }
+
+        const response = await fetch(`${BASE_URL}/api/favorites/list`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${auth.token}`,
+            }
+        });
 
         const data = await response.json();
         if (!response.ok) {
@@ -60,7 +88,17 @@ export const getFavoriteTeachers = async () => {
 
 export const checkFavoriteStatus = async (teacherEmail: string) => {
     try {
-        const response = await makeAuthenticatedCall(`/api/favorites/check/${teacherEmail}`);
+        const auth = await getAuthData();
+        if (!auth?.token) {
+            return false;
+        }
+
+        const response = await fetch(`${BASE_URL}/api/favorites/check/${teacherEmail}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${auth.token}`,
+            }
+        });
 
         const data = await response.json();
         if (!response.ok) {
