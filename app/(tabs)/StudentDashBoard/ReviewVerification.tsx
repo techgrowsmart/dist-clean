@@ -1,107 +1,143 @@
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import React from 'react';
-import { Ionicons } from '@expo/vector-icons';
-import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
-import { isTablet } from "../../../utils/devices";
-import { router } from 'expo-router';
-import ChatReadIcon from '../../../assets/svgIcons/ChatReadIcon';
-import { Poppins_400Regular, useFonts } from '@expo-google-fonts/poppins';
-import { RedHatDisplay_500Medium,RedHatDisplay_400Regular } from '@expo-google-fonts/red-hat-display';
+import {
+  RedHatDisplay_400Regular,
+  RedHatDisplay_500Medium,
+  useFonts,
+} from "@expo-google-fonts/red-hat-display";
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import React from "react";
+import {
+  Dimensions,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import Svg, { Circle, Path, Rect } from "react-native-svg";
+
+const { width } = Dimensions.get("window");
+
+const ChatCheckIcon = () => (
+  <Svg width={64} height={64} viewBox="0 0 64 64" fill="none">
+    <Rect x="4" y="6" width="44" height="36" rx="6" fill="white" />
+    <Path d="M14 42L4 52V42" fill="white" />
+    <Circle
+      cx="46"
+      cy="40"
+      r="12"
+      fill="white"
+      stroke="#8DC63F"
+      strokeWidth="2"
+    />
+    <Path
+      d="M40 40l4 4 7-7"
+      stroke="#8DC63F"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
 
 const ReviewVerification = () => {
-    let[fontsLoaded] = useFonts({
-        Poppins_400Regular,
-        RedHatDisplay_500Medium,
-        RedHatDisplay_400Regular
-    })
+  const [fontsLoaded] = useFonts({
+    RedHatDisplay_500Medium,
+    RedHatDisplay_400Regular,
+  });
+
+  if (!fontsLoaded) return null;
+
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Review Me</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.closeIcon}>
-          <Ionicons name="close" size={24} color="#fff" />
-        </TouchableOpacity>
-      </View>
+    <Modal transparent animationType="fade" visible={true}>
+      <View style={styles.overlay}>
+        <View style={styles.card}>
+          {/* Close Button */}
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={() => router.back()}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close" size={22} color="#fff" />
+          </TouchableOpacity>
 
-      {/* Content */}
-      <View style={styles.contentWrapper}>
-        <View style={styles.iconWrapper}>
-          <ChatReadIcon width={wp('12%')} height={wp('12%')} />
+          {/* Icon */}
+          <View style={styles.iconWrapper}>
+            <ChatCheckIcon />
+          </View>
+
+          {/* Message */}
+          <Text style={styles.messageText}>
+            Thank you for your review!{"\n"}
+            Your review is being currently verified.{"\n"}
+            It will appear on a company profile{"\n"}
+            within a few minutes.
+          </Text>
+
+          {/* Back Home Button */}
+          <TouchableOpacity
+            style={styles.backHomeBtn}
+            onPress={() => router.replace("/(tabs)/StudentDashBoard/Student")}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.backHomeText}>Back home</Text>
+          </TouchableOpacity>
         </View>
-
-        <Text style={styles.messageText}>
-          Thank you for your review! Your review is currently being verified. It will appear on the company profile within a few minutes.
-        </Text>
-
-        <TouchableOpacity style={styles.backHomeBtn} onPress={() => router.replace('/(tabs)/StudentDashBoard/Student')}>
-          <Text style={styles.backHomeText}>Back Home</Text>
-        </TouchableOpacity>
       </View>
-    </View>
+    </Modal>
   );
 };
 
 export default ReviewVerification;
+
 const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: '#fff',
-    },
-    header: {
-      height: hp('11%'),
-      backgroundColor: '#5f5fff',
-      justifyContent: 'center',
-      alignItems: 'center',
-      position: 'relative',
-      borderBottomWidth: 1,
-      borderBottomColor: '#ddd',
-    },
-    headerTitle: {
-      marginTop: hp('2.5%'),
-      fontSize: isTablet ? wp('4.5%') : wp('5.3%'),
-      lineHeight: hp('3.2%'),
-      color: '#fff',
-      fontFamily: 'Poppins_400Regular',
-    },
-    closeIcon: {
-      position: 'absolute',
-      right: wp('5.3%'),
-      top: hp('3.8%'),
-    },
-    contentWrapper: {
-      flex: 1,
-      backgroundColor: '#5f5fff',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: wp('5%'),
-    },
-    iconWrapper: {
-      marginBottom: hp('2.5%'),
-    },
-    messageText: {
-      textAlign: 'center',
-      fontSize: isTablet ? wp('3.7%') : wp('4.2%'),
-      color: '#fff',
-      marginBottom: hp('4%'),
-      fontFamily: 'RedHatDisplay_400Regular',
-      lineHeight: hp('3.2%'),
-    },
-    backHomeBtn: {
-      width: wp('44%'),
-      height: hp('5.381%'),
-      backgroundColor: "#ffffff",
-      paddingHorizontal: wp('2.13%'),
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: wp("6.66%"),
-    },
-    backHomeText: {
-      fontSize: isTablet ? wp('3.4%') : wp('3.733%'),
-      lineHeight: hp('2.422%'),
-      color: '#000000',
-      fontWeight: '600',
-      fontFamily:"RedHatDisplay_500Medium"
-    },
-  });
-  
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  card: {
+    backgroundColor: "#8DC63F",
+    borderRadius: 18,
+    width: "100%",
+    maxWidth: 420,
+    paddingTop: 40,
+    paddingBottom: 36,
+    paddingHorizontal: 28,
+    alignItems: "center",
+    position: "relative",
+  },
+  closeButton: {
+    position: "absolute",
+    top: 14,
+    right: 16,
+    padding: 4,
+  },
+  iconWrapper: {
+    marginBottom: 20,
+  },
+  messageText: {
+    textAlign: "center",
+    color: "#fff",
+    fontSize: 16,
+    lineHeight: 26,
+    marginBottom: 28,
+    fontFamily: "RedHatDisplay_400Regular",
+  },
+  backHomeBtn: {
+    backgroundColor: "#ffffff",
+    borderRadius: 999,
+    paddingVertical: 12,
+    paddingHorizontal: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  backHomeText: {
+    color: "#111111",
+    fontSize: 15,
+    fontWeight: "600",
+    fontFamily: "RedHatDisplay_500Medium",
+  },
+});
