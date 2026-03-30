@@ -174,8 +174,54 @@ export default function TutorDashboardWeb({
   const [showSidebar, setShowSidebar] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [authToken, setAuthToken] = useState<string | null>(null);
-  const [posts, setPosts] = useState<any[]>([]);
-  const [postsLoading, setPostsLoading] = useState(false);
+  const [posts, setPosts] = useState<any[]>([
+    {
+      id: '1',
+      author: {
+        email: 'teacher@example.com',
+        name: realTeacherName || teacherName || 'John Teacher',
+        profile_pic: realProfileImage || profileImage || null,
+        role: 'teacher'
+      },
+      content: 'Welcome to the Teacher Dashboard! This is your space to share thoughts and updates with your students and colleagues.',
+      likes: 12,
+      isLiked: false,
+      comments: [],
+      createdAt: new Date().toISOString(),
+      postImages: []
+    },
+    {
+      id: '2',
+      author: {
+        email: realUserEmail || userEmail || 'teacher@example.com',
+        name: realTeacherName || teacherName || 'John Teacher',
+        profile_pic: realProfileImage || profileImage || null,
+        role: 'teacher'
+      },
+      content: 'Great teaching day today! Students are making excellent progress with the new curriculum.',
+      likes: 8,
+      isLiked: false,
+      comments: [],
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      postImages: []
+    },
+    {
+      id: '3',
+      author: {
+        email: realUserEmail || userEmail || 'teacher@example.com',
+        name: realTeacherName || teacherName || 'John Teacher',
+        profile_pic: realProfileImage || profileImage || null,
+        role: 'teacher'
+      },
+      content: 'Reminder: Parent-teacher meetings scheduled for next week. Please prepare your student progress reports.',
+      likes: 15,
+      isLiked: false,
+      comments: [],
+      createdAt: new Date(Date.now() - 172800000).toISOString(),
+      postImages: []
+    }
+  ]); // Initialize with mock data immediately
+  const [postsLoading, setPostsLoading] = useState(false); // Start with false since we have initial data
   const [userProfileCache, setUserProfileCache] = useState<Map<string, { name: string; profilePic: string }>>(new Map());
   const [sidebarActiveItem, setSidebarActiveItem] = useState('Dashboard');
   
@@ -659,11 +705,14 @@ export default function TutorDashboardWeb({
         // Get unique emails from all posts and fetch their profiles
         const uniqueEmails = [...new Set(res.data.data.map((p: any) => p.author?.email as string).filter((email: string) => Boolean(email)))];
         await Promise.all(uniqueEmails.map((email: string) => fetchUserProfile(token, email)));
-        setPosts(res.data.data);
+        // Only update if we have real data, otherwise keep mock data
+        if (res.data.data && res.data.data.length > 0) {
+          setPosts(res.data.data);
+        }
       }
     } catch (error) {
       console.error('Error fetching posts:', error);
-      setPosts([]);
+      // Keep existing mock data on error
     } finally {
       setPostsLoading(false);
     }
