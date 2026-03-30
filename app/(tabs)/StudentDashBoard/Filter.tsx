@@ -3,6 +3,7 @@ import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, Dimensions
 import { useRouter } from "expo-router";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
 import BackButton from "../../../components/BackButton";
+import { safeBack } from "../../../utils/navigation";
 
 const { width } = Dimensions.get("window");
 
@@ -39,7 +40,7 @@ const Filter = () => {
         <View style={styles.container}>
             {/* Top Navigation Bar */}
             <View style={styles.topBar}>
-                <BackButton size={24} color="#000" onPress={() => router.back()} />
+                <BackButton size={24} color="#000" onPress={() => safeBack(router)} />
                 <Text style={styles.title}>Filter</Text>
                 <View style={{ width: 30 }} />
             </View>
@@ -160,7 +161,7 @@ const Filter = () => {
 
                     <TouchableOpacity
                         style={[styles.filterButton, styles.applyButton]}
-                        onPress={() => router.back()}
+                        onPress={() => safeBack(router)}
                     >
                         <Text style={[styles.filterButtonText, styles.applyButtonText]}>Apply</Text>
                     </TouchableOpacity>

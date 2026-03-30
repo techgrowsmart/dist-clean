@@ -84,3 +84,7 @@ yarn-error.*
 
 # @end expo-cli*.aab
 *.apk
+.vercel
+
+# Local Netlify folder
+.netlify

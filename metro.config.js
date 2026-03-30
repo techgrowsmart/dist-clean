@@ -14,6 +14,8 @@ module.exports = (async () => {
         ...config.resolver.alias,
         // Redirect expo-notifications to our conditional import on web
         'expo-notifications': require.resolve('./utils/notifications.js'),
+        // Allow importing from growsmart-ui-screens
+        '@ui-screens': '../growsmart-ui-screens/screens',
       },
       platformExtensions: ['ios', 'android', 'native', 'web', 'js', 'ts', 'tsx', 'jsx', 'json'],
     },

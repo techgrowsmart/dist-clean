@@ -48,7 +48,7 @@ const ContactsScreen: React.FC<ContactsScreenProps> = ({ contacts, onSelectConta
                 <Image source={require('../../../assets/images/Search.png')} style={styles.searchIcon} />
                 <TextInput
                     style={styles.searchInput}
-                    placeholder="Search Mernrjntors"
+                    placeholder="Search Mentors"
                     placeholderTextColor="#888"
                     value={searchQuery}
                     onChangeText={setSearchQuery}

@@ -1,9 +1,11 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Platform, useWindowDimensions } from 'react-native';
+import { useRouter } from 'expo-router';
 
 export default function LoginScreen() {
   const { width } = useWindowDimensions();
   const isLargeScreen = Platform.OS === 'web' && width >= 768;
+  const router = useRouter();
 
   return (
     <View style={styles.container}>
@@ -19,11 +21,11 @@ export default function LoginScreen() {
 
           <Text style={styles.descriptionText}>This app is the best app, thank you for downloading it.{'\n'}You won't regret using it.</Text>
 
-          <TouchableOpacity style={styles.signupButton}>
+          <TouchableOpacity style={styles.signupButton} onPress={() => router.push('/SignUp')}>
             <Text style={styles.signupButtonText}>Sign up</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.loginButton}>
+          <TouchableOpacity style={styles.loginButton} onPress={() => router.push('/Login')}>
             <Text style={styles.loginButtonText}>Log in</Text>
           </TouchableOpacity>
 

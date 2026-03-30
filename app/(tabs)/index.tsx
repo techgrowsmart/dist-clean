@@ -18,10 +18,10 @@ export default function SplashScreen() {
                     console.log("User is logged in as:", authData.role);
                     
                     if (authData.role === "teacher") {
-                        router.replace("/(tabs)/TeacherDashBoard/Teacher");
+                        router.replace("/(tabs)/TeacherDashBoard");
                     } else {
                       
-                        router.replace("/(tabs)/StudentDashBoard/Student");
+                        router.replace("/(tabs)/StudentDashBoard");
                     }
                 } else {
                     console.log("User is not logged in");

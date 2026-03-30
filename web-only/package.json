@@ -1,0 +1,22 @@
+{
+  "name": "gogrowsmart-web-only",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start --web",
+    "build": "expo export --platform web",
+    "serve": "npx serve dist"
+  },
+  "dependencies": {
+    "expo": "~53.0.27",
+    "expo-router": "~5.1.11",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "react-native": "0.79.6",
+    "react-native-web": "~0.20.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^25.2.2",
+    "@expo/webpack-config": "^19.0.1"
+  }
+}

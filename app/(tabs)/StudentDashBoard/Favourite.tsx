@@ -501,7 +501,7 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
             });
           }
           if (itemName === "My Tutions") {
-            // Handle My Tutions navigation if needed
+            router.push("/(tabs)/StudentDashBoard/ConnectWeb");
           }
           if (itemName === "Faq") router.push("/(tabs)/StudentDashBoard/Faq");
           if (itemName === "Share") {

@@ -66,7 +66,7 @@ interface RatingsCount {
   5: number;
 }
 
-const LeftScreen: React.FC = () => {
+const LeftScreen: React.FC<{ leftFont?: string }> = ({ leftFont }) => {
   const navigation = useNavigation();
   const [fontsLoaded] = useFonts({
     'Quicksand-Regular': require('@expo-google-fonts/quicksand').Quicksand_400Regular,
@@ -308,7 +308,7 @@ const LeftScreen: React.FC = () => {
       >
         {/* Header with Back Button */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>My Reviews</Text>
+          <Text style={[styles.headerTitle, { fontFamily: leftFont || styles.headerTitle.fontFamily }]}>My Reviews</Text>
           <View style={styles.headerRightPlaceholder} />
         </View>
 
@@ -341,7 +341,7 @@ const LeftScreen: React.FC = () => {
                 onError={(e) => console.log('Error loading profile image:', e.nativeEvent.error)} 
               />
             </View>
-            <Text style={styles.teacherName} numberOfLines={1}>
+            <Text style={[styles.teacherName, { fontFamily: leftFont || styles.teacherName.fontFamily }]} numberOfLines={1}>
               {teacherData?.name || 'Teacher Name'}
             </Text>
             {teacherData?.category && (

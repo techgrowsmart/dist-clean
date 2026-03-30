@@ -13,6 +13,7 @@ import RazorpayCheckout from "react-native-razorpay";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import { isTablet } from "../../../utils/devices";
 import {Prompt_400Regular, useFonts} from '@expo-google-fonts/prompt'
+import { safeBack } from "../../../utils/navigation";
 export default function Payment() {
   let [fontsLoaded]=useFonts({
     Prompt_400Regular
@@ -149,7 +150,7 @@ const initiatePayment = async () => {
     <View style={styles.container}>
     {/* Top Bar */}
     <View style={styles.topBar}>
-      <TouchableOpacity onPress={() => router.back()}>
+      <TouchableOpacity onPress={() => safeBack(router)}>
         <ArrowBack size={wp(isTablet?'5%':'8%')} />
       </TouchableOpacity>
       <Text style={styles.title}>Spotlight Review</Text>

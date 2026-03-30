@@ -13,6 +13,7 @@ import {
   ActivityIndicator
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from 'expo-router';
 const { height, width } = Dimensions.get("window");
 import {
   widthPercentageToDP as wp,
@@ -22,11 +23,17 @@ import { Poppins_400Regular, Poppins_600SemiBold, useFonts } from '@expo-google-
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_URL } from '../../../config';
 import { getAuthData } from '../../../utils/authStorage';
+import TeacherWebHeader from '../../../components/ui/TeacherWebHeader';
+import TeacherWebSidebar from '../../../components/ui/TeacherWebSidebar';
 
 const Settings = () => {
   const [isChecked, setIsChecked] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [teacherName, setTeacherName] = useState('');
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [sidebarActiveItem, setSidebarActiveItem] = useState('Settings');
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [bankDetails, setBankDetails] = useState({
     accountNumber: "",
     ifscCode: "",
@@ -41,6 +48,57 @@ const Settings = () => {
     pan: "",
     accountHolderName: ""
   });
+
+  // Load teacher data for web header and sidebar
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const loadTeacherData = async () => {
+        try {
+          const authData = await getAuthData();
+          if (authData?.name) {
+            setTeacherName(authData.name);
+          }
+          if (authData?.profileImage) {
+            setProfileImage(authData.profileImage);
+          }
+          if (authData?.email) {
+            setUserEmail(authData.email);
+          }
+        } catch (error) {
+          console.error('Error loading teacher data:', error);
+        }
+      };
+      loadTeacherData();
+    }
+  }, []);
+
+  // Handle sidebar navigation
+  const handleSidebarSelect = (item: string) => {
+    setSidebarActiveItem(item);
+    // Handle navigation for sidebar items
+    switch (item) {
+      case 'Dashboard':
+        router.push('/(tabs)/TeacherDashBoard/TutorDashboardWeb');
+        break;
+      case 'subjects':
+        router.push('/(tabs)/TeacherDashBoard/SubjectsListWeb');
+        break;
+      case 'students':
+        router.push('/(tabs)/TeacherDashBoard/StudentsEnrolled');
+        break;
+      case 'joinedDate':
+        router.push('/(tabs)/TeacherDashBoard/JoinedDateWeb');
+        break;
+      case 'Create Subject':
+        router.push('/(tabs)/TeacherDashBoard/CreateSubject');
+        break;
+      case 'Settings':
+        // Already on this page
+        break;
+      default:
+        console.log('Navigate to:', item);
+    }
+  };
 
   let [fontsLoaded] = useFonts({ 
     Poppins_400Regular,
@@ -174,168 +232,335 @@ const Settings = () => {
   }
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-    >
-      <ScrollView 
-        contentContainerStyle={styles.scrollContainer} 
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        showsVerticalScrollIndicator={false}
-        contentInsetAdjustmentBehavior="automatic"
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>User Settings</Text>
-          <Text style={styles.info}>Update your preferences in User Settings anytime</Text>
+    // Web Layout - Only show on web
+    Platform.OS === 'web' ? (
+      <View style={styles.webLayout}>
+        {/* Web Header */}
+        <TeacherWebHeader 
+          teacherName={teacherName}
+          profileImage={profileImage}
+          showSearch={true}
+        />
+        
+        {/* Main Content with Sidebar */}
+        <View style={styles.webContent}>
+          {/* Sidebar */}
+          <TeacherWebSidebar 
+            teacherName={teacherName}
+            profileImage={profileImage}
+            activeItem={sidebarActiveItem}
+            onItemPress={handleSidebarSelect}
+            userEmail={userEmail}
+            subjectCount={0}
+            studentCount={0}
+            revenue="₹2.1K"
+            isSpotlight={false}
+          />
+          
+          {/* Main Content Area */}
+          <View style={styles.webMainContent}>
+            <ScrollView 
+              contentContainerStyle={styles.scrollContainer} 
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator={false}
+              contentInsetAdjustmentBehavior="automatic"
+            >
+              {/* Mobile Header - Only show on non-web platforms */}
+              {Platform.OS !== 'web' && (
+                <View style={styles.header}>
+                  <Text style={styles.title}>User Settings</Text>
+                  <Text style={styles.info}>Update your preferences in User Settings anytime</Text>
+                </View>
+              )}
+
+              <View style={styles.divider} />
+
+              {/* Form */}
+              <View style={styles.content}>
+                <View style={styles.personalInfo}>
+                  <Text style={styles.label}>Personal Info</Text>
+                  <View style={styles.inputFields}>
+                    <TextInput 
+                      placeholder="First Name" 
+                      style={styles.input} 
+                      value={formData.accountHolderName.split(' ')[0] || ''}
+                      onChangeText={(text) => {
+                        const names = formData.accountHolderName.split(' ');
+                        names[0] = text;
+                        handleInputChange('accountHolderName', names.join(' '));
+                      }}
+                      editable={isEditing}
+                      placeholderTextColor="#3d3d3d" 
+                    />
+                    <TextInput 
+                      placeholder="Last Name" 
+                      style={styles.input} 
+                      value={formData.accountHolderName.split(' ').slice(1).join(' ') || ''}
+                      onChangeText={(text) => {
+                        const names = formData.accountHolderName.split(' ');
+                        names[1] = text;
+                        handleInputChange('accountHolderName', names.join(' ').trim());
+                      }}
+                      editable={isEditing}
+                      placeholderTextColor="#3d3d3d" 
+                    />
+                  </View>
+                  <TouchableOpacity style={styles.countryBtn}>
+                    <Text style={styles.btnTxt}>India</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.divider} />
+
+                <View style={styles.mainContent}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.mainContentTitle}>Account details</Text>
+                    <TouchableOpacity 
+                      style={styles.editIcon}
+                      onPress={() => setIsEditing(!isEditing)}
+                    >
+                      <Ionicons 
+                        name={isEditing ? "close" : "create-outline"} 
+                        size={wp('4.5%')} 
+                        color={isEditing ? "#c30707" : "#5f5fff"} 
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.inputs}>
+                    <TextInput 
+                      placeholder="Bank Name" 
+                      style={styles.input} 
+                      value={formData.bankName}
+                      onChangeText={(text) => handleInputChange('bankName', text)}
+                      editable={isEditing}
+                      placeholderTextColor="#3d3d3d" 
+                    />
+                    <TextInput 
+                      placeholder="Account Number" 
+                      style={styles.input} 
+                      value={formData.accountNumber}
+                      onChangeText={(text) => handleInputChange('accountNumber', text)}
+                      editable={isEditing}
+                      placeholderTextColor="#3d3d3d" 
+                      keyboardType="numeric"
+                    />
+                    <TextInput 
+                      placeholder="IFSC Code" 
+                      style={styles.input} 
+                      value={formData.ifscCode}
+                      onChangeText={(text) => handleInputChange('ifscCode', text)}
+                      editable={isEditing}
+                      placeholderTextColor="#3d3d3d" 
+                      autoCapitalize="characters"
+                    />
+                    <TextInput 
+                      placeholder="PAN Number" 
+                      style={styles.input} 
+                      value={formData.pan}
+                      onChangeText={(text) => handleInputChange('pan', text)}
+                      editable={isEditing}
+                      placeholderTextColor="#3d3d3d" 
+                      autoCapitalize="characters"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.divider} />
+
+                <View style={styles.notificationSection}>
+                  <Text style={styles.mainContentTitle}>Notification Settings</Text>
+                  <View style={styles.notificationItem}>
+                    <Text style={styles.notificationText}>Email Notifications</Text>
+                    <TouchableOpacity 
+                      style={[styles.checkbox, isChecked && styles.checkboxChecked]}
+                      onPress={() => setIsChecked(!isChecked)}
+                    >
+                      {isChecked && <Ionicons name="checkmark" size={16} color="#fff" />}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Action Buttons */}
+                {isEditing && (
+                  <View style={styles.actionButtons}>
+                    <TouchableOpacity 
+                      style={[styles.actionBtn, styles.cancelBtn]} 
+                      onPress={handleCancel}
+                    >
+                      <Text style={styles.cancelBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.actionBtn, styles.saveBtn]} 
+                      onPress={handleUpdate}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.saveBtnText}>Save Changes</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+          </View>
         </View>
-
-        <View style={styles.divider} />
-
-        {/* Form */}
-        <View style={styles.content}>
-          <View style={styles.personalInfo}>
-            <Text style={styles.label}>Personal Info</Text>
-            <View style={styles.inputFields}>
-              <TextInput 
-                placeholder="First Name" 
-                style={styles.input} 
-                value={formData.accountHolderName.split(' ')[0] || ''}
-                onChangeText={(text) => {
-                  const names = formData.accountHolderName.split(' ');
-                  names[0] = text;
-                  handleInputChange('accountHolderName', names.join(' '));
-                }}
-                editable={isEditing}
-                placeholderTextColor="#3d3d3d" 
-              />
-              <TextInput 
-                placeholder="Last Name" 
-                style={styles.input} 
-                value={formData.accountHolderName.split(' ').slice(1).join(' ') || ''}
-                onChangeText={(text) => {
-                  const names = formData.accountHolderName.split(' ');
-                  names[1] = text;
-                  handleInputChange('accountHolderName', names.join(' ').trim());
-                }}
-                editable={isEditing}
-                placeholderTextColor="#3d3d3d" 
-              />
-            </View>
-            <TouchableOpacity style={styles.countryBtn}>
-              <Text style={styles.btnTxt}>India</Text>
-            </TouchableOpacity>
+      </View>
+    ) : (
+      // Mobile Layout
+      <KeyboardAvoidingView 
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+      >
+        <ScrollView 
+          contentContainerStyle={styles.scrollContainer} 
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+          contentInsetAdjustmentBehavior="automatic"
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.title}>User Settings</Text>
+            <Text style={styles.info}>Update your preferences in User Settings anytime</Text>
           </View>
 
           <View style={styles.divider} />
 
-          <View style={styles.mainContent}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.mainContentTitle}>Account details</Text>
-              <TouchableOpacity 
-                style={styles.editIcon}
-                onPress={() => setIsEditing(!isEditing)}
-              >
-                <Ionicons 
-                  name={isEditing ? "close" : "create-outline"} 
-                  size={wp('4.5%')} 
-                  color={isEditing ? "#c30707" : "#5f5fff"} 
+          {/* Form */}
+          <View style={styles.content}>
+            <View style={styles.personalInfo}>
+              <Text style={styles.label}>Personal Info</Text>
+              <View style={styles.inputFields}>
+                <TextInput 
+                  placeholder="First Name" 
+                  style={styles.input} 
+                  value={formData.accountHolderName.split(' ')[0] || ''}
+                  onChangeText={(text) => {
+                    const names = formData.accountHolderName.split(' ');
+                    names[0] = text;
+                    handleInputChange('accountHolderName', names.join(' '));
+                  }}
+                  editable={isEditing}
+                  placeholderTextColor="#3d3d3d" 
                 />
+                <TextInput 
+                  placeholder="Last Name" 
+                  style={styles.input} 
+                  value={formData.accountHolderName.split(' ').slice(1).join(' ') || ''}
+                  onChangeText={(text) => {
+                    const names = formData.accountHolderName.split(' ');
+                    names[1] = text;
+                    handleInputChange('accountHolderName', names.join(' ').trim());
+                  }}
+                  editable={isEditing}
+                  placeholderTextColor="#3d3d3d" 
+                />
+              </View>
+              <TouchableOpacity style={styles.countryBtn}>
+                <Text style={styles.btnTxt}>India</Text>
               </TouchableOpacity>
             </View>
-            <View style={styles.inputs}>
-              <TextInput 
-                placeholder="Account Number" 
-                placeholderTextColor="#94a3b8" 
-                style={styles.contentInput} 
-                value={isEditing ? formData.accountNumber : bankDetails.accountNumber}
-                onChangeText={(value) => handleInputChange('accountNumber', value)}
-                editable={isEditing}
-              />
-              <TextInput 
-                placeholder="Bank Name" 
-                placeholderTextColor="#94a3b8" 
-                style={styles.contentInput} 
-                value={isEditing ? formData.bankName : bankDetails.bankName}
-                onChangeText={(value) => handleInputChange('bankName', value)}
-                editable={isEditing}
-              />
-              <TextInput 
-                placeholder="IFSC Code" 
-                placeholderTextColor="#94a3b8" 
-                style={styles.contentInput} 
-                value={isEditing ? formData.ifscCode : bankDetails.ifscCode}
-                onChangeText={(value) => handleInputChange('ifscCode', value)}
-                editable={isEditing}
-              />
-              <TextInput 
-                placeholder="PAN Card Number" 
-                placeholderTextColor="#94a3b8" 
-                style={styles.contentInput} 
-                value={isEditing ? formData.pan : bankDetails.pan}
-                onChangeText={(value) => handleInputChange('pan', value)}
-                editable={isEditing}
-              />
+
+            <View style={styles.divider} />
+
+            <View style={styles.mainContent}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.mainContentTitle}>Account details</Text>
+                <TouchableOpacity 
+                  style={styles.editIcon}
+                  onPress={() => setIsEditing(!isEditing)}
+                >
+                  <Ionicons 
+                    name={isEditing ? "close" : "create-outline"} 
+                    size={wp('4.5%')} 
+                    color={isEditing ? "#c30707" : "#5f5fff"} 
+                  />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.inputs}>
+                <TextInput 
+                  placeholder="Bank Name" 
+                  style={styles.input} 
+                  value={formData.bankName}
+                  onChangeText={(text) => handleInputChange('bankName', text)}
+                  editable={isEditing}
+                  placeholderTextColor="#3d3d3d" 
+                />
+                <TextInput 
+                  placeholder="Account Number" 
+                  style={styles.input} 
+                  value={formData.accountNumber}
+                  onChangeText={(text) => handleInputChange('accountNumber', text)}
+                  editable={isEditing}
+                  placeholderTextColor="#3d3d3d" 
+                  keyboardType="numeric"
+                />
+                <TextInput 
+                  placeholder="IFSC Code" 
+                  style={styles.input} 
+                  value={formData.ifscCode}
+                  onChangeText={(text) => handleInputChange('ifscCode', text)}
+                  editable={isEditing}
+                  placeholderTextColor="#3d3d3d" 
+                  autoCapitalize="characters"
+                />
+                <TextInput 
+                  placeholder="PAN Number" 
+                  style={styles.input} 
+                  value={formData.pan}
+                  onChangeText={(text) => handleInputChange('pan', text)}
+                  editable={isEditing}
+                  placeholderTextColor="#3d3d3d" 
+                  autoCapitalize="characters"
+                />
+              </View>
             </View>
-          </View>
 
-          {isEditing && (
-            <>
-              <View style={styles.divider} />
+            <View style={styles.divider} />
 
-              {/* Save & Cancel Buttons */}
+            <View style={styles.notificationSection}>
+              <Text style={styles.mainContentTitle}>Notification Settings</Text>
+              <View style={styles.notificationItem}>
+                <Text style={styles.notificationText}>Email Notifications</Text>
+                <TouchableOpacity 
+                  style={[styles.checkbox, isChecked && styles.checkboxChecked]}
+                  onPress={() => setIsChecked(!isChecked)}
+                >
+                  {isChecked && <Ionicons name="checkmark" size={16} color="#fff" />}
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Action Buttons */}
+            {isEditing && (
               <View style={styles.actionButtons}>
                 <TouchableOpacity 
-                  style={styles.saveBtn}
+                  style={[styles.actionBtn, styles.cancelBtn]} 
+                  onPress={handleCancel}
+                >
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.actionBtn, styles.saveBtn]} 
                   onPress={handleUpdate}
                   disabled={isLoading}
                 >
                   {isLoading ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={styles.btnTxt}>Update</Text>
+                    <Text style={styles.saveBtnText}>Save Changes</Text>
                   )}
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.cancelBtn}
-                  onPress={handleCancel}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.cancelBtnTxt}>Cancel</Text>
-                </TouchableOpacity>
               </View>
-            </>
-          )}
-
-          <View style={styles.divider} />
-
-          {/* Security Section */}
-          <View style={styles.security}>
-            <Text style={styles.securityTitle}>Security</Text>
-            <View style={styles.checkboxContainer}>
-              <Text style={styles.checkboxLabel}>Delete my profile</Text>
-              <TouchableOpacity 
-                style={styles.checkbox} 
-                onPress={() => setIsChecked(!isChecked)}
-              >
-                {isChecked && <Ionicons name="checkmark" size={wp('3.2%')} color="#000" />}
-              </TouchableOpacity>
-            </View>
+            )}
           </View>
-
-          <View style={styles.divider} />
-
-          {/* Delete Button */}
-          <View style={styles.deleteContainer}>
-            <TouchableOpacity style={styles.deleteBtn}>
-              <Text style={styles.deleteText}>Delete</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    )
   );
 };
 
@@ -347,11 +572,24 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
     paddingTop: Platform.OS === 'ios' ? hp('2%') : 0
   },
+  // Web-specific styles
+  webLayout: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  webContent: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  webMainContent: {
+    flex: 1,
+    backgroundColor: '#FFF',
+  },
   scrollContainer: { 
-    flexGrow: 1,
-    paddingBottom: hp('15%'),
-    paddingHorizontal: wp('5%'),
-    paddingTop: hp('2%')
+    flexGrow: 1, 
+    paddingBottom: hp('5%'), 
+    paddingHorizontal: wp('5%'), 
+    paddingTop: hp('2%') 
   },
   loadingContainer: {
     justifyContent: 'center',
@@ -541,5 +779,33 @@ const styles = StyleSheet.create({
     fontSize: wp('3.8%'), 
     color: "#c30707", 
     fontFamily: "Poppins_600SemiBold" 
+  },
+  // Notification and action button styles
+  notificationSection: {
+    marginVertical: hp('2%'),
+  },
+  notificationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: hp('1%'),
+  },
+  notificationText: {
+    fontSize: wp('3.8%'),
+    fontFamily: 'Poppins_400Regular',
+    color: '#000',
+  },
+  checkboxChecked: {
+    backgroundColor: '#3164f4',
+  },
+  cancelBtnText: {
+    fontSize: wp('3.8%'),
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#000',
+  },
+  saveBtnText: {
+    fontSize: wp('3.8%'),
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#fff',
   },
 });

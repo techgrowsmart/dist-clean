@@ -1,0 +1,7 @@
+{
+  "name": "gogrowsmart-mobile",
+  "buildCommand": "npx expo export",
+  "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "devCommand": "npm run web"
+}

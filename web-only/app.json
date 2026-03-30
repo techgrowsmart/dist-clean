@@ -1,0 +1,89 @@
+{
+  "expo": {
+    "name": "GROWSMART",
+    "slug": "client",
+    "version": "2.0.10",
+    "orientation": "portrait",
+    "icon": "./assets/images/growsmart-icon.png",
+    "scheme": "gogrowsmart",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": false,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gogrowsmart.app.mobile",
+      "jsEngine": "jsc",
+      "runtimeVersion": {
+        "policy": "appVersion"
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "appName": "GROWSMART",
+      "label": "GROWSMART",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/growsmart-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.gogrowsmart.app.mobile",
+      "versionCode": 14,
+      "plugins": [
+        "expo-notifications",
+        "expo-notifications"
+      ],
+      "runtimeVersion": "1.0.0"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png",
+      "excludedPlatforms": ["ios", "android"]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/growsmart-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      "expo-font",
+      "./app.plugin.js",
+      [
+        "expo-notifications",
+        {
+          "icon": {
+            "light": "./assets/images/growsmart-icon.png",
+            "dark": "./assets/images/growsmart-icon.png"
+          },
+          "color": "#000000",
+          "sounds": [
+            "./assets/audio/notification.wav"
+          ],
+          "defaultChannel": "default"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "05fec7d8-c438-4568-a18d-cd8eceefe083"
+      },
+      "developmentClient": {
+        "silentLogin": true
+      }
+    },
+    "owner": "scoder06",
+    "updates": {
+      "url": "https://u.expo.dev/05fec7d8-c438-4568-a18d-cd8eceefe083"
+    }
+  }
+}

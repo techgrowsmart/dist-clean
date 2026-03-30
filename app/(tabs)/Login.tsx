@@ -10,6 +10,7 @@ import React, { useState, useEffect } from "react";
 import {
     Dimensions,
     Image,
+    ImageBackground,
     Keyboard,
     KeyboardAvoidingView,
     Platform,

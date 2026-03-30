@@ -6,14 +6,20 @@ const getBaseUrl = () => {
   let url = process.env.EXPO_PUBLIC_API_URL;
   
   if (!url) {
-    // Fallback to production API
-    url = "https://growsmartserver.gogrowsmart.com";
+    // Fallback to local development server - try localhost first
+    url = "http://localhost:3000";
   }
 
-  // Android emulator: 127.0.0.1 points to the emulator itself, not the host.
-  // Use 10.0.2.2 to reach the host machine's localhost.
-  if (Platform.OS === 'android' && (url.includes('127.0.0.1') || url.includes('localhost'))) {
-    url = url.replace(/127\.0\.0\.1|localhost/g, '10.0.2.2');
+  // Handle localhost/127.0.0.1 for different platforms
+  if (url.includes('127.0.0.1') || url.includes('localhost')) {
+    if (Platform.OS === 'android') {
+      // Android emulator: 127.0.0.1 points to the emulator itself, not the host.
+      // Use 10.0.2.2 to reach the host machine's localhost.
+      url = url.replace(/127\.0\.0\.1|localhost/g, '10.0.2.2');
+    } else if (Platform.OS === 'ios') {
+      // iOS simulator can use localhost or 127.0.0.1
+      // No change needed for iOS
+    }
   }
   
   return url;

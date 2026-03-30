@@ -13,6 +13,7 @@ import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-nat
 import Entypo from "@expo/vector-icons/Entypo";
 import { Ionicons } from "@expo/vector-icons";
 import CustomCheckbox from "../../../components/CustomCheckbox";
+import { safeBack } from "../../../utils/navigation";
 
 const { width, height } = Dimensions.get("window");
 
@@ -81,7 +82,7 @@ export default function BookClass() {
       <View style={styles.topContainer}>
         <View style={styles.titleContent}>
           <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit>Confirm Your Class :</Text>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={() => safeBack(router)}>
             <Ionicons name="close" size={wp("10%")} color="#FFF" />
           </TouchableOpacity>
         </View>

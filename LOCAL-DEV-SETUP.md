@@ -1,22 +1,37 @@
 # Local Development Setup Guide
 
-## Quick Start
+## IP Address Configuration
 
-### 1. Switch to Local Development
+The app needs to connect to your local backend server during development. Since mobile devices and emulators can't access `localhost` directly, we use your machine's IP address.
+
+### Current Configuration
+- **Your IP**: `172.17.1.63`
+- **Backend URL**: `http://172.17.1.63:3000`
+
+### Updating IP Address
+
+If your IP address changes, you can update it in two ways:
+
+#### 1. Automatic Update (Recommended)
+Run the provided script:
+```bash
+./update-local-ip.sh
+```
+
+#### 2. Manual Update
+Update these files:
+- `.env` - Change `EXPO_PUBLIC_API_URL`
+- `config.ts` - Change the fallback URL
+
+#### 3. Switch Server Script (Alternative)
 ```bash
 # Switch to local server
 node switch-server.js local
 
-# Restart Expo
-npx expo start --clear
-```
-
-### 2. Switch Back to Production
-```bash
-# Switch to production server
+# Switch to production server  
 node switch-server.js prod
 
-# Restart Expo
+# Restart Expo after switching
 npx expo start --clear
 ```
 

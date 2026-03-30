@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { Poppins_400Regular, useFonts } from "@expo-google-fonts/poppins";
 import CustomDropdown from "../../../app/CustomDropdown";
+import { safeBack } from "../../../utils/navigation";
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
@@ -218,7 +219,7 @@ export default function AddonClass() {
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => safeBack(router)}>
           <ArrowBack size={wp(isTablet ? "6%" : "8%")} />
         </TouchableOpacity>
         <Text style={styles.title}>Add on Class</Text>

@@ -5,7 +5,7 @@
     "version": "2.0.10",
     "orientation": "portrait",
     "icon": "./assets/images/growsmart-icon.png",
-    "scheme": "client",
+    "scheme": "gogrowsmart",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "ios": {
@@ -38,8 +38,8 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images /favicon.png",
-      "port": 8080
+      "favicon": "./assets/images/growsmart-icon.png",
+      "excludedPlatforms": ["ios", "android"]
     },
     "plugins": [
       "expo-router",

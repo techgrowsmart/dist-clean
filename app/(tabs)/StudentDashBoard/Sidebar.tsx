@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import React from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View, Linking } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View, Linking, Platform } from "react-native";
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import BillIcon from "../../../assets/svgIcons/Bill";
 import ContactPhoneIcon from "../../../assets/svgIcons/ContactPhone";
@@ -12,6 +12,7 @@ import SubscriptionIcon from "../../../assets/svgIcons/SubscriptionIcon";
 import Terms from "../../../assets/svgIcons/Terms";
 import TutorCap from "../../../assets/svgIcons/TutorCap";
 import { clearAllStorage } from "../../../utils/authStorage";
+import Toast from "react-native-toast-message";
 
 const menuItems = [
   { name: "My Tuitions", icon: TutorCap },
@@ -37,6 +38,7 @@ type SidebarProps = {
 const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, studentName, profileImage }: SidebarProps) => {
   const router = useRouter();
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);
+  const [isLoggingOut, setIsLoggingOut] = React.useState(false);
 
   if (!visible) return null;
 
@@ -53,13 +55,43 @@ const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, student
   };
 
   const confirmLogout = async () => {
+    setIsLoggingOut(true);
     try {
       await clearAllStorage();
-      router.replace("/");
+      
+      if (Platform.OS === "web") {
+        // Force redirect to login page on web
+        window.location.href = '/login';
+      } else {
+        router.replace("/(tabs)/LoginScreen");
+      }
+      
+      Toast.show({
+        type: 'success',
+        text1: 'Logged Out',
+        text2: 'You have been successfully logged out.',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
       onClose();
     } catch (error) {
       console.error("Logout error:", error);
+      Toast.show({
+        type: 'error',
+        text1: 'Logout Error',
+        text2: 'There was an error logging out. Please try again.',
+        position: 'bottom',
+        visibilityTime: 3000,
+      });
+      // Still try to navigate even if storage clear fails
+      if (Platform.OS === "web") {
+        window.location.href = '/login';
+      } else {
+        router.replace("/(tabs)/LoginScreen");
+      }
+      onClose();
     } finally {
+      setIsLoggingOut(false);
       setShowLogoutModal(false);
     }
   };
@@ -119,9 +151,16 @@ const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, student
         </View>
 
         {/* Raise a Complaint Text */}
-        <Text style={{ fontSize: wp('3%'), color: "#FFF", fontFamily: "Poppins", fontWeight: "400", marginBottom: hp('1%'), marginTop: hp('0.5%') }}>
-          Raise a Complaint
-        </Text>
+        <TouchableOpacity 
+          style={{ marginBottom: hp('1%'), marginTop: hp('0.5%') }}
+          onPress={() => {
+            Linking.openURL("mailto:support@gogrowsmart.com?subject=Complaint&body=Please describe your issue here...");
+          }}
+        >
+          <Text style={{ fontSize: wp('3%'), color: "#FFF", fontFamily: "Poppins", fontWeight: "400", textDecorationLine: "underline" }}>
+            Raise a Complaint
+          </Text>
+        </TouchableOpacity>
 
         {/* Logout Button at Bottom */}
         <TouchableOpacity style={{ flexDirection: "row", alignItems: "center", paddingVertical: hp('1%') }} onPress={handleLogout}>
@@ -145,10 +184,32 @@ const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, student
             You will need to log back in to access your personalized learning dashboard and live classes.
           </Text>
           <View style={{ width: "100%", alignItems: "center" }}>
-            <TouchableOpacity style={{ width: wp('70%'), paddingVertical: hp('1.8%'), borderRadius: wp('2%'), backgroundColor: "#EF4444", justifyContent: "center", alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 }} onPress={confirmLogout}>
-              <Text style={{ color: "#FFF", fontSize: wp('3.5%'), fontWeight: "600", fontFamily: "Poppins" }}>
-                Confirm Log Out
-              </Text>
+            <TouchableOpacity 
+              style={{ 
+                width: wp('70%'), 
+                paddingVertical: hp('1.8%'), 
+                borderRadius: wp('2%'), 
+                backgroundColor: isLoggingOut ? "#9CA3AF" : "#EF4444", 
+                justifyContent: "center", 
+                alignItems: "center", 
+                shadowColor: "#000", 
+                shadowOffset: { width: 0, height: 4 }, 
+                shadowOpacity: 0.1, 
+                shadowRadius: 8, 
+                elevation: 4 
+              }} 
+              onPress={confirmLogout}
+              disabled={isLoggingOut}
+            >
+              {isLoggingOut ? (
+                <Text style={{ color: "#FFF", fontSize: wp('3.5%'), fontWeight: "600", fontFamily: "Poppins" }}>
+                  Logging Out...
+                </Text>
+              ) : (
+                <Text style={{ color: "#FFF", fontSize: wp('3.5%'), fontWeight: "600", fontFamily: "Poppins" }}>
+                  Confirm Log Out
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>

@@ -28,6 +28,8 @@ import Menubook from "../../../assets/svgIcons/MenuBook";
 import Pencil from "../../../assets/svgIcons/Pencil";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
+import TeacherWebHeader from '../../../components/ui/TeacherWebHeader';
+import TeacherWebSidebar from '../../../components/ui/TeacherWebSidebar';
 
 import {
   heightPercentageToDP as hp,
@@ -54,6 +56,48 @@ export default function TeacherProfile() {
   const router = useRouter();
   const [errors, setErrors] = useState<FormErrors>({});
   const [educationJson, setEducationJson] = useState<any[]>([]);
+  const [sidebarActiveItem, setSidebarActiveItem] = useState('Profile');
+  const [webTeacherName, setWebTeacherName] = useState('');
+  const [webProfileImage, setWebProfileImage] = useState<string | null>(null);
+  const [webUserEmail, setWebUserEmail] = useState<string | null>(null);
+
+  // Handle sidebar navigation
+  const handleSidebarSelect = (item: string) => {
+    setSidebarActiveItem(item);
+    // Navigate based on item
+    switch (item) {
+      case "Dashboard":
+        router.push("/(tabs)/TeacherDashBoard/TutorDashboardWeb");
+        break;
+      case "My Students":
+        router.push("/(tabs)/TeacherDashBoard/StudentsEnrolled");
+        break;
+      case "My Subjects":
+        router.push("/(tabs)/TeacherDashBoard/SubjectsListWeb");
+        break;
+      case "Create Subject":
+        router.push("/(tabs)/TeacherDashBoard/CreateSubject");
+        break;
+      case "Spotlights":
+        router.push("/(tabs)/TeacherDashBoard/JoinedDateWeb");
+        break;
+      case "Share":
+        router.push("/(tabs)/TeacherDashBoard/Share");
+        break;
+      case "Profile":
+        // Already on Profile page
+        break;
+      case "Billing":
+        router.push("/(tabs)/TeacherDashBoard/Billing");
+        break;
+      case "Settings":
+        router.push("/(tabs)/TeacherDashBoard/Settings");
+        break;
+      case "Contact Us":
+        router.push("/(tabs)/Contact");
+        break;
+    }
+  };
 
   const [boards, setBoards] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
@@ -1166,41 +1210,118 @@ const validateTimeRange = () => {
   };
 
   return (
-    <View style={styles.container}>
-      {!fontsLoaded ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#5B7FFF" />
-          <Text style={styles.loadingText}>Loading fonts...</Text>
+    Platform.OS === 'web' ? (
+      <View style={styles.webLayout}>
+        <TeacherWebHeader 
+          teacherName={webTeacherName}
+          profileImage={webProfileImage}
+          showSearch={true}
+        />
+        <View style={styles.webContent}>
+          <TeacherWebSidebar 
+            teacherName={webTeacherName}
+            profileImage={webProfileImage}
+            activeItem={sidebarActiveItem}
+            onItemPress={handleSidebarSelect}
+            userEmail={userEmail}
+            subjectCount={0}
+            studentCount={0}
+            revenue="₹1.2K"
+            isSpotlight={false}
+          />
+          <View style={styles.webMainContent}>
+            <ScrollView style={styles.webScrollContainer}>
+              <View style={styles.container}>
+                {!fontsLoaded ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#5B7FFF" />
+                    <Text style={styles.loadingText}>Loading fonts...</Text>
+                  </View>
+                ) : isLoading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#5B7FFF" />
+                    <Text style={styles.loadingText}>Loading profile...</Text>
+                  </View>
+                ) : (
+                  <ScrollView
+                    style={styles.scrollContainer}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    <View style={styles.profileContainer}>
+                      {Platform.OS !== 'web' && (
+                        <BackButton size={24} color="#000" onPress={() => router.push("/(tabs)/TeacherDashBoard/Teacher")} style={styles.backButton} />
+                      )}
+                      <TouchableOpacity
+                        onPress={handleImagePicker}
+                        style={styles.imageContainer}
+                      >
+                        {profileImage ? (
+                          <Image
+                            style={styles.profileImage}
+                            source={{ uri: profileImage }}
+                          />
+                        ) : (
+                          <View style={styles.placeholder}>
+                            <View style={styles.uploadContainer}>
+                              <Image
+                                source={require("../../../assets/image/upload.png")}
+                                style={styles.uploadIcon}
+                              />
+                            </View>
+                            <Text style={styles.uploadTxt}>Upload Profile Picture</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                      <View style={styles.nameSection}>
+                        {/* First Row: Name and Rating */}
+                        <View style={styles.nameRow}>
+                          <Text style={styles.nameText}>{teacherName}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </ScrollView>
+                )}
+              </View>
+            </ScrollView>
+          </View>
         </View>
-      ) : isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#5B7FFF" />
-          <Text style={styles.loadingText}>Loading profile...</Text>
-        </View>
-      ) : (
-      <ScrollView
-        style={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.profileContainer}>
-          <BackButton size={24} color="#000" onPress={() => router.push("/(tabs)/TeacherDashBoard/Teacher")} style={styles.backButton} />
-          <TouchableOpacity
-            onPress={handleImagePicker}
-            style={styles.imageContainer}
-          >
-            {profileImage ? (
-              <Image
-                style={styles.profileImage}
-                source={{ uri: profileImage }}
-              />
-            ) : (
-              <View style={styles.placeholder}>
-                <View style={styles.uploadContainer}>
-                  <Image
-                    source={require("../../../assets/image/upload.png")}
-                    style={styles.uploadIcon}
-                  />
-                </View>
+      </View>
+    ) : (
+      <View style={styles.container}>
+        {!fontsLoaded ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#5B7FFF" />
+            <Text style={styles.loadingText}>Loading fonts...</Text>
+          </View>
+        ) : isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#5B7FFF" />
+            <Text style={styles.loadingText}>Loading profile...</Text>
+          </View>
+        ) : (
+        <ScrollView
+          style={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.profileContainer}>
+            <BackButton size={24} color="#000" onPress={() => router.push("/(tabs)/TeacherDashBoard/Teacher")} style={styles.backButton} />
+            <TouchableOpacity
+              onPress={handleImagePicker}
+              style={styles.imageContainer}
+            >
+              {profileImage ? (
+                <Image
+                  style={styles.profileImage}
+                  source={{ uri: profileImage }}
+                />
+              ) : (
+                <View style={styles.placeholder}>
+                  <View style={styles.uploadContainer}>
+                    <Image
+                      source={require("../../../assets/image/upload.png")}
+                      style={styles.uploadIcon}
+                    />
+                  </View>
 
                 <Text style={styles.uploadTxt}>Upload Profile Picture</Text>
               </View>
@@ -2146,10 +2267,27 @@ const validateTimeRange = () => {
       </ScrollView>
       )}
     </View>
+        )
   );
 }
 // ... rest of your styles remain exactly the same
 const styles = StyleSheet.create({
+  // Web-specific styles
+  webLayout: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  webContent: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  webMainContent: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+  },
+  webScrollContainer: {
+    flex: 1,
+  },
   selectedDaysDisplay: {
   flex: 1,
   minHeight: hp('6%'),

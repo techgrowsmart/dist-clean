@@ -14,6 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import DownloadIcon from "../../assets/svgIcons/Downlode";
 import BackButton from "../../components/BackButton";
+import { safeBack } from "../../utils/navigation";
 
 const { width, height } = Dimensions.get("window");
 
@@ -61,7 +62,7 @@ const Billing = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <BackButton size={30} color="#000" onPress={() => router.back()} />
+        <BackButton size={30} color="#000" onPress={() => safeBack(router)} />
         <Text style={styles.headerText}>Billing</Text>
       </View>
 

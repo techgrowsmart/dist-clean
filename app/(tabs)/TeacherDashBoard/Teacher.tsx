@@ -1,4 +1,4 @@
-import BottomNavigation from "../../../app/(tabs)/BottomNavigation";
+import BottomNavigation from "./BottomNavigationTeacher";
 import Bars from "../../../assets/svgIcons/Bars";
 import NotificationBellIcon from "../../../assets/svgIcons/NotificationBell";
 import { BASE_URL } from "../../../config";
@@ -8,6 +8,8 @@ import {
   Poppins_700Bold,
   Poppins_600SemiBold,
 } from "@expo-google-fonts/poppins";
+import { WorkSans_400Regular } from '@expo-google-fonts/work-sans';
+import { RedHatDisplay_400Regular } from '@expo-google-fonts/red-hat-display';
 import { useFonts } from 'expo-font';
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -25,15 +27,17 @@ import {
   TouchableOpacity,
   View,
   Image,
+  Platform,
 } from "react-native";
 import { LineChart } from "react-native-chart-kit";
 import SidebarMenu from "./TeacherSidebar";
-const screenWidth = Dimensions.get("window").width;
+  const screenWidth = Dimensions.get("window").width;
 const { width, height } = Dimensions.get("window");
 import { Animated, PanResponder } from 'react-native';
-import LeftScreen from '../TeacherDashBoard/LeftScreen';  // Adjust path as needed
-import RightScreen from '../TeacherDashBoard/RightScreen';  // Adjust path as needed
 import * as Haptics from 'expo-haptics';
+import LeftScreen from './LeftScreen';
+import RightScreen from './RightScreen';
+import TutorDashboardWeb from './TutorDashboardWeb';
 
 const SCREEN_COUNT = 3;
 const CACHE_KEYS = {
@@ -913,6 +917,8 @@ export default function TeacherDashboard() {
     Poppins_Bold: Poppins_700Bold,
     Poppins_SemiBold: Poppins_600SemiBold,
     OpenSans_400Regular,
+    WorkSans_400Regular,
+    RedHatDisplay_400Regular,
   });
   const formatDate = (isoDate: string | null) => {
     if (!isoDate) return "N/A";
@@ -924,6 +930,28 @@ export default function TeacherDashboard() {
   };
 
   if (!fontsLoaded) return <Text>Loading...</Text>;
+
+  // For web, use TutorDashboardWeb UI with real data
+  if (Platform.OS === 'web') {
+    return (
+      <TutorDashboardWeb 
+        teacherName={teacherName}
+        profileImage={profileImage}
+        userEmail={userEmail}
+        subjectCount={subjectCount}
+        contacts={contacts}
+        reviews={reviews}
+        unreadCount={unreadCount}
+        userStatus={userStatus}
+        createdAt={createdAt}
+        isSpotlight={isSpotlight}
+        profileLoading={profileLoading}
+        contactsLoading={contactsLoading}
+        reviewsLoading={reviewsLoading}
+        subjectsLoading={subjectsLoading}
+      />
+    );
+  }
 
 return (
   <>
@@ -958,7 +986,7 @@ return (
 >
   {/* Left Screen (Index 0) */}
   <View style={[styles.screen, { width }]}>
-    <LeftScreen />
+    <LeftScreen leftFont={'RedHatDisplay_400Regular'} />
   </View>
             
             {/* Home Screen - Teacher Dashboard (Index 1) */}
@@ -967,15 +995,20 @@ return (
                 visible={menuVisible}
                 onClose={() => setMenuVisible(false)}
                 activeItem={activeMenuItem}
+                userEmail={userEmail || ''}
+                teacherName={teacherName}
+                profileImage={profileImage}
                 onItemPress={(itemName: string) => {
                   setActiveMenuItem(itemName);
-                  if (itemName === "Settings") {
+                  if (itemName === "Dashboard") {
+                    // Dashboard is already current screen, just close sidebar
+                    setMenuVisible(false);
+                  } else if (itemName === "Settings") {
                     router.push({
                       pathname: "/(tabs)/TeacherDashBoard/Settings",
                       params: { userEmail },
                     });
-                  }
-                  if (itemName === "Billing") {
+                  } else if (itemName === "Billing") {
                     router.push({
                       pathname: "/(tabs)/Billing",
                       params: {
@@ -985,36 +1018,33 @@ return (
                         profileImage,
                       },
                     });
-                  }
-                  if (itemName === "Spotlight")
+                  } else if (itemName === "Spotlight") {
                     router.push("/(tabs)/TeacherDashBoard/SpotlightTarrif");
-                  if (itemName === "Share") {
+                  } else if (itemName === "Share") {
                     router.push({
                       pathname: "/(tabs)/TeacherDashBoard/Share",
                       params: { userEmail, teacherName, profileImage },
                     });
-                  }
-
-                  if (itemName === "Add on Class") {
+                  } else if (itemName === "Add on Class") {
                     router.push({
                       pathname: "/(tabs)/TeacherDashBoard/AddonClass",
                       params: { userEmail },
                     });
-                  }
-
-                  if (itemName === "Create Subject") {
+                  } else if (itemName === "Create Subject") {
                     router.push({ pathname: "/(tabs)/TeacherDashBoard/Subjects" });
+                  } else if (itemName === "Contact") {
+                    router.push("/(tabs)/Messages/Messages");
                   }
-
-                  if (itemName === "Contact") {
-                    router.push({ pathname: "/(tabs)/Contact" });
-                  }
+                  // Terms & Conditions and Privacy Policy are handled in the component itself
+                  // Logout is handled in the component itself
                 }}
-                userEmail={userEmail as string}
+    
+                userEmail={userEmail || ''}
                 teacherName={teacherName}
                 profileImage={profileImage}
+                leftFont={'RedHatDisplay_400Regular'}
               />
-              
+
               <View style={styles.headerContainer}>
                 <View style={styles.headerRow}>
                   {/* Left: Menu icon and spotlight badge */}
@@ -1167,11 +1197,11 @@ return (
                 </View>
               </ScrollView>
 
-              <BottomNavigation userType="teacher" />
+              <BottomNavigation userEmail={userEmail || ""} />
             </View>
             
-            {/* Right Screen (Index 2) */}
-            <View style={[styles.screen, { width }]}>
+            {/* Right Screen (Index 2) - GrowThoughts / Thoughts panel */}
+            <View style={[styles.screen, { width }]}> 
               <RightScreen />
             </View>
         {/* ADD THIS VISUAL OVERLAY */}
@@ -1352,7 +1382,7 @@ reviewCard: {
     fontWeight: '600',
   },
   
-  reviewText: { color: "#fff", fontSize: wp("4.27%"), fontWeight: "700", lineHeight: hp("2.826%") },
+  reviewText: { color: "#fff", fontSize: wp("4.27%"), fontWeight: "700", lineHeight: hp("2.826%"), fontFamily: 'WorkSans_400Regular' },
   rating: { color: "#fff", marginTop: hp("0.7%") },
 reviewContent: { color: "#fff", fontSize: wp("3.2%"), lineHeight: hp("2.2%"), fontWeight: "500" },
 reviewContentScroll: { flex: 1, maxHeight: hp("8%") },
@@ -1378,13 +1408,13 @@ welcome: {
   lineHeight: hp('2.422%'),
   textTransform: 'uppercase',
   color: '#393939',
-  fontFamily: 'OpenSans_400Regular',
+  fontFamily: 'WorkSans_400Regular',
   flex: 1,
   paddingRight: wp('25%'), // Add this - creates space for status text
 },
 statusText: {
   fontSize: wp('3.2%'),
-  fontFamily: 'OpenSans_400Regular',
+  fontFamily: 'WorkSans_400Regular',
   textTransform: 'uppercase',
   fontWeight: '600',
   marginLeft: wp('2%'),
@@ -1462,7 +1492,7 @@ statusText: {
     fontSize: wp("4.5%"), 
     fontWeight: "700", 
     lineHeight: hp("3%"),
-    fontFamily: "Poppins_700Bold",
+    fontFamily: "WorkSans_400Regular",
   },
   cardBottom: { 
     color: "#fff", 
@@ -1470,13 +1500,13 @@ statusText: {
     lineHeight: hp("2.3%"), 
     fontWeight: "600", 
     textAlign: "center",
-    fontFamily: "Poppins_600SemiBold",
+    fontFamily: "WorkSans_400Regular",
   },
   // reviewCardContainer: { flexDirection: "row", paddingBottom: 10, paddingHorizontal: 10 },
   // reviewCard: { backgroundColor: "#5f5fff", height: hp("15.7%"), width: wp("80.8%"), borderRadius: wp("2.66%"), paddingHorizontal: wp("3.4%"), paddingVertical: hp("1.5%"), marginLeft: wp("2.13%"), justifyContent: "space-between" },
   // reviewText: { color: "#fff", fontSize: wp("4.8%"), lineHeight: hp("3.23%"), fontWeight: "500" },
   enrollmentRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%", marginTop: height * (19 / 743), marginBottom: 8 },
-  enrollmentLabel: { fontSize: wp("5.33%"), fontWeight: "500", color: "#07040e", fontFamily: "OpenSans_400Regular", lineHeight: hp("4.03%") },
+  enrollmentLabel: { fontSize: wp("5.33%"), fontWeight: "500", color: "#07040e", fontFamily: "Poppins_Regular", lineHeight: hp("4.03%") },
   chartContainer: { flexDirection: "column", alignItems: "center", justifyContent: "center", top: -hp("3%") },
   dropDownWrapper: { borderWidth: wp("0.22%"), borderColor: "#ccc", borderRadius: wp("2.13%"), width: wp("40%"), backgroundColor: "transparent" },
   picker: { height: hp("6.38%"), width: "100%", color: "#333", fontSize: wp("3.733%") },

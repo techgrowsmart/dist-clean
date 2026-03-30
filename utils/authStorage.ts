@@ -1,5 +1,6 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 
 export interface AuthData {
     role: string;
@@ -69,25 +70,18 @@ export const getAuthToken = async (): Promise<string | null> => {
 
 export const clearAllStorage = async () => {
     try {
-        await AsyncStorage.clear();
-        // await AsyncStorage.multiRemove([
-        //     "user_role",
-        //     "user_email",
-        //     "user_token",
-        //     "is_logged_in",
-        //     "profileImage"
-        // ]);
-        // console.log("Auth data cleared successfully");
+        if (Platform.OS === "web") {
+            console.log("🌐 Clearing web localStorage and sessionStorage...");
+            localStorage.clear();
+            sessionStorage.clear();
+        } else {
+            console.log("📱 Clearing mobile AsyncStorage...");
+            await AsyncStorage.clear();
+        }
+        console.log("✅ All storage data cleared successfully");
     } catch (error) {
-        console.error("Error clearing auth data:", error);
+        console.error("❌ Error clearing all data:", error);
+        throw error;
     }
 };
-// export const clearAllStorage = async () => {
-//     try {
-//       await AsyncStorage.clear();
-//       console.log("✅ All AsyncStorage data cleared");
-//     } catch (error) {
-//       console.error("❌ Error clearing all data:", error);
-//     }
-//   };
   

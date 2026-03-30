@@ -21,6 +21,7 @@ import { getAuthData, storeAuthData } from '../../../utils/authStorage';
 import { autoRefreshToken } from '../../../utils/tokenRefresh';
 import { BASE_URL } from '../../../config';
 import axios from 'axios';
+import ThoughtsCard from '../StudentDashBoard/ThoughtsCard';
 
 const { width, height } = Dimensions.get('window');
 
@@ -869,135 +870,46 @@ const RightScreen: React.FC = () => {
               </View>
             ) : (
               posts.map((post) => {
-                // Get user profile from cache or fetch it
-                const userProfile = userProfileCache.get(post.author.email) || { name: 'Unknown User', profilePic: '' };
-                
-                // Use the profile data from AstraDB, fallback to post data if needed
-                let displayName = userProfile.name || post.author.name;
-                let displayProfilePic: string | null = userProfile.profilePic || post.author.profile_pic;
-                let displayRole = post.author.role;
-                
-                // Debug logging to understand the data structure
-                console.log('🔍 Enhanced post author data:', {
-                  postAuthorEmail: post.author.email,
-                  userProfileFromCache: userProfile,
-                  postAuthorData: { name: post.author.name, profile_pic: post.author.profile_pic, role: post.author.role },
-                  finalDisplayName: displayName,
-                  finalProfilePic: displayProfilePic
-                });
-                
-                // Only use email fallback as last resort
-                if (!displayName || displayName === 'null' || displayName === 'undefined' || displayName.trim() === '' || displayName.includes('@')) {
-                  displayName = post.author.email?.split('@')[0] || 'Unknown User';
-                }
-                
-                // Ensure profile picture URL is properly formatted
-                if (displayProfilePic && displayProfilePic !== '' && displayProfilePic !== 'null' && displayProfilePic !== 'undefined') {
-                  if (!displayProfilePic.startsWith('http') && !displayProfilePic.startsWith('/')) {
-                    displayProfilePic = `/${displayProfilePic}`;
+                const resolvePostAuthor = (post: any) => {
+                  const userProfile = userProfileCache.get(post.author.email) || { name: 'Unknown User', profilePic: '' };
+                  let name = userProfile.name || post.author.name;
+                  let pic: string | null = userProfile.profilePic || post.author.profile_pic;
+                  let role = post.author.role;
+                  
+                  if (!name || name === 'null' || name === 'undefined' || name.trim() === '' || name.includes('@')) {
+                    name = post.author.email?.split('@')[0] || 'Unknown User';
                   }
-                } else {
-                  displayProfilePic = null;
-                }
-                
-                if (!displayRole || displayRole.trim() === '' || displayRole === 'null' || displayRole === 'undefined') {
-                  displayRole = 'User';
-                }
-                
-                
+                  
+                  if (pic && pic !== '' && pic !== 'null' && pic !== 'undefined') {
+                    if (!pic.startsWith('http') && !pic.startsWith('/')) {
+                      pic = `/${pic}`;
+                    }
+                  } else {
+                    pic = null;
+                  }
+                  
+                  if (!role || role.trim() === '' || role === 'null' || role === 'undefined') {
+                    role = 'User';
+                  }
+                  
+                  return { name, pic, role };
+                };
+
+                const initials = (name: string) => {
+                  return name ? name.split(' ').map(w => w.charAt(0)).join('').toUpperCase().slice(0, 2) : 'U';
+                };
 
                 return (
-                  <View key={post.id} style={styles.postCard}>
-                    <View style={styles.postHeader}>
-                      {displayProfilePic ? (
-                        <Image 
-                          source={{ 
-                            uri: displayProfilePic.startsWith('http') 
-                              ? displayProfilePic 
-                              : displayProfilePic.startsWith('/') 
-                                ? `${BASE_URL}${displayProfilePic}`
-                                : `${BASE_URL}/${displayProfilePic}`
-                          }} 
-                          style={styles.avatar}
-                          onError={(e) => {
-                            console.log('❌ Error loading author profile image:', e.nativeEvent.error);
-                            console.log('🔗 Attempted URL:', displayProfilePic.startsWith('http') 
-                              ? displayProfilePic 
-                              : displayProfilePic.startsWith('/') 
-                                ? `${BASE_URL}${displayProfilePic}`
-                                : `${BASE_URL}/${displayProfilePic}`);
-                          }}
-                          onLoad={() => {
-                            console.log('✅ Author profile image loaded successfully for:', displayName);
-                          }}
-                        />
-                      ) : (
-                        <View style={[styles.avatar, { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }]}>
-                          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#6B7280' }}>
-                            {displayName?.charAt(0).toUpperCase() || 'U'}
-                          </Text>
-                        </View>
-                      )}
-                      <View style={styles.postInfo}>
-                        <Text style={styles.authorName}>{displayName}</Text>
-                        <View style={styles.roleContainer}>
-                          <Text style={styles.roleText}>{displayRole}</Text>
-                          <Text style={styles.timeText}> • {formatTimeAgo(post.createdAt)}</Text>
-                        </View>
-                      </View>
-                      <TouchableOpacity>
-                        <MaterialCommunityIcons name="dots-horizontal" size={24} color="#999" />
-                      </TouchableOpacity>
-                    </View>
-
-                  <Text style={styles.postContent}>{post.content}</Text>
-
-                  {post.postImage && (
-                    <Image 
-                      source={{ uri: post.postImage }} 
-                      style={styles.postImage} 
-                      resizeMode="cover"
-                    />
-                  )}
-
-                  {post.tags && post.tags.length > 0 && (
-                    <View style={styles.tagsContainer}>
-                      {post.tags.map((tag, index) => (
-                        <View key={index} style={styles.tag}>
-                          <Text style={styles.tagText}>#{tag}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  <View style={styles.postActions}>
-                    <TouchableOpacity 
-                      style={styles.actionButton}
-                      onPress={() => handleLike(post.id)}
-                    >
-                      <Ionicons 
-                        name={post.isLiked ? "heart" : "heart-outline"} 
-                        size={20} 
-                        color={post.isLiked ? "#EF4444" : "#666666"} 
-                      />
-                      <Text style={styles.actionText}>{post.likes}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={styles.actionButton}
-                      onPress={() => openCommentsModal(post)}
-                    >
-                      <Ionicons name="chatbubble-outline" size={20} color="#666666" />
-                      <Text style={styles.actionText}>{(post.comments?.length || 0)}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={styles.actionButton}
-                      onPress={() => openReportModal('post', post.id)}
-                    >
-                      <Ionicons name="flag-outline" size={20} color="#666666" />
-                      <Text style={styles.actionText}>Report</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                  <ThoughtsCard
+                    key={post.id}
+                    post={post}
+                    onLike={handleLike}
+                    onComment={openCommentsModal}
+                    onReport={(post) => openReportModal('post', post.id)}
+                    getProfileImageSource={getProfileImageSource}
+                    initials={initials}
+                    resolvePostAuthor={resolvePostAuthor}
+                  />
                 );
               })
             )}

@@ -1,4 +1,5 @@
 import { Inter_600SemiBold } from '@expo-google-fonts/inter';
+import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import { Poppins_400Regular, Poppins_600SemiBold } from '@expo-google-fonts/poppins';
 import { RedHatDisplay_400Regular } from '@expo-google-fonts/red-hat-display';
 import { Fontisto } from '@expo/vector-icons';
@@ -6,12 +7,13 @@ import { useNavigation } from '@react-navigation/native';
 import axios from 'axios';
 import { useFonts } from 'expo-font';
 import React, { useEffect, useState } from 'react';
-import { Alert, Dimensions, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import RazorpayCheckout from 'react-native-razorpay';
 import BackButton from '../../../components/BackButton';
 import { BASE_URL, RAZOR_PAY_KEY } from '../../../config';
 import { getAuthData } from '../../../utils/authStorage';
 import BottomNavigation from '../BottomNavigation';
+import WebNavbar from '../../../components/WebNavbar';
 
 const { width, height } = Dimensions.get('window');
 
@@ -226,6 +228,10 @@ const AndroidLayout = ({ navigation, plans, handleSubscribe, fontsLoaded }) => {
 // Web Layout Component (New Uizard Design)
 const WebLayout = ({ navigation, plans, handleSubscribe, fontsLoaded }) => {
   const [screenWidth, setScreenWidth] = useState(Dimensions.get("window").width);
+  const [studentName, setStudentName] = useState("Student");
+  const [profileImage, setProfileImage] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
   
   useEffect(() => {
     const onChange = (result: any) => {
@@ -236,28 +242,28 @@ const WebLayout = ({ navigation, plans, handleSubscribe, fontsLoaded }) => {
     return () => subscription?.remove();
   }, []);
 
+  // Load user data for navbar
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const auth = await getAuthData();
+        if (auth?.name) setStudentName(auth.name);
+        if (auth?.profileImage) setProfileImage(auth.profileImage);
+      } catch {}
+    };
+    loadUserData();
+  }, []);
+
   return (
     <View style={webStyles.page}>
-      {/* TOP HEADER - Keep existing */}
-      <View style={webStyles.header}>
-        <View style={webStyles.headerLeft}>
-          <Text style={webStyles.logoText}>Growsmart</Text>
-        </View>
-        
-        <View style={webStyles.headerCenter}>
-          <View style={webStyles.searchBar}>
-            <Text style={webStyles.searchPlaceholder}>Type in search</Text>
-          </View>
-        </View>
-        
-        <View style={webStyles.headerRight}>
-          <TouchableOpacity style={webStyles.notificationIcon}>
-            <Text style={webStyles.notificationBell}>🔔</Text>
-          </TouchableOpacity>
-          <View style={webStyles.avatarPlaceholder} />
-          <Text style={webStyles.userName}>Ben Goro</Text>
-        </View>
-      </View>
+      {/* REUSABLE WEB NAVBAR */}
+      <WebNavbar
+        studentName={studentName}
+        profileImage={profileImage}
+        unreadCount={unreadCount}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+      />
 
       {/* CENTER CONTENT ONLY - No Sidebars */}
       <ScrollView
@@ -288,20 +294,13 @@ const WebLayout = ({ navigation, plans, handleSubscribe, fontsLoaded }) => {
           ))}
         </View>
 
-        {/* SECTION 3 — BOTTOM PROMOTIONAL BANNER */}
-        <View style={webStyles.promotionalBanner}>
-          <View style={webStyles.promoLeft}>
-            <Text style={webStyles.promoLogo}>GrowSmart</Text>
-            <Text style={webStyles.promoText}>
-              Empowering Students.{'\n'}Connecting Futures
-            </Text>
-          </View>
-          <View style={webStyles.promoRight}>
-            <View style={webStyles.promoImagePlaceholder} />
-            <Text style={webStyles.promoSubtitle}>
-              Unlock Quality Learning From India's Best Teachers. Anytime. Anywhere.
-            </Text>
-          </View>
+        {/* SECTION 3 — SUBSCRIPTION BOTTOM IMAGE */}
+        <View style={webStyles.subscriptionBottomContainer}>
+          <Image 
+            source={require('../../../assets/image/SubscriptionBottom.png')} 
+            style={webStyles.subscriptionBottomImage}
+            resizeMode="contain"
+          />
         </View>
       </ScrollView>
     </View>
@@ -315,6 +314,9 @@ export default function Subscription() {
     'Poppins': Poppins_400Regular,
     'PoppinsSemiBold': Poppins_600SemiBold,
     'Inter': Inter_600SemiBold,
+    'Montserrat': Montserrat_400Regular,
+    'MontserratSemiBold': Montserrat_600SemiBold,
+    'MontserratBold': Montserrat_700Bold,
   });
 
   const handleSubscribe = async (plan: any) => {
@@ -499,76 +501,6 @@ const webStyles = StyleSheet.create({
     backgroundColor: "#f5f5f5"
   },
   
-  // TOP HEADER
-  header: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 72,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 24,
-    backgroundColor: "#ffffff",
-    borderBottomWidth: 1,
-    borderColor: "#eeeeee",
-    zIndex: 1000
-  },
-  headerLeft: {
-    flex: 1,
-  },
-  logoText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#000000",
-  },
-  headerCenter: {
-    flex: 2,
-    alignItems: "center",
-  },
-  searchBar: {
-    width: "100%",
-    height: 40,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    justifyContent: "center",
-  },
-  searchPlaceholder: {
-    fontSize: 14,
-    color: "#6c757d",
-  },
-  headerRight: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 12,
-  },
-  notificationIcon: {
-    padding: 8,
-  },
-  notificationBell: {
-    fontSize: 20,
-  },
-  userAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  avatarPlaceholder: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#e5e7eb"
-  },
-  userName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#000000",
-  },
-  
   // CONTENT AREA
   contentArea: {
     flex: 1,
@@ -638,7 +570,7 @@ const webStyles = StyleSheet.create({
   // CENTER CONTENT
   centerOnlyContent: {
     flex: 1,
-    marginTop: 72,
+    marginTop: 56, // Adjusted to account for navbar height
     paddingHorizontal: 40,
     backgroundColor: "#f5f5f5"
   },
@@ -705,12 +637,14 @@ const webStyles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 16,
     lineHeight: 40,
+    fontFamily: "MontserratBold",
   },
   headerCardSubtitle: {
     fontSize: 18,
     color: "#4255ff",
     textAlign: "center",
     lineHeight: 26,
+    fontFamily: "Montserrat",
   },
   
   // PLANS GRID
@@ -1034,5 +968,19 @@ const webStyles = StyleSheet.create({
   actionText: {
     fontSize: 12,
     color: "#495057",
+  },
+  
+  // SUBSCRIPTION BOTTOM IMAGE
+  subscriptionBottomContainer: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 24,
+    marginBottom: 32,
+  },
+  subscriptionBottomImage: {
+    width: 1008, // Fixed width: 4 cards * 240px + 3 gaps * 16px = 1008px
+    height: 180,
+    borderRadius: 102,
   },
 });

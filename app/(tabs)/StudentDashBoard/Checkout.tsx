@@ -5,6 +5,7 @@ import { BASE_URL } from "../../../config";
 import { Ionicons } from "@expo/vector-icons";
 import BackButton from "../../../components/BackButton";
 import { getAuthData } from "../../../utils/authStorage";
+import { safeBack } from "../../../utils/navigation";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import { OpenSans_400Regular, useFonts } from '@expo-google-fonts/open-sans'
 
@@ -53,7 +54,7 @@ export default function Checkout() {
   return (
     <View style={styles.container}>
       <View style={styles.topContainer}>
-        <BackButton size={20} color="#000" onPress={() => router.back()} />
+        <BackButton size={20} color="#000" onPress={() => safeBack(router)} />
         <Text style={styles.heading}>Confirm class</Text>
       </View>
 
