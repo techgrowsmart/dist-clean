@@ -1,13 +1,13 @@
 import { Platform } from 'react-native';
 
-// Get API URL from environment with fallback to production portal
+// Get API URL from environment with fallback to backend server
 const getBaseUrl = () => {
   // Use environment variable if available
   let url = process.env.EXPO_PUBLIC_API_URL;
   
   if (!url) {
-    // Fallback to production portal URL
-    url = "https://portal.gogrowsmart.com";
+    // Fallback to backend server URL (AWS EC2 deployed)
+    url = "https://growsmartserver.gogrowsmart.com";
   }
 
   // Handle localhost/127.0.0.1 for different platforms
