@@ -1,7 +1,9 @@
 {
-  "name": "client",
+  "name": "@gogrowsmart/portal",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "homepage": "https://portal.gogrowsmart.com",
+  "domain": "portal.gogrowsmart.com",
   "scripts": {
     "start": "expo start --dev-client",
     "reset-project": "node ./scripts/reset-project.js",

@@ -1,13 +1,13 @@
 import { Platform } from 'react-native';
 
-// Get API URL from environment with fallback to production
+// Get API URL from environment with fallback to production portal
 const getBaseUrl = () => {
   // Use environment variable if available
   let url = process.env.EXPO_PUBLIC_API_URL;
   
   if (!url) {
-    // Fallback to local development server - try localhost first
-    url = "http://localhost:3000";
+    // Fallback to production portal URL
+    url = "https://portal.gogrowsmart.com";
   }
 
   // Handle localhost/127.0.0.1 for different platforms
@@ -27,3 +27,4 @@ const getBaseUrl = () => {
 
 export const BASE_URL = getBaseUrl();
 export const RAZOR_PAY_KEY = process.env.EXPO_PUBLIC_RAZORPAY_KEY || 'rzp_test_RY9WNGFa44XzaQ';
+export const PORTAL_DOMAIN = process.env.EXPO_PUBLIC_DOMAIN || 'portal.gogrowsmart.com';
