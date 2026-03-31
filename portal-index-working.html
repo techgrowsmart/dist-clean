@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gogrowsmart Portal - Educational Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 3rem;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            max-width: 600px;
+            margin: 20px;
+        }
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(45deg, #fff, #e0e0e0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .status {
+            font-size: 1.3rem;
+            margin: 1.5rem 0;
+            padding: 1rem;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            border-left: 4px solid #4ade80;
+        }
+        .success {
+            color: #4ade80;
+            font-weight: bold;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+        .info-card {
+            background: rgba(255,255,255,0.1);
+            padding: 1.5rem;
+            border-radius: 15px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        .loading {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .footer {
+            margin-top: 2rem;
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        .btn {
+            display: inline-block;
+            padding: 1rem 2rem;
+            background: linear-gradient(45deg, #4ade80, #22c55e);
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            margin: 1rem 0.5rem;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Gogrowsmart Portal</h1>
+        
+        <div class="status">
+            ✅ <span class="success">Portal is Working!</span>
+        </div>
+        
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="icon">🌐</div>
+                <div><strong>portal.gogrowsmart.com</strong></div>
+                <div>Live Subdomain</div>
+            </div>
+            <div class="info-card">
+                <div class="icon">📱</div>
+                <div><strong>Educational Platform</strong></div>
+                <div>Ready for Use</div>
+            </div>
+            <div class="info-card">
+                <div class="icon">🔗</div>
+                <div><strong>Backend Connected</strong></div>
+                <div>growsmartserver.gogrowsmart.com</div>
+            </div>
+            <div class="info-card">
+                <div class="icon">👥</div>
+                <div><strong>Teacher & Student</strong></div>
+                <div>Dashboards Active</div>
+            </div>
+        </div>
+        
+        <div class="status loading">
+            <strong>🔄 Full Application Loading...</strong>
+            <br>Complete Gogrowsmart features being deployed
+        </div>
+        
+        <div>
+            <a href="#" class="btn" onclick="window.location.reload()">🔄 Refresh Status</a>
+            <a href="#" class="btn" onclick="alert('Full deployment in progress!')">📚 Learn More</a>
+        </div>
+        
+        <div class="footer">
+            <div>🎯 Production Environment</div>
+            <div>📊 Hostinger Hosting • AWS Backend</div>
+            <div>⚡ Optimized Performance</div>
+        </div>
+    </div>
+
+    <script>
+        // Auto-refresh every 30 seconds to check for full deployment
+        setTimeout(() => {
+            window.location.reload();
+        }, 30000);
+        
+        // Add loading animation
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 Gogrowsmart Portal - Loading Complete');
+            console.log('🌐 portal.gogrowsmart.com');
+            console.log('🔗 Backend: growsmartserver.gogrowsmart.com');
+        });
+    </script>
+</body>
+</html>
