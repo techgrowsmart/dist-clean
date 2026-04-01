@@ -6,8 +6,13 @@ const getBaseUrl = () => {
   let url = process.env.EXPO_PUBLIC_API_URL;
   
   if (!url) {
-    // Fallback to backend server URL (AWS EC2 deployed)
-    url = "https://growsmartserver.gogrowsmart.com";
+    // For development, use local backend server
+    if (__DEV__) {
+      url = "http://localhost:3000";
+    } else {
+      // Fallback to backend server URL (AWS EC2 deployed)
+      url = "https://growsmartserver.gogrowsmart.com";
+    }
   }
 
   // Handle localhost/127.0.0.1 for different platforms

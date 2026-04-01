@@ -2,7 +2,7 @@ import { BASE_URL } from '../config';
 import { storeAuthData, getAuthData, clearAllStorage } from '../utils/authStorage';
 
 // Development mode flag
-const IS_DEVELOPMENT_MODE = true; // Set to false in production
+const IS_DEVELOPMENT_MODE = false; // Disabled since we're using real backend
 
 export interface LoginResponse {
   success: boolean;
@@ -67,6 +67,12 @@ class AuthService {
         )
       ]) as Response;
 
+      // Check if response is HTML (error page) instead of JSON
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        throw new Error('Network Error - Server returned HTML instead of JSON');
+      }
+
       // Clone response before reading to avoid "body stream already read" error
       const clonedResponse = response.clone();
       const data = await response.json();
@@ -78,13 +84,24 @@ class AuthService {
       return data;
     } catch (error: any) {
       console.error('API request error:', error);
+      console.log('🔍 Error details:', {
+        message: error.message,
+        endpoint,
+        method: options.method,
+        isDevelopmentMode: IS_DEVELOPMENT_MODE
+      });
       
       // Check if it's a network error (backend not reachable)
       if (IS_DEVELOPMENT_MODE && (
           error.message.includes('Failed to fetch') || 
           error.message.includes('Network Error') || 
           error.message.includes('Request timeout') ||
-          error.message.includes('ERR_CONNECTION_TIMED_OUT')
+          error.message.includes('ERR_CONNECTION_TIMED_OUT') ||
+          error.message.includes('Server returned HTML instead of JSON') ||
+          error.message.includes('Your not registered') ||
+          error.message.includes('Failed to send OTP') ||
+          error.message.includes('HTTP error! status: 404') ||
+          error.message.includes('HTTP error! status: 500')
         )) {
         console.log('🔄 Backend not reachable, using fallback for development');
         
@@ -93,17 +110,29 @@ class AuthService {
           const body = JSON.parse(options.body as string);
           const email = body.email;
           
-          // Mock successful login for development
+          // For development, check if it's a test user
+          const testUsers = ["student1@example.com", "teacher56@example.com", "teacher31@example.com"];
+          if (testUsers.includes(email)) {
+            console.log(`🧪 Test user detected: ${email} - Bypassing OTP`);
+            const role = email.includes('teacher') ? 'teacher' : 'student';
+            const token = 'mock-test-token-' + Date.now();
+            
+            return {
+              message: "✅ Login successful (test user)",
+              role: role,
+              token: token,
+              name: email.split('@')[0],
+              isTestUser: true
+            };
+          }
+          
+          // For other emails, simulate OTP sending
+          console.log('🔄 Using development fallback - sending OTP');
           return {
-            success: true,
-            token: 'mock-token-' + Date.now(),
-            message: 'OTP sent successfully (Development Mode)',
-            otpId: 'mock-otp-id',
+            message: "✅ OTP sent successfully",
+            otpId: 'mock-otp-id-' + Date.now(),
             isRegistered: true,
-            isTestUser: email.includes('test') || email.includes('demo'),
-            name: email.split('@')[0],
-            email: email,
-            role: email.includes('teacher') ? 'teacher' : 'student'
+            role: email.includes('teacher') ? 'teacher' : 'student',
           };
         }
         
@@ -113,12 +142,9 @@ class AuthService {
           
           // Mock successful OTP verification
           return {
-            success: true,
-            token: 'mock-verified-token-' + Date.now(),
-            name: email.split('@')[0],
-            email: email,
+            message: "✅ OTP verified successfully",
             role: email.includes('teacher') ? 'teacher' : 'student',
-            isTestUser: email.includes('test') || email.includes('demo')
+            token: 'mock-verified-token-' + Date.now()
           };
         }
         
@@ -127,34 +153,21 @@ class AuthService {
           const email = body.email;
           const name = body.fullName;
           
-          // Mock successful signup
-          return {
-            success: true,
-            message: 'User registered successfully (Development Mode)',
-            otpId: 'mock-signup-otp-id',
-            user: {
-              id: 'mock-user-' + Date.now(),
-              email: email,
-              name: name,
-              role: 'student'
-            }
-          };
+          // Mock successful signup OTP sending
+          return { message: "✅ OTP sent successfully", otpId: 'mock-signup-otp-id-' + Date.now() };
         }
         
         if (endpoint === '/api/signup/verify-otp' && options.method === 'POST') {
           const body = JSON.parse(options.body as string);
           const email = body.email;
           const name = body.name;
-          const role = body.role;
           
           // Mock successful signup OTP verification
           return {
-            success: true,
+            message: "✅ Account created successfully",
             token: 'mock-verified-token-' + Date.now(),
             userId: 'mock-user-' + Date.now(),
-            email: email,
-            name: name,
-            role: role || 'student'
+            responseTime: 100
           };
         }
       }
@@ -163,28 +176,33 @@ class AuthService {
     }
   }
 
-  // Send OTP for email verification (using existing login endpoint)
+  // Send OTP for email verification (login)
   async sendOTP(email: string, role: string): Promise<OTPResponse> {
     try {
+      // Validate email domain
+      if (!this.isValidEmail(email)) {
+        throw new Error('Please enter a valid email address');
+      }
+
       const response = await this.makeRequest('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email }),
       });
 
-      // Handle different response formats
-      if (response.isRegistered === false) {
-        // User not registered, need to signup
-        throw new Error(response.message || 'User not registered. Please sign up first.');
-      }
-
       return {
         success: true,
-        message: response.message,
+        message: response.message || 'OTP sent successfully',
         otpId: response.otpId,
         email,
       };
     } catch (error: any) {
       console.error('Send OTP error:', error);
+      
+      // Check if it's a "not registered" error to trigger signup flow
+      if (error.message.includes('not registered') || error.message.includes('sign up')) {
+        throw error; // Re-throw to handle signup flow
+      }
+      
       // Provide more specific error messages
       if (error.message.includes('Failed to send OTP')) {
         throw new Error('Unable to send verification code. Please check your email and try again.');
@@ -194,6 +212,12 @@ class AuthService {
         throw error;
       }
     }
+  }
+
+  // Validate email format and domain
+  private isValidEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   }
 
   // Verify OTP
@@ -229,40 +253,6 @@ class AuthService {
       };
     } catch (error: any) {
       console.error('Verify OTP error:', error);
-      throw error;
-    }
-  }
-
-  // Verify signup OTP
-  async verifySignupOTP(email: string, otp: string, name: string, role: string): Promise<LoginResponse> {
-    try {
-      const response = await this.makeRequest('/api/signup/verify-otp', {
-        method: 'POST',
-        body: JSON.stringify({ email, otp, name, phonenumber: '0000000000', role }),
-      });
-
-      // Store auth data if successful
-      if (response.token) {
-        await storeAuthData({
-          role: role || 'student',
-          email: response.email || email,
-          token: response.token,
-          name: name,
-        });
-      }
-
-      return {
-        success: true,
-        token: response.token,
-        user: {
-          id: response.userId || email,
-          email: response.email || email,
-          name: name,
-          role: role || 'student',
-        },
-      };
-    } catch (error: any) {
-      console.error('Verify signup OTP error:', error);
       throw error;
     }
   }
@@ -332,12 +322,27 @@ class AuthService {
   // Signup new user
   async signup(email: string, name: string, role: string, password?: string): Promise<SignupResponse> {
     try {
+      // Validate email before signup
+      if (!this.isValidEmail(email)) {
+        throw new Error('Please enter a valid email address');
+      }
+
       const response = await this.makeRequest('/api/signup', {
         method: 'POST',
-        body: JSON.stringify({ email, fullName: name, phonenumber: '0000000000' }),
+        body: JSON.stringify({ 
+          email, 
+          fullName: name, 
+          phonenumber: '0000000000',
+          role: role 
+        }),
       });
 
-      return response;
+      return {
+        success: true,
+        message: response.message || 'User registered successfully',
+        user: response.user,
+        otpId: response.otpId
+      };
     } catch (error: any) {
       console.error('Signup error:', error);
       throw error;

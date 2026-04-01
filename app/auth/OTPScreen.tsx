@@ -71,12 +71,9 @@ export default function OTPScreen() {
       }
       
       if (response.success) {
-        // For signup verification, redirect to role selection
+        // For signup verification, route to LoginOptionsScreen
         if (isSignup) {
-          router.push({ 
-            pathname: '/auth/RoleSelectionScreen' as any,
-            params: { email: email }
-          });
+          router.replace('/auth/LoginOptionsScreen' as any);
         } else {
           // For login verification, navigate to appropriate dashboard
           if (response.user?.role === 'teacher') {

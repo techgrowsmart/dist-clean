@@ -25,71 +25,69 @@ export default function EmailInputScreen() {
     setLoading(true);
 
     try {
-      // Check if it's a test user
-      if (email === 'student1@example.com' || email === 'teacher56@example.com' || email === 'teacher31@example.com') {
-        const response = await authService.testUserLogin(email);
+      // Try to send OTP for login/signup
+      const response = await authService.sendOTP(email, role);
+      
+      // Check if it's a test user that bypasses OTP
+      if (response.isTestUser && response.token) {
+        // Store auth data and navigate directly to dashboard
+        await authService.storeAuthData({
+          role: response.role || role,
+          email: email,
+          token: response.token,
+          name: response.name || email.split('@')[0],
+        });
         
-        if (response.success) {
-          // Navigate to appropriate dashboard
-          if (response.user?.role === 'teacher') {
-            router.replace('/(tabs)/TeacherDashBoard' as any);
-          } else {
-            router.replace('/(tabs)/StudentDashBoard' as any);
-          }
+        // Navigate to appropriate dashboard
+        if (response.role === 'teacher') {
+          router.replace('/(tabs)/TeacherDashBoard' as any);
         } else {
-          Alert.alert('Error', response.message || 'Login failed');
+          router.replace('/(tabs)/StudentDashBoard' as any);
         }
-      } else {
-        // For regular users, try login first, then signup if needed
+        return;
+      }
+      
+      // For regular users, navigate to OTP verification screen
+      router.push({ 
+        pathname: '/auth/OTPScreen' as any,
+        params: { 
+          email: email, 
+          isLogin: 'false', 
+          role: role,
+          otpId: response.otpId || '',
+          isSignup: 'true'
+        } 
+      });
+    } catch (error: any) {
+      console.error('OTP sending error:', error);
+      
+      // For any error in development mode, try signup directly
+      if (process.env.NODE_ENV === 'development') {
         try {
-          const response = await authService.sendOTP(email, role);
+          const signupResponse = await authService.signup(email, 'New User', role);
           
-          if (response.success) {
-            // Navigate to OTP verification screen
+          if (signupResponse.otpId) {
+            // Navigate to OTP verification screen for signup
             router.push({ 
               pathname: '/auth/OTPScreen' as any,
               params: { 
                 email: email, 
-                isLogin: isLogin.toString(), 
+                isLogin: 'false', 
                 role: role,
-                otpId: response.otpId || ''
+                otpId: signupResponse.otpId || '',
+                isSignup: 'true'
               } 
             });
           } else {
-            Alert.alert('Error', response.message || 'Failed to send OTP');
+            Alert.alert('Error', 'Failed to initiate signup');
           }
-        } catch (loginError: any) {
-          // If login fails because user not registered, try signup
-          if (loginError.message && loginError.message.includes('not registered')) {
-            try {
-              const signupResponse = await authService.signup(email, 'New User', role);
-              
-              if (signupResponse.otpId) {
-                // Navigate to OTP verification screen for signup
-                router.push({ 
-                  pathname: '/auth/OTPScreen' as any,
-                  params: { 
-                    email: email, 
-                    isLogin: 'false', 
-                    role: role,
-                    otpId: signupResponse.otpId || '',
-                    isSignup: 'true'
-                  } 
-                });
-              } else {
-                Alert.alert('Error', 'Failed to initiate signup');
-              }
-            } catch (signupError: any) {
-              Alert.alert('Error', signupError.message || 'Failed to signup');
-            }
-          } else {
-            Alert.alert('Error', loginError.message || 'Failed to send OTP');
-          }
+        } catch (signupError: any) {
+          console.error('Direct signup error:', signupError);
+          Alert.alert('Error', signupError.message || 'Failed to signup');
         }
+      } else {
+        Alert.alert('Error', error.message || 'Failed to send OTP');
       }
-    } catch (error: any) {
-      console.error('Email input error:', error);
-      Alert.alert('Error', error.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
