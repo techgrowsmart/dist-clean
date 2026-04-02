@@ -5,6 +5,7 @@ import { authService } from '../../services/authService';
 import { safeBack } from '../../utils/navigation';
 
 const { width, height } = Dimensions.get('window');
+const windowWidth = width;
 
 export default function EmailInputScreen() {
   const router = useRouter();
@@ -15,6 +16,22 @@ export default function EmailInputScreen() {
   const [loading, setLoading] = useState(false);
   const [isLogin, setIsLogin] = useState(params.type === 'login' || false);
   const [role, setRole] = useState(params.role as string || '');
+  const [fullName, setFullName] = useState('');
+  const [phoneCountry, setPhoneCountry] = useState('+91');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
+
+  const countries = [
+    { name: 'India', code: 'IN', dial_code: '+91' },
+    { name: 'United States', code: 'US', dial_code: '+1' },
+    { name: 'United Kingdom', code: 'GB', dial_code: '+44' },
+    { name: 'Canada', code: 'CA', dial_code: '+1' },
+    { name: 'Australia', code: 'AU', dial_code: '+61' },
+    { name: 'Pakistan', code: 'PK', dial_code: '+92' },
+    { name: 'Bangladesh', code: 'BD', dial_code: '+880' },
+    { name: 'Nigeria', code: 'NG', dial_code: '+234' },
+    { name: 'South Africa', code: 'ZA', dial_code: '+27' },
+  ];
 
   const handleContinue = async () => {
     if (!email.trim()) {
@@ -55,7 +72,9 @@ export default function EmailInputScreen() {
           isLogin: 'false', 
           role: role,
           otpId: response.otpId || '',
-          isSignup: 'true'
+          isSignup: 'true',
+          name: fullName,
+          phone: phoneNumber ? `${phoneCountry}${phoneNumber}` : ''
         } 
       });
     } catch (error: any) {
@@ -102,15 +121,15 @@ export default function EmailInputScreen() {
       <View style={webStyles.container}>
         <StatusBar barStyle="light-content" />
         {/* Left Column - Background Image Only */}
-        <View style={webStyles.leftColumn}>
-          <ImageBackground
-            source={require('../../assets/images/login-background.jpeg')}
-            style={webStyles.backgroundImage}
-            resizeMode="cover"
-          >
-            <View style={webStyles.imageOverlay} />
-          </ImageBackground>
-        </View>
+        {windowWidth >= 900 && (
+          <View style={webStyles.leftColumn}>
+            <ImageBackground
+              source={require('../../assets/images/login-background.jpeg')}
+              style={webStyles.backgroundImage}
+              resizeMode="cover"
+            />
+          </View>
+        )}
 
         {/* Right Column - Content */}
         <View style={webStyles.rightColumn}>
@@ -122,7 +141,7 @@ export default function EmailInputScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Email Input Section */}
+            {/* Email / Signup Input Section */}
             <View style={webStyles.emailSection}>
               <Text style={webStyles.emailTitle}>
                 {isLogin ? 'Welcome Back' : 'Create Account'}
@@ -130,9 +149,43 @@ export default function EmailInputScreen() {
               <Text style={webStyles.emailSubtitle}>
                 {isLogin 
                   ? 'Enter your email to continue to your account'
-                  : 'Enter your email to get started with GoGrowSmart'
+                  : 'Enter your details to get started with GoGrowSmart'
                 }
               </Text>
+
+              {/* Name (signup only) */}
+              {!isLogin && (
+                <View style={webStyles.inputContainer}>
+                  <TextInput
+                    style={webStyles.emailInput}
+                    placeholder="Full name"
+                    placeholderTextColor="#9CA3AF"
+                    value={fullName}
+                    onChangeText={setFullName}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                  />
+                </View>
+              )}
+
+              {/* Phone (signup only) */}
+              {!isLogin && (
+                <View style={webStyles.phoneRow}>
+                  <TouchableOpacity style={webStyles.countryPicker} onPress={() => setCountryDropdownOpen(!countryDropdownOpen)}>
+                    <Text style={webStyles.countryPickerText}>{phoneCountry}</Text>
+                  </TouchableOpacity>
+                  <TextInput
+                    style={webStyles.phoneInput}
+                    placeholder="Phone number"
+                    placeholderTextColor="#9CA3AF"
+                    value={phoneNumber}
+                    onChangeText={setPhoneNumber}
+                    keyboardType="phone-pad"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+              )}
 
               <View style={webStyles.inputContainer}>
                 <TextInput
@@ -158,6 +211,17 @@ export default function EmailInputScreen() {
                   <Text style={webStyles.continueButtonText}>Continue</Text>
                 )}
               </TouchableOpacity>
+
+              {/* Country dropdown list */}
+              {countryDropdownOpen && (
+                <View style={webStyles.countryList}>
+                  {countries.map((c) => (
+                    <TouchableOpacity key={c.code} style={webStyles.countryItem} onPress={() => { setPhoneCountry(c.dial_code); setCountryDropdownOpen(false); }}>
+                      <Text style={webStyles.countryItemText}>{c.name} {c.dial_code}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
 
             {/* Terms and Conditions */}
@@ -187,32 +251,62 @@ export default function EmailInputScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Email Title */}
+        {/* Title */}
         <Text style={styles.mobileEmailTitle}>
           {isLogin ? 'Welcome Back' : 'Create Account'}
         </Text>
 
-        {/* Email Description */}
+        {/* Description */}
         <Text style={styles.mobileEmailSubtitle}>
           {isLogin 
             ? 'Enter your email to continue to your account'
-            : 'Enter your email to get started with GoGrowSmart'
+            : 'Enter your details to get started with GoGrowSmart'
           }
         </Text>
 
-        {/* Email Input */}
-        <View style={styles.mobileInputContainer}>
+        {/* Name (signup only) */}
+        {!isLogin && (
           <TextInput
             style={styles.mobileEmailInput}
-            placeholder="Enter your email address"
+            placeholder="Full name"
             placeholderTextColor="#9CA3AF"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
+            value={fullName}
+            onChangeText={setFullName}
+            autoCapitalize="words"
             autoCorrect={false}
           />
-        </View>
+        )}
+
+        {/* Phone (signup only) */}
+        {!isLogin && (
+          <View style={styles.mobilePhoneRow}>
+            <TouchableOpacity style={styles.mobileCountryPicker} onPress={() => setCountryDropdownOpen(!countryDropdownOpen)}>
+              <Text style={styles.mobileCountryPickerText}>{phoneCountry}</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={styles.mobileEmailInput}
+              placeholder="Phone number"
+              placeholderTextColor="#9CA3AF"
+              value={phoneNumber}
+              onChangeText={setPhoneNumber}
+              keyboardType="phone-pad"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+        )}
+
+        {/* Email Input */}
+        <TextInput
+          style={styles.mobileEmailInput}
+          placeholder="Enter your email address"
+          placeholderTextColor="#9CA3AF"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
 
         {/* Continue Button */}
         <TouchableOpacity 
@@ -226,6 +320,17 @@ export default function EmailInputScreen() {
             <Text style={styles.mobileContinueButtonText}>Continue</Text>
           )}
         </TouchableOpacity>
+
+        {/* Country dropdown list (mobile) */}
+        {countryDropdownOpen && (
+          <View style={styles.mobileCountryList}>
+            {countries.map((c) => (
+              <TouchableOpacity key={c.code} style={styles.mobileCountryItem} onPress={() => { setPhoneCountry(c.dial_code); setCountryDropdownOpen(false); }}>
+                <Text style={styles.mobileCountryItemText}>{c.name} {c.dial_code}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {/* Terms */}
         <Text style={styles.mobileTermsText}>
@@ -308,6 +413,58 @@ const webStyles = StyleSheet.create({
     lineHeight: 24,
     paddingHorizontal: 20,
     marginBottom: 32,
+  },
+  inputContainer: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  phoneRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  countryPicker: {
+    width: 80,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+  },
+  countryPickerText: {
+    color: '#1A1A1A',
+    fontWeight: '600',
+  },
+  phoneInput: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    backgroundColor: '#F9FAFB',
+    color: '#1A1A1A',
+  },
+  countryList: {
+    width: '100%',
+    maxHeight: 200,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  countryItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  countryItemText: {
+    color: '#1A1A1A',
   },
   inputContainer: {
     width: '100%',
@@ -401,8 +558,47 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 32,
+    marginBottom: 24,
     paddingHorizontal: 20,
+  },
+  mobilePhoneRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  mobileCountryPicker: {
+    width: 86,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+    marginRight: 8,
+  },
+  mobileCountryPickerText: {
+    color: '#1A1A1A',
+    fontWeight: '600',
+  },
+  mobileCountryList: {
+    width: '100%',
+    maxHeight: 240,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  mobileCountryItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  mobileCountryItemText: {
+    color: '#1A1A1A',
   },
   mobileInputContainer: {
     width: '100%',

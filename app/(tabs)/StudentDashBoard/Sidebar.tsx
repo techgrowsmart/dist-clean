@@ -39,10 +39,54 @@ const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, student
   const router = useRouter();
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
+  const isWeb = Platform.OS === 'web';
 
-  if (!visible) return null;
+  if (!visible && !isWeb) return null;
 
   const handleLogout = () => setShowLogoutModal(true);
+
+  // Render a persistent left sidebar for web (like teacher's sidebar)
+  if (isWeb) {
+    return (
+      <View style={styles.webContainer}>
+        <View style={styles.webSidebar}>
+          <View style={styles.webProfileSection}>
+            {profileImage ? (
+              <Image source={{ uri: profileImage }} style={styles.webProfileImage} />
+            ) : (
+              <View style={styles.webProfilePlaceholder}>
+                <Text style={styles.webProfileInitial}>{studentName ? studentName[0]?.toUpperCase() : '?'}</Text>
+              </View>
+            )}
+            <Text style={styles.webStudentName}>{studentName || 'Student'}</Text>
+          </View>
+
+          <View style={styles.webMenuItems}>
+            {menuItems.map((item, index) => {
+              const IconComponent = item.icon;
+              const isActive = activeItem === item.name;
+              return (
+                <TouchableOpacity key={index} onPress={() => handleItemPress(item.name)} style={[styles.webNavItem, isActive && styles.webNavItemActive]}>
+                  <IconComponent size={20} color={isActive ? '#FFF' : '#374151'} />
+                  <Text style={[styles.webNavText, isActive && styles.webNavTextActive]}>{item.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.webFooter}>
+            <TouchableOpacity onPress={() => Linking.openURL('mailto:support@gogrowsmart.com?subject=Complaint')}>
+              <Text style={styles.webFooterLink}>Raise a Complaint</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleLogout} style={styles.webLogoutRow}>
+              <LogoutIcon size={18} color="#374151" />
+              <Text style={styles.webLogoutText}>Log Out</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   const handleItemPress = (itemName: string) => {
     if (itemName === "Terms & Conditions") {
@@ -210,12 +254,14 @@ const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, student
                   Confirm Log Out
                 </Text>
               )}
-            </TouchableOpacity>
-          </View>
-        </View>
+                },
+              },
+            });
+
       )}
     </TouchableOpacity>
   );
 };
 
 export default Sidebar;
+

@@ -1,14 +1,42 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ImageBackground, Dimensions, Platform, StatusBar, Animated } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ImageBackground, Dimensions, Platform, StatusBar, Animated, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
+const windowWidth = width;
 
 export default function InitialScreen() {
   const router = useRouter();
   const isWeb = Platform.OS === 'web';
   const [signupScale] = useState(new Animated.Value(1));
   const [loginScale] = useState(new Animated.Value(1));
+  const [backTarget, setBackTarget] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isWeb) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const returnTo = params.get('returnTo') || params.get('from');
+        if (returnTo) {
+          setBackTarget(returnTo);
+          return;
+        }
+        if (document.referrer) {
+          setBackTarget(document.referrer);
+          return;
+        }
+      } catch (e) {
+        // ignore
+      }
+    } else {
+      // for native apps we can accept a deep link param via router params if provided
+      try {
+        // @ts-ignore - expo router small differences
+        const routeParams = (router as any).query || {};
+        if (routeParams?.returnTo) setBackTarget(routeParams.returnTo as string);
+      } catch (e) {}
+    }
+  }, [isWeb, router]);
 
   const animateButton = (scaleAnim: Animated.Value, callback: () => void) => {
     Animated.sequence([
@@ -43,17 +71,44 @@ export default function InitialScreen() {
       <View style={webStyles.container}>
         <StatusBar barStyle="light-content" />
         {/* Left Column - Background Image Only */}
-        <View style={webStyles.leftColumn}>
-          <ImageBackground
-            source={require('../../assets/images/login-background.jpeg')}
-            style={webStyles.backgroundImage}
-            resizeMode="cover"
-          >
-          </ImageBackground>
-        </View>
+        {windowWidth >= 900 && (
+          <View style={webStyles.leftColumn}>
+            <ImageBackground
+              source={require('../../assets/images/login-background.jpeg')}
+              style={webStyles.backgroundImage}
+              resizeMode="cover"
+            />
+          </View>
+        )}
 
         {/* Right Column - Content */}
         <View style={webStyles.rightColumn}>
+          {/* Back button - smart navigation */}
+          <View style={webStyles.backWrapper}>
+            <TouchableOpacity
+              onPress={() => {
+                if (backTarget) {
+                  // If it's an absolute URL, navigate using window.location
+                  if (backTarget.startsWith('http')) {
+                    window.location.href = backTarget;
+                    return;
+                  }
+                  // internal path
+                  router.replace(backTarget as any);
+                  return;
+                }
+                // fallback to router.back()
+                try {
+                  router.back();
+                } catch (e) {
+                  router.replace('/');
+                }
+              }}
+              style={webStyles.backButton}
+            >
+              <Text style={webStyles.backButtonText}>Back</Text>
+            </TouchableOpacity>
+          </View>
           <View style={webStyles.content}>
             {/* Welcome Section */}
             <View style={webStyles.welcomeSection}>
@@ -110,6 +165,23 @@ export default function InitialScreen() {
       <View style={styles.mobileContent}>
         {/* Mobile Header */}
         <View style={styles.mobileHeader}>
+          <TouchableOpacity
+            style={styles.mobileBack}
+            onPress={() => {
+              if (backTarget) {
+                // deep link or external url
+                if (backTarget.startsWith('http')) {
+                  Linking.openURL(backTarget).catch(() => router.replace('/'));
+                  return;
+                }
+                router.replace(backTarget as any);
+                return;
+              }
+              router.back();
+            }}
+          >
+            <Text style={styles.mobileBackText}>{'←'}</Text>
+          </TouchableOpacity>
           <View style={styles.mobileLogo}>
             <Text style={styles.mobileLogoText}>GS</Text>
           </View>
@@ -220,13 +292,28 @@ const webStyles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: '8%',
   },
+  backWrapper: {
+    position: 'absolute',
+    top: 24,
+    left: 24,
+    zIndex: 50,
+  },
+  backButton: {
+    backgroundColor: 'transparent',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  backButtonText: {
+    color: '#6B7280',
+    fontSize: 16,
+  },
   content: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
-    maxWidth: 600,
-    paddingVertical: 40,
+    maxWidth: 520,
+    paddingVertical: 36,
   },
   welcomeSection: {
     alignItems: 'center',
@@ -234,7 +321,7 @@ const webStyles = StyleSheet.create({
     width: '100%',
   },
   welcomeTitle: {
-    fontSize: 48,
+    fontSize: 40,
     fontWeight: '900',
     color: '#1A1A1A',
     textAlign: 'center',
@@ -251,12 +338,12 @@ const webStyles = StyleSheet.create({
   },
   buttonsSection: {
     width: '100%',
-    marginBottom: 60,
+    marginBottom: 40,
   },
   signupButton: {
     backgroundColor: '#7C4DDB',
-    paddingVertical: 24,
-    paddingHorizontal: 40,
+    paddingVertical: 18,
+    paddingHorizontal: 36,
     borderRadius: 20,
     marginBottom: 20,
     width: '100%',
@@ -277,8 +364,8 @@ const webStyles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderWidth: 2,
     borderColor: '#7C4DDB',
-    paddingVertical: 24,
-    paddingHorizontal: 40,
+    paddingVertical: 18,
+    paddingHorizontal: 36,
     borderRadius: 20,
     width: '100%',
     alignItems: 'center',
@@ -317,11 +404,24 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
   },
   mobileHeader: {
     alignItems: 'center',
     marginBottom: 32,
+  },
+  mobileBack: {
+    position: 'absolute',
+    left: 16,
+    top: 12,
+    padding: 8,
+    zIndex: 30,
+  },
+  mobileBackText: {
+    fontSize: 20,
+    color: '#7C4DDB',
+    fontWeight: '700',
   },
   mobileLogo: {
     width: 60,
@@ -355,7 +455,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   mobileWelcomeTitle: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '800',
     color: '#1A1A1A',
     textAlign: 'center',
@@ -363,20 +463,20 @@ const styles = StyleSheet.create({
     lineHeight: 38,
   },
   mobileDescription: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#6B7280',
     textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 20,
+    marginBottom: 28,
+    lineHeight: 22,
   },
   signupButton: {
     backgroundColor: '#7C4DDB',
-    paddingVertical: 18,
-    paddingHorizontal: 32,
+    paddingVertical: 16,
+    paddingHorizontal: 28,
     borderRadius: 16,
     marginBottom: 16,
     width: '100%',
-    maxWidth: 300,
+    maxWidth: 360,
     alignItems: 'center',
     shadowColor: '#7C4DDB',
     shadowOffset: { width: 0, height: 4 },
@@ -394,12 +494,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderWidth: 2,
     borderColor: '#7C4DDB',
-    paddingVertical: 18,
-    paddingHorizontal: 32,
+    paddingVertical: 16,
+    paddingHorizontal: 28,
     borderRadius: 16,
     marginBottom: 24,
     width: '100%',
-    maxWidth: 300,
+    maxWidth: 360,
     alignItems: 'center',
   },
   loginButtonText: {

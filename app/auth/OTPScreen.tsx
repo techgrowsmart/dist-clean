@@ -5,6 +5,7 @@ import { authService } from '../../services/authService';
 import { safeBack } from '../../utils/navigation';
 
 const { width, height } = Dimensions.get('window');
+const windowWidth = width;
 
 export default function OTPScreen() {
   const router = useRouter();
@@ -15,6 +16,8 @@ export default function OTPScreen() {
   const isLogin = params.isLogin === 'true';
   const isSignup = params.isSignup === 'true';
   const role = params.role as string || 'student';
+  const signupName = (params.name as string) || '';
+  const signupPhone = (params.phone as string) || '';
   const otpId = params.otpId as string || '';
   
   const [otp, setOtp] = useState(['', '', '', '']);
@@ -22,6 +25,31 @@ export default function OTPScreen() {
   const [timer, setTimer] = useState(120);
   const [canResend, setCanResend] = useState(false);
   const [verifying, setVerifying] = useState(false);
+
+  // Auto-login for known test users to bypass OTP screen
+  useEffect(() => {
+    const testUsers = ['student1@example.com', 'teacher56@example.com'];
+    if (email && testUsers.includes(email)) {
+      (async () => {
+        setVerifying(true);
+        try {
+          const res = await authService.testUserLogin(email);
+          if (res.success) {
+            if (res.user?.role === 'teacher') {
+              router.replace('/(tabs)/TeacherDashBoard' as any);
+            } else {
+              router.replace('/(tabs)/StudentDashBoard' as any);
+            }
+            return;
+          }
+        } catch (e) {
+          console.warn('Test user auto-login failed:', e);
+        } finally {
+          setVerifying(false);
+        }
+      })();
+    }
+  }, [email, router]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -62,9 +90,9 @@ export default function OTPScreen() {
       let response;
       
       if (isSignup) {
-        // For signup, we need user name - let's use a default or get it from somewhere
-        const userName = email.split('@')[0]; // Use email prefix as default name
-        response = await authService.verifySignupOTP(email, otpValue, userName, role);
+        // For signup, use provided name/phone (if any)
+        const userName = signupName || email.split('@')[0];
+        response = await authService.verifySignupOTP(email, otpValue, userName, role, signupPhone);
       } else {
         // For login verification
         response = await authService.verifyOTP(email, otpValue, otpId);
@@ -136,15 +164,15 @@ export default function OTPScreen() {
       <View style={webStyles.container}>
         <StatusBar barStyle="light-content" />
         {/* Left Column - Background Image Only */}
-        <View style={webStyles.leftColumn}>
-          <ImageBackground
-            source={require('../../assets/images/login-background.jpeg')}
-            style={webStyles.backgroundImage}
-            resizeMode="cover"
-          >
-            <View style={webStyles.imageOverlay} />
-          </ImageBackground>
-        </View>
+        {windowWidth >= 900 && (
+          <View style={webStyles.leftColumn}>
+            <ImageBackground
+              source={require('../../assets/images/login-background.jpeg')}
+              style={webStyles.backgroundImage}
+              resizeMode="cover"
+            />
+          </View>
+        )}
 
         {/* Right Column - Content */}
         <View style={webStyles.rightColumn}>
@@ -347,7 +375,7 @@ const webStyles = StyleSheet.create({
     width: '100%',
   },
   otpTitle: {
-    fontSize: 42,
+    fontSize: 36,
     fontWeight: '900',
     color: '#1A1A1A',
     textAlign: 'center',
@@ -368,12 +396,12 @@ const webStyles = StyleSheet.create({
   otpContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 32,
-    gap: 12,
+    marginBottom: 24,
+    gap: 10,
   },
   otpInputContainer: {
-    width: 50,
-    height: 50,
+    width: 48,
+    height: 48,
   },
   otpInput: {
     width: '100%',
@@ -381,7 +409,7 @@ const webStyles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#E5E7EB',
     borderRadius: 12,
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#1A1A1A',
     backgroundColor: '#F9FAFB',
