@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -8,7 +8,8 @@ import {
   Dimensions, 
   Platform, 
   StatusBar,
-  Image
+  Image,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
@@ -44,6 +45,23 @@ const onboardingData = [
 export default function OnboardingScreen() {
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const windowWidth = Dimensions.get('window').width;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // simple transition animation when index changes
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: -10, duration: 220, useNativeDriver: true }),
+      ]),
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration: 300, useNativeDriver: true }),
+      ]),
+    ]).start();
+  }, [currentIndex, fadeAnim, translateY]);
 
   const handleNext = () => {
     if (currentIndex < onboardingData.length - 1) {
@@ -87,14 +105,14 @@ export default function OnboardingScreen() {
     const currentItem = onboardingData[currentIndex];
     return (
       <View style={styles.onboardingItem}>
-        <View style={styles.contentContainer}>
+        <Animated.View style={[styles.contentContainer, { opacity: fadeAnim, transform: [{ translateY }] }]}>
           {/* Progress Indicators */}
           {renderProgressIndicators()}
           
           {/* Circle with Image */}
-          <View style={styles.circleContainer}>
+          <Animated.View style={styles.circleContainer}>
             <Image source={currentItem.image} style={styles.circleImage} resizeMode="contain" />
-          </View>
+          </Animated.View>
           
           {/* Title */}
           <Text style={styles.title}>{currentItem.title}</Text>
@@ -117,7 +135,7 @@ export default function OnboardingScreen() {
               </Text>
             </TouchableOpacity>
           )}
-        </View>
+        </Animated.View>
       </View>
     );
   };
@@ -127,15 +145,15 @@ export default function OnboardingScreen() {
       <View style={webStyles.container}>
         <StatusBar barStyle="light-content" />
         {/* Left Column - Background Image Only */}
-        <View style={webStyles.leftColumn}>
-          <ImageBackground
-            source={require('../assets/images/login-background.jpeg')}
-            style={webStyles.backgroundImage}
-            resizeMode="cover"
-          >
-            <View style={webStyles.imageOverlay} />
-          </ImageBackground>
-        </View>
+        {windowWidth >= 900 && (
+          <View style={webStyles.leftColumn}>
+            <ImageBackground
+              source={require('../assets/images/login-background.jpeg')}
+              style={webStyles.backgroundImage}
+              resizeMode="cover"
+            />
+          </View>
+        )}
 
         {/* Right Column - Onboarding Content */}
         <View style={webStyles.rightColumn}>
@@ -172,7 +190,7 @@ const webStyles = StyleSheet.create({
   leftColumn: {
     width: '50%',
     minWidth: 300,
-    backgroundColor: '#3131b0',
+    backgroundColor: 'transparent',
   },
   backgroundImage: {
     flex: 1,
@@ -181,7 +199,7 @@ const webStyles = StyleSheet.create({
   },
   imageOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(49, 49, 176, 0.3)',
+    backgroundColor: 'transparent',
   },
   rightColumn: {
     flex: 1,

@@ -257,6 +257,42 @@ class AuthService {
     }
   }
 
+  // Verify signup OTP and create account
+  async verifySignupOTP(email: string, otp: string, name: string, role: string, phone?: string): Promise<LoginResponse> {
+    try {
+      const response = await this.makeRequest('/api/signup/verify-otp', {
+        method: 'POST',
+        body: JSON.stringify({ email, otp, name, role, phone }),
+      });
+
+      // Store auth data if successful
+      if (response.token && response.role) {
+        await storeAuthData({
+          role: response.role,
+          email: response.email || email,
+          token: response.token,
+          name: response.name || name,
+          profileImage: response.profileImage,
+        });
+      }
+
+      return {
+        success: true,
+        token: response.token,
+        user: {
+          id: response.id || email,
+          email: response.email || email,
+          name: response.name || name,
+          role: response.role,
+          profileImage: response.profileImage,
+        },
+      };
+    } catch (error: any) {
+      console.error('Verify signup OTP error:', error);
+      throw error;
+    }
+  }
+
   // Update user role after signup
   async updateRole(email: string, role: string): Promise<any> {
     try {

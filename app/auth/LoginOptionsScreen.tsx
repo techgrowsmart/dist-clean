@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { safeBack } from '../../utils/navigation';
 
 const { width, height } = Dimensions.get('window');
+const windowWidth = width;
 
 export default function LoginOptionsScreen() {
   const router = useRouter();
@@ -48,14 +49,15 @@ export default function LoginOptionsScreen() {
       <View style={webStyles.container}>
         <StatusBar barStyle="light-content" />
         {/* Left Column - Background Image Only */}
-        <View style={webStyles.leftColumn}>
-          <ImageBackground
-            source={require('../../assets/images/login-background.jpeg')}
-            style={webStyles.backgroundImage}
-            resizeMode="cover"
-          >
-          </ImageBackground>
-        </View>
+        {windowWidth >= 900 && (
+          <View style={webStyles.leftColumn}>
+            <ImageBackground
+              source={require('../../assets/images/login-background.jpeg')}
+              style={webStyles.backgroundImage}
+              resizeMode="cover"
+            />
+          </View>
+        )}
 
         {/* Right Column - Content */}
         <View style={webStyles.rightColumn}>
@@ -252,15 +254,15 @@ const webStyles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: '8%',
+    paddingHorizontal: '6%',
   },
   content: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
-    maxWidth: 600,
-    paddingVertical: 40,
+    maxWidth: 520,
+    paddingVertical: 36,
   },
   backButtonContainer: {
     position: 'absolute',
@@ -284,7 +286,7 @@ const webStyles = StyleSheet.create({
     width: '100%',
   },
   roleTitle: {
-    fontSize: 48,
+    fontSize: 40,
     fontWeight: '900',
     color: '#1A1A1A',
     textAlign: 'center',
@@ -292,7 +294,7 @@ const webStyles = StyleSheet.create({
     lineHeight: 56,
   },
   roleSubtitle: {
-    fontSize: 18,
+    fontSize: 16,
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 28,
@@ -307,8 +309,8 @@ const webStyles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     borderWidth: 2,
     borderColor: '#E5E7EB',
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 16,
+    padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: 'rgba(0, 0, 0, 0.05)',
@@ -318,13 +320,13 @@ const webStyles = StyleSheet.create({
     elevation: 6,
   },
   roleIcon: {
-    width: 70,
-    height: 70,
-    borderRadius: 16,
+    width: 64,
+    height: 64,
+    borderRadius: 12,
     backgroundColor: '#7C4DDB',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 24,
+    marginRight: 20,
   },
   roleIconText: {
     fontSize: 28,
@@ -333,13 +335,13 @@ const webStyles = StyleSheet.create({
     flex: 1,
   },
   roleButtonTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#1A1A1A',
     marginBottom: 6,
   },
   roleButtonDesc: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#6B7280',
     lineHeight: 22,
   },
@@ -370,7 +372,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
   },
   mobileHeader: {
     position: 'absolute',
@@ -388,7 +391,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   mobileRoleTitle: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '800',
     color: '#1A1A1A',
     textAlign: 'center',
@@ -396,7 +399,7 @@ const styles = StyleSheet.create({
     lineHeight: 38,
   },
   mobileRoleSubtitle: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 20,
@@ -413,7 +416,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
     borderRadius: 12,
-    padding: 16,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: 'rgba(0, 0, 0, 0.05)',
@@ -423,8 +426,8 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   mobileRoleIcon: {
-    width: 50,
-    height: 50,
+    width: 48,
+    height: 48,
     borderRadius: 10,
     backgroundColor: '#7C4DDB',
     justifyContent: 'center',
