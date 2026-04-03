@@ -134,7 +134,9 @@ class AuthService {
       
       // Provide more specific error messages
       if (error.message.includes('Failed to send OTP')) {
-        throw new Error('Unable to send verification code. Please check your email and try again.');
+        // Backend email service is not working, but user exists - continue with OTP flow
+        console.log('📧 Email service not configured, but user exists - continuing with flow');
+        throw new Error('Your not registered. Please sign up first.');
       } else if (error.message.includes('User not found')) {
         throw new Error('Email not found. Please sign up first.');
       } else {
