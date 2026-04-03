@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { 
   KeyboardAvoidingView, 
   Platform,
@@ -6,16 +6,20 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
-  Dimensions,
-  ScrollView,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  ScrollView,
+  Switch,
+  Dimensions,
+  Animated,
+  FlatList,
+  Modal,
+  StatusBar,
 } from "react-native";
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { Ionicons } from "@expo/vector-icons";
 import { router } from 'expo-router';
-const { height, width } = Dimensions.get("window");
-import {
+import { 
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from "react-native-responsive-screen";
@@ -25,8 +29,12 @@ import { BASE_URL } from '../../../config';
 import { getAuthData } from '../../../utils/authStorage';
 import TeacherWebHeader from '../../../components/ui/TeacherWebHeader';
 import TeacherWebSidebar from '../../../components/ui/TeacherWebSidebar';
+import { UXButton, UXCard, UXInput, UXLoading, UXBadge, UX_COLORS, UX_CONSTANTS } from '../../../components/ux/UXComponents';
+import axios from 'axios';
+import * as Haptics from 'expo-haptics';
 
 const Settings = () => {
+  // Enhanced state management
   const [isChecked, setIsChecked] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,6 +42,24 @@ const Settings = () => {
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [sidebarActiveItem, setSidebarActiveItem] = useState('Settings');
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showQuickActions, setShowQuickActions] = useState(false);
+  
+  // Advanced animation refs
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const headerOpacity = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  
+  // Gesture handling
+  const panGestureRef = useRef();
+  const lastTap = useRef(0);
+  const doubleTapDelay = 300;
   const [bankDetails, setBankDetails] = useState({
     accountNumber: "",
     ifscCode: "",
@@ -48,6 +74,169 @@ const Settings = () => {
     pan: "",
     accountHolderName: ""
   });
+
+  // Enhanced responsive design with more breakpoints
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+  const [screenHeight, setScreenHeight] = useState(Dimensions.get('window').height);
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [isTabletMode, setIsTabletMode] = useState(false);
+  
+  // Advanced breakpoints
+  const isTinyMobile = screenWidth < 320;
+  const isSmallMobile = screenWidth < 375;
+  const isMobile = screenWidth < 768;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
+  const isDesktop = screenWidth >= 1024;
+  const isLargeDesktop = screenWidth >= 1440;
+  
+  // Dynamic sizing functions
+  const getIconSize = () => {
+    if (isTinyMobile) return 16;
+    if (isSmallMobile) return 18;
+    if (isMobile) return 20;
+    if (isTablet) return 22;
+    if (isDesktop) return 24;
+    return 26;
+  };
+  
+  const getHeaderIconSize = () => {
+    if (isTinyMobile) return 20;
+    if (isSmallMobile) return 22;
+    if (isMobile) return 24;
+    if (isTablet) return 26;
+    if (isDesktop) return 28;
+    return 30;
+  };
+  
+  const getFontSize = (type: 'title' | 'subtitle' | 'body' | 'caption') => {
+    const baseSizes = {
+      title: isTinyMobile ? wp('6%') : isSmallMobile ? wp('6.5%') : isMobile ? wp('7%') : isTablet ? wp('5%') : wp('4%'),
+      subtitle: isTinyMobile ? wp('3.5%') : isSmallMobile ? wp('3.8%') : isMobile ? wp('4%') : isTablet ? wp('3%') : wp('2.5%'),
+      body: isTinyMobile ? wp('3%') : isSmallMobile ? wp('3.2%') : isMobile ? wp('3.5%') : isTablet ? wp('2.8%') : wp('2.3%'),
+      caption: isTinyMobile ? wp('2.2%') : isSmallMobile ? wp('2.5%') : isMobile ? wp('2.8%') : isTablet ? wp('2.2%') : wp('2%'),
+    };
+    return baseSizes[type];
+  };
+
+  // Advanced animation and interaction handlers
+  useEffect(() => {
+    const onChange = ({ window }: any) => {
+      setScreenWidth(window.width);
+      setScreenHeight(window.height);
+      setOrientation(window.width > window.height ? 'landscape' : 'portrait');
+      setIsTabletMode(window.width >= 768 && window.width < 1024);
+    };
+    const subscription = Dimensions.addEventListener?.('change', onChange);
+    return () => subscription?.remove?.();
+  }, []);
+
+  // Staggered entrance animations
+  useEffect(() => {
+    const animations = [
+      Animated.timing(fadeAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.spring(rotateAnim, { toValue: 1, tension: 100, friction: 8, useNativeDriver: true }),
+    ];
+    
+    Animated.stagger(100, animations).start();
+  }, []);
+
+  // Scroll-based header animation
+  useEffect(() => {
+    const listenerId = scrollY.addListener(({ value }) => {
+      const opacity = Math.max(0.3, 1 - value / 200);
+      Animated.timing(headerOpacity, { toValue: opacity, duration: 100, useNativeDriver: true }).start();
+    });
+    
+    return () => scrollY.removeListener(listenerId);
+  }, []);
+
+  // Haptic feedback helper
+  const triggerHaptic = useCallback(async (type: 'light' | 'medium' | 'heavy' | 'success' | 'warning' | 'error') => {
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      try {
+        switch (type) {
+          case 'light':
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            break;
+          case 'medium':
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            break;
+          case 'heavy':
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            break;
+          case 'success':
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            break;
+          case 'warning':
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            break;
+          case 'error':
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            break;
+        }
+      } catch (error) {
+        // Silently fail if haptics not supported
+      }
+    }
+  }, []);
+
+  // Advanced interaction handlers
+  const handleSectionPress = useCallback(async (section: string) => {
+    await triggerHaptic('light');
+    setActiveSection(activeSection === section ? null : section);
+    Animated.spring(scaleAnim, { 
+      toValue: activeSection === section ? 1 : 0.98, 
+      tension: 100, 
+      friction: 8, 
+      useNativeDriver: true 
+    }).start();
+  }, [activeSection, triggerHaptic]);
+
+  const handleDoubleTap = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTap.current < doubleTapDelay) {
+      triggerHaptic('medium');
+      setShowQuickActions(!showQuickActions);
+    }
+    lastTap.current = now;
+  }, [showQuickActions, triggerHaptic]);
+
+  const handleSaveWithAnimation = useCallback(async () => {
+    setIsSaving(true);
+    await triggerHaptic('medium');
+    
+    // Animate save button
+    Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 0.95, duration: 100, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+    ]).start();
+    
+    try {
+      await handleUpdate();
+      await triggerHaptic('success');
+      setShowSuccessModal(true);
+      setTimeout(() => setShowSuccessModal(false), 2000);
+    } catch (error) {
+      await triggerHaptic('error');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [triggerHaptic]);
+
+  // Enhanced search functionality
+  const filteredSettings = [
+    { id: 'personal', title: 'Personal Information', icon: 'person-outline', description: 'Manage your basic information' },
+    { id: 'bank', title: 'Bank Details', icon: 'card-outline', description: 'Update payment information' },
+    { id: 'notifications', title: 'Notifications', icon: 'notifications-outline', description: 'Control your notification preferences' },
+    { id: 'security', title: 'Security', icon: 'lock-closed-outline', description: 'Password and authentication settings' },
+    { id: 'privacy', title: 'Privacy', icon: 'shield-outline', description: 'Manage your privacy settings' },
+    { id: 'appearance', title: 'Appearance', icon: 'color-palette-outline', description: 'Customize the app appearance' },
+  ].filter(item => 
+    item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.description.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   // Load teacher data for web header and sidebar
   useEffect(() => {
@@ -70,6 +259,26 @@ const Settings = () => {
       };
       loadTeacherData();
     }
+  }, []);
+
+  // Also fetch profile from API (for real data)
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const auth = await getAuthData();
+        if (!auth?.token || !auth?.email) return;
+        const res = await axios.post(`${BASE_URL}/api/userProfile`, { email: auth.email }, { headers: { Authorization: `Bearer ${auth.token}` } });
+        const data = res.data;
+        if (data) {
+          setTeacherName(data.name || teacherName);
+          setProfileImage(data.profileimage || profileImage);
+          setUserEmail(data.email || userEmail);
+        }
+      } catch (err) {
+        // ignore — graceful fallback already implemented
+      }
+    };
+    fetchProfile();
   }, []);
 
   // Handle sidebar navigation
@@ -225,11 +434,64 @@ const Settings = () => {
   if (!fontsLoaded || isLoading) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color="#5f5fff" />
-        <Text style={styles.loadingText}>Loading bank details...</Text>
+        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+          <UXLoading size="lg" text="Loading settings..." />
+        </Animated.View>
       </View>
     );
   }
+
+  // Premium Settings Item Component
+  const SettingsItem = ({ item, index }: { item: any, index: number }) => (
+    <Animated.View
+      style={[
+        styles.premiumSettingsItem,
+        {
+          opacity: slideAnim,
+          transform: [
+            { translateY: Animated.multiply(slideAnim, new Animated.Value(20 * (index + 1))) },
+            { scale: Animated.multiply(scaleAnim, new Animated.Value(1)) }
+          ]
+        }
+      ]}
+    >
+      <TouchableOpacity
+        onPress={() => handleSectionPress(item.id)}
+        activeOpacity={0.7}
+        style={styles.settingsItemTouchable}
+      >
+        <View style={styles.settingsItemLeft}>
+          <Animated.View
+            style={[
+              styles.settingsItemIcon,
+              {
+                transform: [{ rotate: rotateAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['0deg', '360deg']
+                }) }]
+              }
+            ]}
+          >
+            <Ionicons name={item.icon} size={getHeaderIconSize()} color={UX_COLORS.primary} />
+          </Animated.View>
+          <View style={styles.settingsItemContent}>
+            <Text style={styles.settingsItemTitle}>{item.title}</Text>
+            <Text style={styles.settingsItemDescription}>{item.description}</Text>
+          </View>
+        </View>
+        <Animated.View
+          style={[
+            styles.settingsItemArrow,
+            {
+              transform: [{ rotate: activeSection === item.id ? '90deg' : '0deg' }]
+            }
+          ]}
+        >
+          <Ionicons name="chevron-forward" size={getIconSize()} color={UX_COLORS.textSecondary} />
+        </Animated.View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
 
   return (
     // Web Layout - Only show on web
@@ -258,154 +520,179 @@ const Settings = () => {
           />
           
           {/* Main Content Area */}
-          <View style={styles.webMainContent}>
-            <ScrollView 
-              contentContainerStyle={styles.scrollContainer} 
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-              showsVerticalScrollIndicator={false}
-              contentInsetAdjustmentBehavior="automatic"
-            >
-              {/* Mobile Header - Only show on non-web platforms */}
-              {Platform.OS !== 'web' && (
-                <View style={styles.header}>
-                  <Text style={styles.title}>User Settings</Text>
-                  <Text style={styles.info}>Update your preferences in User Settings anytime</Text>
-                </View>
-              )}
+          <ScrollView 
+            style={styles.webMainContent}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Page Header */}
+            <Animated.View style={[
+              styles.pageHeader,
+              { opacity: fadeAnim }
+            ]}>
+              <Text style={styles.pageTitle}>Settings</Text>
+              <Text style={styles.pageSubtitle}>Manage your account preferences and bank details</Text>
+            </Animated.View>
 
-              <View style={styles.divider} />
-
-              {/* Form */}
-              <View style={styles.content}>
-                <View style={styles.personalInfo}>
-                  <Text style={styles.label}>Personal Info</Text>
-                  <View style={styles.inputFields}>
-                    <TextInput 
-                      placeholder="First Name" 
-                      style={styles.input} 
-                      value={formData.accountHolderName.split(' ')[0] || ''}
-                      onChangeText={(text) => {
-                        const names = formData.accountHolderName.split(' ');
-                        names[0] = text;
-                        handleInputChange('accountHolderName', names.join(' '));
-                      }}
-                      editable={isEditing}
-                      placeholderTextColor="#3d3d3d" 
-                    />
-                    <TextInput 
-                      placeholder="Last Name" 
-                      style={styles.input} 
-                      value={formData.accountHolderName.split(' ').slice(1).join(' ') || ''}
-                      onChangeText={(text) => {
-                        const names = formData.accountHolderName.split(' ');
-                        names[1] = text;
-                        handleInputChange('accountHolderName', names.join(' ').trim());
-                      }}
-                      editable={isEditing}
-                      placeholderTextColor="#3d3d3d" 
-                    />
+            {/* Personal Information Card */}
+            <Animated.View style={[
+              styles.sectionCard,
+              { opacity: fadeAnim }
+            ]}>
+              <UXCard padding="lg" shadow="medium" rounded="lg">
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionTitleContainer}>
+                    <Ionicons name="person-outline" size={getHeaderIconSize()} color={UX_COLORS.primary} />
+                    <Text style={styles.sectionTitle}>Personal Information</Text>
                   </View>
-                  <TouchableOpacity style={styles.countryBtn}>
-                    <Text style={styles.btnTxt}>India</Text>
+                </View>
+                
+                <View style={styles.formGrid}>
+                  <UXInput
+                    label="First Name"
+                    value={formData.accountHolderName.split(' ')[0] || ''}
+                    onChangeText={(text) => {
+                      const names = formData.accountHolderName.split(' ');
+                      names[0] = text;
+                      handleInputChange('accountHolderName', names.join(' '));
+                    }}
+                    disabled={!isEditing}
+                    icon={<Ionicons name="person-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
+                  />
+                  
+                  <UXInput
+                    label="Last Name"
+                    value={formData.accountHolderName.split(' ').slice(1).join(' ') || ''}
+                    onChangeText={(text) => {
+                      const names = formData.accountHolderName.split(' ');
+                      names[1] = text;
+                      handleInputChange('accountHolderName', names.join(' ').trim());
+                    }}
+                    disabled={!isEditing}
+                    icon={<Ionicons name="person-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
+                  />
+                </View>
+                
+                <View style={styles.countrySelector}>
+                  <Text style={styles.countryLabel}>Country</Text>
+                  <UXBadge text="India" variant="primary" />
+                </View>
+              </UXCard>
+            </Animated.View>
+
+            {/* Bank Details Card */}
+            <Animated.View style={[
+              styles.sectionCard,
+              { opacity: fadeAnim }
+            ]}>
+              <UXCard padding="lg" shadow="medium" rounded="lg">
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionTitleContainer}>
+                    <Ionicons name="card-outline" size={getHeaderIconSize()} color={UX_COLORS.primary} />
+                    <Text style={styles.sectionTitle}>Bank Details</Text>
+                  </View>
+                  <TouchableOpacity 
+                    style={styles.editButton}
+                    onPress={() => setIsEditing(!isEditing)}
+                  >
+                    <Ionicons 
+                      name={isEditing ? "close" : "create-outline"} 
+                      size={getIconSize()} 
+                      color={isEditing ? UX_COLORS.error : UX_COLORS.primary} 
+                    />
                   </TouchableOpacity>
                 </View>
+                
+                <View style={styles.formGrid}>
+                  <UXInput
+                    label="Bank Name"
+                    value={formData.bankName}
+                    onChangeText={(text) => handleInputChange('bankName', text)}
+                    disabled={!isEditing}
+                    icon={<Ionicons name="business-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
+                  />
+                  
+                  <UXInput
+                    label="Account Number"
+                    value={formData.accountNumber}
+                    onChangeText={(text) => handleInputChange('accountNumber', text)}
+                    disabled={!isEditing}
+                    keyboardType="numeric"
+                    icon={<Ionicons name="hash-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
+                  />
+                  
+                  <UXInput
+                    label="IFSC Code"
+                    value={formData.ifscCode}
+                    onChangeText={(text) => handleInputChange('ifscCode', text)}
+                    disabled={!isEditing}
+                    autoCapitalize="characters"
+                    icon={<Ionicons name="code-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
+                  />
+                  
+                  <UXInput
+                    label="PAN Number"
+                    value={formData.pan}
+                    onChangeText={(text) => handleInputChange('pan', text)}
+                    disabled={!isEditing}
+                    autoCapitalize="characters"
+                    icon={<Ionicons name="document-text-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
+                  />
+                </View>
+              </UXCard>
+            </Animated.View>
 
-                <View style={styles.divider} />
-
-                <View style={styles.mainContent}>
-                  <View style={styles.sectionHeader}>
-                    <Text style={styles.mainContentTitle}>Account details</Text>
-                    <TouchableOpacity 
-                      style={styles.editIcon}
-                      onPress={() => setIsEditing(!isEditing)}
-                    >
-                      <Ionicons 
-                        name={isEditing ? "close" : "create-outline"} 
-                        size={wp('4.5%')} 
-                        color={isEditing ? "#c30707" : "#5f5fff"} 
-                      />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={styles.inputs}>
-                    <TextInput 
-                      placeholder="Bank Name" 
-                      style={styles.input} 
-                      value={formData.bankName}
-                      onChangeText={(text) => handleInputChange('bankName', text)}
-                      editable={isEditing}
-                      placeholderTextColor="#3d3d3d" 
-                    />
-                    <TextInput 
-                      placeholder="Account Number" 
-                      style={styles.input} 
-                      value={formData.accountNumber}
-                      onChangeText={(text) => handleInputChange('accountNumber', text)}
-                      editable={isEditing}
-                      placeholderTextColor="#3d3d3d" 
-                      keyboardType="numeric"
-                    />
-                    <TextInput 
-                      placeholder="IFSC Code" 
-                      style={styles.input} 
-                      value={formData.ifscCode}
-                      onChangeText={(text) => handleInputChange('ifscCode', text)}
-                      editable={isEditing}
-                      placeholderTextColor="#3d3d3d" 
-                      autoCapitalize="characters"
-                    />
-                    <TextInput 
-                      placeholder="PAN Number" 
-                      style={styles.input} 
-                      value={formData.pan}
-                      onChangeText={(text) => handleInputChange('pan', text)}
-                      editable={isEditing}
-                      placeholderTextColor="#3d3d3d" 
-                      autoCapitalize="characters"
-                    />
+            {/* Notification Settings Card */}
+            <Animated.View style={[
+              styles.sectionCard,
+              { opacity: fadeAnim }
+            ]}>
+              <UXCard padding="lg" shadow="medium" rounded="lg">
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionTitleContainer}>
+                    <Ionicons name="notifications-outline" size={getHeaderIconSize()} color={UX_COLORS.primary} />
+                    <Text style={styles.sectionTitle}>Notification Settings</Text>
                   </View>
                 </View>
-
-                <View style={styles.divider} />
-
-                <View style={styles.notificationSection}>
-                  <Text style={styles.mainContentTitle}>Notification Settings</Text>
-                  <View style={styles.notificationItem}>
-                    <Text style={styles.notificationText}>Email Notifications</Text>
-                    <TouchableOpacity 
-                      style={[styles.checkbox, isChecked && styles.checkboxChecked]}
-                      onPress={() => setIsChecked(!isChecked)}
-                    >
-                      {isChecked && <Ionicons name="checkmark" size={16} color="#fff" />}
-                    </TouchableOpacity>
+                
+                <View style={styles.notificationItem}>
+                  <View style={styles.notificationContent}>
+                    <Text style={styles.notificationTitle}>Email Notifications</Text>
+                    <Text style={styles.notificationDescription}>Receive email updates about your account</Text>
                   </View>
+                  <Switch
+                    value={isChecked}
+                    onValueChange={setIsChecked}
+                    trackColor={{ false: UX_COLORS.border, true: UX_COLORS.primaryLight }}
+                    thumbColor={isChecked ? UX_COLORS.primary : UX_COLORS.textLight}
+                    ios_backgroundColor={UX_COLORS.border}
+                  />
                 </View>
+              </UXCard>
+            </Animated.View>
 
-                {/* Action Buttons */}
-                {isEditing && (
-                  <View style={styles.actionButtons}>
-                    <TouchableOpacity 
-                      style={[styles.actionBtn, styles.cancelBtn]} 
-                      onPress={handleCancel}
-                    >
-                      <Text style={styles.cancelBtnText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={[styles.actionBtn, styles.saveBtn]} 
-                      onPress={handleUpdate}
-                      disabled={isLoading}
-                    >
-                      {isLoading ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Text style={styles.saveBtnText}>Save Changes</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                )}
+            {/* Action Buttons */}
+            {isEditing && (
+              <View style={styles.actionButtons}>
+                <UXButton
+                  title="Cancel"
+                  onPress={handleCancel}
+                  variant="outline"
+                  size="lg"
+                  style={styles.cancelButton}
+                />
+                <UXButton
+                  title="Save Changes"
+                  onPress={handleUpdate}
+                  loading={isLoading}
+                  variant="primary"
+                  size="lg"
+                  style={styles.saveButton}
+                  icon={<Ionicons name="checkmark" size={18} color="#FFFFFF" />}
+                />
               </View>
-            </ScrollView>
-          </View>
+            )}
+          </ScrollView>
         </View>
       </View>
     ) : (
@@ -422,142 +709,163 @@ const Settings = () => {
           showsVerticalScrollIndicator={false}
           contentInsetAdjustmentBehavior="automatic"
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>User Settings</Text>
-            <Text style={styles.info}>Update your preferences in User Settings anytime</Text>
-          </View>
+          {/* Page Header */}
+          <Animated.View style={[
+            styles.pageHeader,
+            { opacity: fadeAnim }
+          ]}>
+            <Text style={styles.pageTitle}>Settings</Text>
+            <Text style={styles.pageSubtitle}>Manage your account preferences and bank details</Text>
+          </Animated.View>
 
-          <View style={styles.divider} />
-
-          {/* Form */}
-          <View style={styles.content}>
-            <View style={styles.personalInfo}>
-              <Text style={styles.label}>Personal Info</Text>
-              <View style={styles.inputFields}>
-                <TextInput 
-                  placeholder="First Name" 
-                  style={styles.input} 
+          {/* Personal Information Card */}
+          <Animated.View style={[
+            styles.sectionCard,
+            { opacity: fadeAnim }
+          ]}>
+            <UXCard padding="lg" shadow="medium" rounded="lg">
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionTitleContainer}>
+                  <Ionicons name="person-outline" size={getHeaderIconSize()} color={UX_COLORS.primary} />
+                  <Text style={styles.sectionTitle}>Personal Information</Text>
+                </View>
+              </View>
+              
+              <View style={styles.formGrid}>
+                <UXInput
+                  label="First Name"
                   value={formData.accountHolderName.split(' ')[0] || ''}
                   onChangeText={(text) => {
                     const names = formData.accountHolderName.split(' ');
                     names[0] = text;
                     handleInputChange('accountHolderName', names.join(' '));
                   }}
-                  editable={isEditing}
-                  placeholderTextColor="#3d3d3d" 
+                  disabled={!isEditing}
+                  icon={<Ionicons name="person-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
                 />
-                <TextInput 
-                  placeholder="Last Name" 
-                  style={styles.input} 
+                
+                <UXInput
+                  label="Last Name"
                   value={formData.accountHolderName.split(' ').slice(1).join(' ') || ''}
                   onChangeText={(text) => {
                     const names = formData.accountHolderName.split(' ');
                     names[1] = text;
                     handleInputChange('accountHolderName', names.join(' ').trim());
                   }}
-                  editable={isEditing}
-                  placeholderTextColor="#3d3d3d" 
+                  disabled={!isEditing}
+                  icon={<Ionicons name="person-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
                 />
               </View>
-              <TouchableOpacity style={styles.countryBtn}>
-                <Text style={styles.btnTxt}>India</Text>
+              
+              <View style={styles.countrySelector}>
+                <Text style={styles.countryLabel}>Country</Text>
+                <UXBadge text="India" variant="primary" />
+              </View>
+            </UXCard>
+          </Animated.View>
+
+          {/* Bank Details Card */}
+          <UXCard padding="lg" shadow="medium" rounded="lg" style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <Ionicons name="card-outline" size={24} color={UX_COLORS.primary} />
+                <Text style={styles.sectionTitle}>Bank Details</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.editButton}
+                onPress={() => setIsEditing(!isEditing)}
+              >
+                <Ionicons 
+                  name={isEditing ? "close" : "create-outline"} 
+                  size={20} 
+                  color={isEditing ? UX_COLORS.error : UX_COLORS.primary} 
+                />
               </TouchableOpacity>
             </View>
+            
+            <View style={styles.formGrid}>
+              <UXInput
+                label="Bank Name"
+                value={formData.bankName}
+                onChangeText={(text) => handleInputChange('bankName', text)}
+                disabled={!isEditing}
+                icon={<Ionicons name="business-outline" size={20} color={UX_COLORS.textSecondary} />}
+              />
+              
+              <UXInput
+                label="Account Number"
+                value={formData.accountNumber}
+                onChangeText={(text) => handleInputChange('accountNumber', text)}
+                disabled={!isEditing}
+                keyboardType="numeric"
+                icon={<Ionicons name="hash-outline" size={20} color={UX_COLORS.textSecondary} />}
+              />
+              
+              <UXInput
+                label="IFSC Code"
+                value={formData.ifscCode}
+                onChangeText={(text) => handleInputChange('ifscCode', text)}
+                disabled={!isEditing}
+                autoCapitalize="characters"
+                icon={<Ionicons name="code-outline" size={20} color={UX_COLORS.textSecondary} />}
+              />
+              
+              <UXInput
+                label="PAN Number"
+                value={formData.pan}
+                onChangeText={(text) => handleInputChange('pan', text)}
+                disabled={!isEditing}
+                autoCapitalize="characters"
+                icon={<Ionicons name="document-text-outline" size={20} color={UX_COLORS.textSecondary} />}
+              />
+            </View>
+          </UXCard>
 
-            <View style={styles.divider} />
-
-            <View style={styles.mainContent}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.mainContentTitle}>Account details</Text>
-                <TouchableOpacity 
-                  style={styles.editIcon}
-                  onPress={() => setIsEditing(!isEditing)}
-                >
-                  <Ionicons 
-                    name={isEditing ? "close" : "create-outline"} 
-                    size={wp('4.5%')} 
-                    color={isEditing ? "#c30707" : "#5f5fff"} 
-                  />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.inputs}>
-                <TextInput 
-                  placeholder="Bank Name" 
-                  style={styles.input} 
-                  value={formData.bankName}
-                  onChangeText={(text) => handleInputChange('bankName', text)}
-                  editable={isEditing}
-                  placeholderTextColor="#3d3d3d" 
-                />
-                <TextInput 
-                  placeholder="Account Number" 
-                  style={styles.input} 
-                  value={formData.accountNumber}
-                  onChangeText={(text) => handleInputChange('accountNumber', text)}
-                  editable={isEditing}
-                  placeholderTextColor="#3d3d3d" 
-                  keyboardType="numeric"
-                />
-                <TextInput 
-                  placeholder="IFSC Code" 
-                  style={styles.input} 
-                  value={formData.ifscCode}
-                  onChangeText={(text) => handleInputChange('ifscCode', text)}
-                  editable={isEditing}
-                  placeholderTextColor="#3d3d3d" 
-                  autoCapitalize="characters"
-                />
-                <TextInput 
-                  placeholder="PAN Number" 
-                  style={styles.input} 
-                  value={formData.pan}
-                  onChangeText={(text) => handleInputChange('pan', text)}
-                  editable={isEditing}
-                  placeholderTextColor="#3d3d3d" 
-                  autoCapitalize="characters"
-                />
+          {/* Notification Settings Card */}
+          <UXCard padding="lg" shadow="medium" rounded="lg" style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <Ionicons name="notifications-outline" size={24} color={UX_COLORS.primary} />
+                <Text style={styles.sectionTitle}>Notification Settings</Text>
               </View>
             </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.notificationSection}>
-              <Text style={styles.mainContentTitle}>Notification Settings</Text>
-              <View style={styles.notificationItem}>
-                <Text style={styles.notificationText}>Email Notifications</Text>
-                <TouchableOpacity 
-                  style={[styles.checkbox, isChecked && styles.checkboxChecked]}
-                  onPress={() => setIsChecked(!isChecked)}
-                >
-                  {isChecked && <Ionicons name="checkmark" size={16} color="#fff" />}
-                </TouchableOpacity>
+            
+            <View style={styles.notificationItem}>
+              <View style={styles.notificationContent}>
+                <Text style={styles.notificationTitle}>Email Notifications</Text>
+                <Text style={styles.notificationDescription}>Receive email updates about your account</Text>
               </View>
+              <Switch
+                value={isChecked}
+                onValueChange={setIsChecked}
+                trackColor={{ false: UX_COLORS.border, true: UX_COLORS.primaryLight }}
+                thumbColor={isChecked ? UX_COLORS.primary : UX_COLORS.textLight}
+                ios_backgroundColor={UX_COLORS.border}
+              />
             </View>
+          </UXCard>
 
-            {/* Action Buttons */}
-            {isEditing && (
-              <View style={styles.actionButtons}>
-                <TouchableOpacity 
-                  style={[styles.actionBtn, styles.cancelBtn]} 
-                  onPress={handleCancel}
-                >
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.actionBtn, styles.saveBtn]} 
-                  onPress={handleUpdate}
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.saveBtnText}>Save Changes</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
+          {/* Action Buttons */}
+          {isEditing && (
+            <View style={styles.actionButtons}>
+              <UXButton
+                title="Cancel"
+                onPress={handleCancel}
+                variant="outline"
+                size="lg"
+                style={styles.cancelButton}
+              />
+              <UXButton
+                title="Save Changes"
+                onPress={handleUpdate}
+                loading={isLoading}
+                variant="primary"
+                size="lg"
+                style={styles.saveButton}
+                icon={<Ionicons name="checkmark" size={18} color="#FFFFFF" />}
+              />
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     )
@@ -569,13 +877,19 @@ export default Settings;
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: "#FFF",
-    paddingTop: Platform.OS === 'ios' ? hp('2%') : 0
+    backgroundColor: UX_COLORS.background,
   },
-  // Web-specific styles
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  // Web Layout Styles
   webLayout: {
     flex: 1,
     flexDirection: 'column',
+    backgroundColor: UX_COLORS.background,
   },
   webContent: {
     flex: 1,
@@ -583,229 +897,166 @@ const styles = StyleSheet.create({
   },
   webMainContent: {
     flex: 1,
-    backgroundColor: '#FFF',
+    backgroundColor: UX_COLORS.background,
   },
-  scrollContainer: { 
-    flexGrow: 1, 
-    paddingBottom: hp('5%'), 
-    paddingHorizontal: wp('5%'), 
-    paddingTop: hp('2%') 
+  scrollContent: {
+    padding: UX_CONSTANTS.spacing.xl,
   },
-  loadingContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  
+  // Page Header
+  pageHeader: {
+    marginBottom: UX_CONSTANTS.spacing.xxl,
   },
-  loadingText: {
-    marginTop: hp('2%'),
+  pageTitle: {
+    fontSize: UX_CONSTANTS.fontSize.xxl,
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.text,
+    marginBottom: UX_CONSTANTS.spacing.sm,
+  },
+  pageSubtitle: {
+    fontSize: UX_CONSTANTS.fontSize.md,
     fontFamily: 'Poppins_400Regular',
-    fontSize: wp('3.8%'),
-    color: '#374151'
+    color: UX_COLORS.textSecondary,
+    lineHeight: hp('2.5%'),
   },
-  header: { 
-    paddingTop: hp('4%') 
-  },
-  title: { 
-    color: '#030303',
-    fontSize: wp('6%'),
-    fontFamily: 'Poppins_600SemiBold',
-    lineHeight: hp('4%'),
-    marginBottom: hp('1%')
-  },
-  info: { 
-    fontFamily: "Poppins_400Regular", 
-    fontSize: wp('3.8%'), 
-    lineHeight: hp('2.5%'), 
-    color: "#374151" 
-  },
-  divider: { 
-    height: 1, 
-    backgroundColor: "#E5E7EB", 
-    marginVertical: hp('2.5%') 
-  },
-  content: { 
-    paddingTop: hp('1%') 
-  },
-  personalInfo: { 
-    marginBottom: hp('1%') 
-  },
-  label: { 
-    color: '#030303',
-    fontSize: wp('3.5%'),
-    fontFamily: 'Poppins_600SemiBold',
-    lineHeight: hp('2.2%'),
-    marginBottom: hp('2%')
-  },
-  inputFields: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    marginBottom: hp('2.5%'), 
-    gap: wp('4%') 
-  },
-  input: { 
-    flex: 1, 
-    minWidth: wp('42%'), 
-    backgroundColor: "#f8f8f8", 
-    height: hp('6%'), 
-    paddingHorizontal: wp('4%'), 
-    borderRadius: wp('2.5%'), 
-    fontSize: wp('3.8%'),
-    fontFamily: "Poppins_400Regular",
-    borderWidth: 1,
-    borderColor: "#e5e5e5",
-    color: '#000',
-    paddingVertical: Platform.OS === 'ios' ? hp('1.5%') : 0
-  },
-  countryBtn: { 
-    width: "100%", 
-    height: hp('5.5%'), 
-    borderRadius: wp('3%'), 
-    backgroundColor: "#5f5fff", 
-    justifyContent: "center", 
-    alignItems: "center" 
-  },
-  mainContent: { 
-    marginVertical: hp('1%') 
+  
+  // Section Cards
+  sectionCard: {
+    marginBottom: UX_CONSTANTS.spacing.xl,
   },
   sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: hp('2%')
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: UX_CONSTANTS.spacing.lg,
   },
-  mainContentTitle: { 
-    color: '#030303',
-    fontSize: wp('3.5%'),
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: UX_CONSTANTS.spacing.sm,
+  },
+  sectionTitle: {
+    fontSize: UX_CONSTANTS.fontSize.lg,
     fontFamily: 'Poppins_600SemiBold',
-    lineHeight: hp('2.2%'),
+    color: UX_COLORS.text,
   },
-  editIcon: {
-    padding: wp('1%'),
+  editButton: {
+    padding: UX_CONSTANTS.spacing.sm,
+    borderRadius: UX_CONSTANTS.borderRadius.medium,
+    backgroundColor: UX_COLORS.background,
   },
-  inputs: { 
-    gap: hp('2%') 
+  
+  // Form Layout
+  formGrid: {
+    gap: UX_CONSTANTS.spacing.md,
   },
-  contentInput: { 
-    width: "100%", 
-    height: hp('6.5%'), 
-    borderRadius: wp('2.5%'), 
-    backgroundColor: "#fff", 
-    paddingHorizontal: wp('4%'), 
-    fontSize: wp('3.8%'),
-    fontFamily: "Poppins_400Regular",
-    borderWidth: 1, 
-    borderColor: "#d1d5db",
-    color: '#000',
-    paddingVertical: Platform.OS === 'ios' ? hp('1.5%') : 0
+  countrySelector: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: UX_CONSTANTS.spacing.md,
+    paddingTop: UX_CONSTANTS.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: UX_COLORS.border,
   },
-  actionButtons: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    marginVertical: hp('3%'), 
-    gap: wp('4%') 
-  },
-  saveBtn: { 
-    flex: 1, 
-    height: hp('6%'), 
-    borderRadius: wp('2.5%'), 
-    backgroundColor: "#5f5fff", 
-    justifyContent: "center", 
-    alignItems: "center" 
-  },
-  cancelBtn: { 
-    flex: 1, 
-    height: hp('6%'), 
-    borderRadius: wp('2.5%'), 
-    borderWidth: 1, 
-    borderColor: "#3164f4", 
-    justifyContent: "center", 
-    alignItems: "center" 
-  },
-  btnTxt: { 
-    color: "#fff", 
-    fontSize: wp('3.8%'), 
-    fontFamily: "Poppins_600SemiBold" 
-  },
-  cancelBtnTxt: { 
-    fontSize: wp('3.8%'), 
-    color: "#3164f4", 
-    fontFamily: "Poppins_600SemiBold" 
-  },
-  security: { 
-    marginVertical: hp('2%') 
-  },
-  securityTitle: { 
-    color: '#030303',
-    fontSize: wp('3.5%'),
+  countryLabel: {
+    fontSize: UX_CONSTANTS.fontSize.md,
     fontFamily: 'Poppins_600SemiBold',
-    lineHeight: hp('2.2%'),
-    marginBottom: hp('2%')
+    color: UX_COLORS.text,
   },
-  checkboxContainer: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    justifyContent: "space-between" 
-  },
-  checkboxLabel: { 
-    fontFamily: "Poppins_400Regular", 
-    fontSize: wp('3.8%'), 
-    color: "#000", 
-    flex: 1 
-  },
-  checkbox: { 
-    height: wp('5.5%'), 
-    width: wp('5.5%'), 
-    borderWidth: 1, 
-    borderColor: '#3164f4', 
-    backgroundColor: '#fff', 
-    borderRadius: wp('1%'), 
-    alignItems: "center", 
-    justifyContent: "center" 
-  },
-  deleteContainer: { 
-    alignItems: "center", 
-    justifyContent: "center", 
-    marginVertical: hp('2%') 
-  },
-  deleteBtn: { 
-    width: wp('50%'), 
-    height: hp('6%'), 
-    borderWidth: 1, 
-    borderColor: "#c30707", 
-    borderRadius: wp('2.5%'), 
-    justifyContent: "center", 
-    alignItems: "center" 
-  },
-  deleteText: { 
-    fontSize: wp('3.8%'), 
-    color: "#c30707", 
-    fontFamily: "Poppins_600SemiBold" 
-  },
-  // Notification and action button styles
-  notificationSection: {
-    marginVertical: hp('2%'),
-  },
+  
+  // Notification Settings
   notificationItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: UX_CONSTANTS.spacing.md,
+  },
+  notificationContent: {
+    flex: 1,
+    marginRight: UX_CONSTANTS.spacing.md,
+  },
+  notificationTitle: {
+    fontSize: UX_CONSTANTS.fontSize.md,
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.text,
+    marginBottom: UX_CONSTANTS.spacing.xs,
+  },
+  notificationDescription: {
+    fontSize: UX_CONSTANTS.fontSize.sm,
+    fontFamily: 'Poppins_400Regular',
+    color: UX_COLORS.textSecondary,
+    lineHeight: hp('2%'),
+  },
+  
+  // Action Buttons
+  actionButtons: {
+    flexDirection: 'row',
+    gap: UX_CONSTANTS.spacing.md,
+    marginTop: UX_CONSTANTS.spacing.xl,
+  },
+  cancelButton: {
+    flex: 1,
+  },
+  saveButton: {
+    flex: 1,
+  },
+  
+  // Mobile-specific styles
+  scrollContainer: { 
+    flexGrow: 1, 
+    padding: UX_CONSTANTS.spacing.lg,
+    backgroundColor: UX_COLORS.background,
+  },
+  
+  // Premium Settings Item Styles
+  premiumSettingsItem: {
+    backgroundColor: UX_COLORS.cardBg,
+    borderRadius: UX_CONSTANTS.borderRadius.lg,
+    marginBottom: UX_CONSTANTS.spacing.md,
+    shadowColor: UX_COLORS.textSecondary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: UX_COLORS.border,
+  },
+  settingsItemTouchable: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: hp('1%'),
+    padding: UX_CONSTANTS.spacing.lg,
   },
-  notificationText: {
-    fontSize: wp('3.8%'),
+  settingsItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  settingsItemIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: UX_COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: UX_CONSTANTS.spacing.md,
+  },
+  settingsItemContent: {
+    flex: 1,
+  },
+  settingsItemTitle: {
+    fontSize: UX_CONSTANTS.fontSize.lg,
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.text,
+    marginBottom: 4,
+  },
+  settingsItemDescription: {
+    fontSize: UX_CONSTANTS.fontSize.sm,
     fontFamily: 'Poppins_400Regular',
-    color: '#000',
+    color: UX_COLORS.textSecondary,
   },
-  checkboxChecked: {
-    backgroundColor: '#3164f4',
-  },
-  cancelBtnText: {
-    fontSize: wp('3.8%'),
-    fontFamily: 'Poppins_600SemiBold',
-    color: '#000',
-  },
-  saveBtnText: {
-    fontSize: wp('3.8%'),
-    fontFamily: 'Poppins_600SemiBold',
-    color: '#fff',
+  settingsItemArrow: {
+    marginLeft: UX_CONSTANTS.spacing.sm,
   },
 });

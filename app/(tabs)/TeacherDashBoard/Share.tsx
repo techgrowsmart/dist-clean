@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Alert, Linking, Share as RNShare } from 'react-native';
 import { useRouter } from 'expo-router';
 import { getAuthData } from '../../../utils/authStorage';
 import { BASE_URL } from '../../../config';
@@ -14,6 +14,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 import { Feather, FontAwesome, FontAwesome6 } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from "react-native-responsive-screen";
 import { Dimensions } from 'react-native';
 
@@ -97,7 +98,7 @@ const Share = () => {
         // Already on this page
         break;
       case 'Billing':
-        router.push('/(tabs)/TeacherDashBoard/Settings');
+        router.push('/(tabs)/TeacherDashBoard/Billing');
         break;
       case 'Settings':
         router.push('/(tabs)/TeacherDashBoard/Settings');
@@ -111,7 +112,58 @@ const Share = () => {
   };
 
   const handleShare = (item: { id?: string; title: any; icon?: string; iconType?: string; color?: string }) => {
-    console.log(`Sharing via ${item.title}`)
+    const url = 'https://gogrowsmart.com';
+    const title = `Check out GrowSmart`;
+
+    (async () => {
+      try {
+        if (item.title === 'Copy') {
+          await Clipboard.setStringAsync(url);
+          Alert.alert('Copied', 'Link copied to clipboard');
+          return;
+        }
+
+        // Mobile native share when available
+        if (item.title === 'Mail') {
+          const mailto = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(url)}`;
+          Linking.openURL(mailto);
+          return;
+        }
+
+        if (item.title === 'WhatsApp') {
+          const wa = `https://wa.me/?text=${encodeURIComponent(title + ' ' + url)}`;
+          Linking.openURL(wa);
+          return;
+        }
+
+        if (item.title === 'Facebook') {
+          const fb = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+          Linking.openURL(fb);
+          return;
+        }
+
+        if (item.title === 'Linkedin') {
+          const li = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`;
+          Linking.openURL(li);
+          return;
+        }
+
+        if (item.title === 'Messenger') {
+          // Messenger deep link fallback to web sharer
+          const messenger = `fb-messenger://share?link=${encodeURIComponent(url)}`;
+          Linking.openURL(messenger).catch(() => {
+            Linking.openURL(`https://www.facebook.com/dialog/send?link=${encodeURIComponent(url)}&app_id=145634995501895`);
+          });
+          return;
+        }
+
+        // Default: use native Share API
+        await RNShare.share({ title, message: `${title} — ${url}`, url });
+      } catch (err) {
+        console.error('Share error', err);
+        Alert.alert('Error', 'Could not share.');
+      }
+    })();
   }
 
   const renderIcon = (item: { id?: string; title?: string; icon: any; iconType: any; color: any }) => {

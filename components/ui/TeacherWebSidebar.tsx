@@ -166,7 +166,7 @@ const TeacherWebSidebar = ({
           router.push("/(tabs)/TeacherDashBoard/ProfileWeb" as any);
           break;
         case "Billing":
-          router.push("/(tabs)/TeacherDashBoard/Settings" as any);
+          router.push("/(tabs)/TeacherDashBoard/Billing" as any);
           break;
         case "Settings":
           router.push("/(tabs)/TeacherDashBoard/Settings" as any);

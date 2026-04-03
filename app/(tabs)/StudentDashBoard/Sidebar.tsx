@@ -13,6 +13,7 @@ import Terms from "../../../assets/svgIcons/Terms";
 import TutorCap from "../../../assets/svgIcons/TutorCap";
 import { clearAllStorage } from "../../../utils/authStorage";
 import Toast from "react-native-toast-message";
+import { styles } from "./Student";
 
 const menuItems = [
   { name: "My Tuitions", icon: TutorCap },
@@ -45,14 +46,14 @@ const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, student
 
   const handleLogout = () => setShowLogoutModal(true);
 
-  // Render a persistent left sidebar for web (like teacher's sidebar)
+  // Render a persistent   sidebar for web (like teacher's sidebar)
   if (isWeb) {
     return (
-      <View style={styles.webContainer}>
+      <View style={styles.container}>
         <View style={styles.webSidebar}>
           <View style={styles.webProfileSection}>
             {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.webProfileImage} />
+              <Image source={{ uri: profileImage }} style={styles.profileImage} />
             ) : (
               <View style={styles.webProfilePlaceholder}>
                 <Text style={styles.webProfileInitial}>{studentName ? studentName[0]?.toUpperCase() : '?'}</Text>
@@ -254,10 +255,9 @@ const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, student
                   Confirm Log Out
                 </Text>
               )}
-                },
-              },
-            });
-
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
     </TouchableOpacity>
   );

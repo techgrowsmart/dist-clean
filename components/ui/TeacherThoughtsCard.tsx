@@ -156,11 +156,19 @@ const TeacherThoughtsCard: React.FC<TeacherThoughtsCardProps> = ({
   const createdAt = post?.createdAt || 'Just now';
   const postId = post?.id || '';
 
-  // If no post provided, show a placeholder
+  // If no post provided, show loading state instead of mock data
   if (!post) {
     return (
-      <View style={s.card}>
-        <Text style={s.body}>No teacher post data available</Text>
+      <View style={[s.card, s.loadingCard]}>
+        <View style={s.loadingContent}>
+          <View style={[s.avatar, s.loadingAvatar]} />
+          <View style={s.loadingTextContainer}>
+            <View style={[s.loadingText, s.loadingTitle]} />
+            <View style={[s.loadingText, s.loadingSubtitle]} />
+          </View>
+        </View>
+        <View style={[s.loadingText, s.loadingContent]} />
+        <View style={[s.loadingText, s.loadingContent, s.loadingContentShort]} />
       </View>
     );
   }
@@ -431,6 +439,47 @@ const s = StyleSheet.create({
     // Enhanced count text
     letterSpacing: -0.1,
     // Responsive font size will be set dynamically
+  },
+  // Loading state styles
+  loadingCard: {
+    opacity: 0.6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  loadingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  loadingAvatar: {
+    backgroundColor: '#e5e7eb',
+    marginRight: 14,
+  },
+  loadingTextContainer: {
+    flex: 1,
+  },
+  loadingText: {
+    backgroundColor: '#e5e7eb',
+    borderRadius: 4,
+    height: 12,
+    marginBottom: 8,
+  },
+  loadingTitle: {
+    width: '60%',
+    height: 16,
+  },
+  loadingSubtitle: {
+    width: '40%',
+    height: 12,
+  },
+  loadingContent: {
+    width: '100%',
+    height: 12,
+    marginBottom: 8,
+  },
+  loadingContentShort: {
+    width: '70%',
   },
 });
 
