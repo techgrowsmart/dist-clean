@@ -2,7 +2,7 @@ import { BASE_URL } from '../config';
 import { storeAuthData, getAuthData, clearAllStorage } from '../utils/authStorage';
 
 // Development mode flag
-const IS_DEVELOPMENT_MODE = false; // Disabled since we're using real backend
+const IS_DEVELOPMENT_MODE = false; // Always use real backend
 
 export interface LoginResponse {
   success: boolean;

@@ -39,6 +39,12 @@ export default function EmailInputScreen() {
       return;
     }
 
+    // For signup, validate name is provided
+    if (!isLogin && !fullName.trim()) {
+      Alert.alert('Error', 'Please enter your full name');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -74,16 +80,17 @@ export default function EmailInputScreen() {
           otpId: response.otpId || '',
           isSignup: 'true',
           name: fullName,
-          phone: phoneNumber ? `${phoneCountry}${phoneNumber}` : ''
+          phone: phoneNumber ? `${phoneCountry}${phoneNumber}` : '+0000000000' // Default phone if not provided
         } 
       });
     } catch (error: any) {
       console.error('OTP sending error:', error);
       
-      // For any error in development mode, try signup directly
-      if (process.env.NODE_ENV === 'development') {
+      // Check if user is not registered and needs to signup
+      if (error.message.includes('not registered') || error.message.includes('sign up')) {
         try {
-          const signupResponse = await authService.signup(email, 'New User', role);
+          // For new users, initiate signup flow
+          const signupResponse = await authService.signup(email, fullName, role);
           
           if (signupResponse.otpId) {
             // Navigate to OTP verification screen for signup
@@ -94,7 +101,9 @@ export default function EmailInputScreen() {
                 isLogin: 'false', 
                 role: role,
                 otpId: signupResponse.otpId || '',
-                isSignup: 'true'
+                isSignup: 'true',
+                name: fullName,
+                phone: phoneNumber ? `${phoneCountry}${phoneNumber}` : '+0000000000' // Default phone if not provided
               } 
             });
           } else {
@@ -176,7 +185,7 @@ export default function EmailInputScreen() {
                   </TouchableOpacity>
                   <TextInput
                     style={webStyles.phoneInput}
-                    placeholder="Phone number"
+                    placeholder="Phone number (optional)"
                     placeholderTextColor="#9CA3AF"
                     value={phoneNumber}
                     onChangeText={setPhoneNumber}
@@ -285,7 +294,7 @@ export default function EmailInputScreen() {
             </TouchableOpacity>
             <TextInput
               style={styles.mobileEmailInput}
-              placeholder="Phone number"
+              placeholder="Phone number (optional)"
               placeholderTextColor="#9CA3AF"
               value={phoneNumber}
               onChangeText={setPhoneNumber}
