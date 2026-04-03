@@ -2,7 +2,7 @@ import { BASE_URL } from '../config';
 import { storeAuthData, getAuthData, clearAllStorage } from '../utils/authStorage';
 
 // Development mode flag
-const IS_DEVELOPMENT_MODE = true; // Enable fallback due to backend 500 errors
+const IS_DEVELOPMENT_MODE = false; // Use real production backend only
 
 export interface LoginResponse {
   success: boolean;
@@ -43,12 +43,6 @@ export interface SignupResponse {
 class AuthService {
   private async makeRequest(endpoint: string, options: RequestInit = {}) {
     try {
-      // For development mode, use mock responses directly
-      if (IS_DEVELOPMENT_MODE) {
-        console.log('🔄 Development mode: Using mock responses');
-        return this.getMockResponse(endpoint, options);
-      }
-
       const url = `${BASE_URL}${endpoint}`;
       
       // Get auth token for authenticated requests
@@ -94,7 +88,6 @@ class AuthService {
         message: error.message,
         endpoint,
         method: options.method,
-        isDevelopmentMode: IS_DEVELOPMENT_MODE
       });
       throw error;
     }
