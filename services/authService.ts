@@ -150,6 +150,77 @@ class AuthService {
     }
   }
 
+  // Mock response handler for development mode
+  private getMockResponse(endpoint: string, options: any) {
+    console.log('🧪 Mock response for:', endpoint);
+    
+    if (endpoint === '/api/auth/login' && options.method === 'POST') {
+      const body = JSON.parse(options.body as string);
+      const email = body.email;
+      
+      // Test users bypass OTP
+      const testUsers = ["student1@example.com", "teacher56@example.com", "teacher31@example.com"];
+      if (testUsers.includes(email)) {
+        console.log(`🧪 Test user detected: ${email} - Bypassing OTP`);
+        const role = email.includes('teacher') ? 'teacher' : 'student';
+        const token = 'mock-test-token-' + Date.now();
+        
+        return {
+          message: "✅ Login successful (test user)",
+          role: role,
+          token: token,
+          name: email.split('@')[0],
+          isTestUser: true
+        };
+      }
+      
+      // Other users get "not registered" to trigger signup
+      return {
+        message: "Your not registered. Please sign up first.",
+        isRegistered: false,
+      };
+    }
+    
+    if (endpoint === '/api/signup' && options.method === 'POST') {
+      const body = JSON.parse(options.body as string);
+      const email = body.email;
+      const name = body.fullName;
+      
+      return { 
+        message: "✅ OTP sent successfully for signup", 
+        otpId: 'mock-signup-otp-id-' + Date.now(),
+        success: true
+      };
+    }
+    
+    if (endpoint === '/api/auth/verify-otp' && options.method === 'POST') {
+      const body = JSON.parse(options.body as string);
+      const email = body.email;
+      
+      return {
+        message: "✅ OTP verified successfully",
+        role: email.includes('teacher') ? 'teacher' : 'student',
+        token: 'mock-verified-token-' + Date.now()
+      };
+    }
+    
+    if (endpoint === '/api/signup/verify-otp' && options.method === 'POST') {
+      const body = JSON.parse(options.body as string);
+      const email = body.email;
+      const name = body.name;
+      
+      return {
+        message: "✅ Account created successfully",
+        token: 'mock-verified-token-' + Date.now(),
+        userId: 'mock-user-' + Date.now(),
+        responseTime: 100
+      };
+    }
+    
+    // Default fallback
+    throw new Error('Mock endpoint not implemented: ' + endpoint);
+  }
+
   // Validate email format and domain
   private isValidEmail(email: string): boolean {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
