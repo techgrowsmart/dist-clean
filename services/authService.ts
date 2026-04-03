@@ -179,21 +179,33 @@ class AuthService {
   // Send OTP for email verification (login)
   async sendOTP(email: string, role: string): Promise<OTPResponse> {
     try {
-      // Validate email domain
-      if (!this.isValidEmail(email)) {
+      // Basic email validation
+      if (!email || typeof email !== 'string') {
+        throw new Error('Please enter a valid email address');
+      }
+
+      // Trim whitespace
+      const trimmedEmail = email.trim();
+      if (!trimmedEmail) {
+        throw new Error('Please enter a valid email address');
+      }
+
+      // Enhanced email validation
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(trimmedEmail)) {
         throw new Error('Please enter a valid email address');
       }
 
       const response = await this.makeRequest('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: trimmedEmail }),
       });
 
       return {
         success: true,
         message: response.message || 'OTP sent successfully',
         otpId: response.otpId,
-        email,
+        email: trimmedEmail,
       };
     } catch (error: any) {
       console.error('Send OTP error:', error);

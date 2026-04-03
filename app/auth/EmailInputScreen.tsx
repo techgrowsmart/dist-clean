@@ -34,8 +34,17 @@ export default function EmailInputScreen() {
   ];
 
   const handleContinue = async () => {
-    if (!email.trim()) {
+    const trimmedEmail = email.trim();
+    
+    if (!trimmedEmail) {
       Alert.alert('Error', 'Please enter your email address');
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      Alert.alert('Error', 'Please enter a valid email address');
       return;
     }
 
@@ -49,16 +58,16 @@ export default function EmailInputScreen() {
 
     try {
       // Try to send OTP for login/signup
-      const response = await authService.sendOTP(email, role);
+      const response = await authService.sendOTP(trimmedEmail, role);
       
       // Check if it's a test user that bypasses OTP
       if (response.isTestUser && response.token) {
         // Store auth data and navigate directly to dashboard
         await authService.storeAuthData({
           role: response.role || role,
-          email: email,
+          email: trimmedEmail,
           token: response.token,
-          name: response.name || email.split('@')[0],
+          name: response.name || trimmedEmail.split('@')[0],
         });
         
         // Navigate to appropriate dashboard
@@ -74,7 +83,7 @@ export default function EmailInputScreen() {
       router.push({ 
         pathname: '/auth/OTPScreen' as any,
         params: { 
-          email: email, 
+          email: trimmedEmail, 
           isLogin: 'false', 
           role: role,
           otpId: response.otpId || '',
@@ -90,14 +99,14 @@ export default function EmailInputScreen() {
       if (error.message.includes('not registered') || error.message.includes('sign up')) {
         try {
           // For new users, initiate signup flow
-          const signupResponse = await authService.signup(email, fullName, role);
+          const signupResponse = await authService.signup(trimmedEmail, fullName, role);
           
           if (signupResponse.otpId) {
             // Navigate to OTP verification screen for signup
             router.push({ 
               pathname: '/auth/OTPScreen' as any,
               params: { 
-                email: email, 
+                email: trimmedEmail, 
                 isLogin: 'false', 
                 role: role,
                 otpId: signupResponse.otpId || '',
