@@ -43,6 +43,12 @@ export interface SignupResponse {
 class AuthService {
   private async makeRequest(endpoint: string, options: RequestInit = {}) {
     try {
+      // For development mode, use mock responses directly
+      if (IS_DEVELOPMENT_MODE) {
+        console.log('🔄 Development mode: Using mock responses');
+        return this.getMockResponse(endpoint, options);
+      }
+
       const url = `${BASE_URL}${endpoint}`;
       
       // Get auth token for authenticated requests
@@ -63,7 +69,7 @@ class AuthService {
           headers,
         }),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timeout')), 15000) // 15 second timeout
+          setTimeout(() => reject(new Error('Request timeout')), 30000) // 30 second timeout
         )
       ]) as Response;
 
@@ -90,100 +96,6 @@ class AuthService {
         method: options.method,
         isDevelopmentMode: IS_DEVELOPMENT_MODE
       });
-      
-      // Check if it's a network error (backend not reachable)
-      if (IS_DEVELOPMENT_MODE && (
-          error.message.includes('Failed to fetch') || 
-          error.message.includes('Network Error') || 
-          error.message.includes('Request timeout') ||
-          error.message.includes('ERR_CONNECTION_TIMED_OUT') ||
-          error.message.includes('Server returned HTML instead of JSON') ||
-          error.message.includes('Your not registered') ||
-          error.message.includes('Failed to send OTP') ||
-          error.message.includes('HTTP error! status: 404') ||
-          error.message.includes('HTTP error! status: 500')
-        )) {
-        console.log('🔄 Backend not reachable, using fallback for development');
-        
-        // For development, provide mock responses for critical endpoints
-        if (endpoint === '/api/auth/login' && options.method === 'POST') {
-          const body = JSON.parse(options.body as string);
-          const email = body.email;
-          
-          // For development, check if it's a test user
-          const testUsers = ["student1@example.com", "teacher56@example.com", "teacher31@example.com"];
-          if (testUsers.includes(email)) {
-            console.log(`🧪 Test user detected: ${email} - Bypassing OTP`);
-            const role = email.includes('teacher') ? 'teacher' : 'student';
-            const token = 'mock-test-token-' + Date.now();
-            
-            return {
-              message: "✅ Login successful (test user)",
-              role: role,
-              token: token,
-              name: email.split('@')[0],
-              isTestUser: true
-            };
-          }
-          
-          // For other emails, simulate user not found to trigger signup
-          console.log('🔄 Using development fallback - user not found, triggering signup');
-          return {
-            message: "Your not registered. Please sign up first.",
-            isRegistered: false,
-          };
-        }
-        
-        if (endpoint === '/api/signup' && options.method === 'POST') {
-          const body = JSON.parse(options.body as string);
-          const email = body.email;
-          const name = body.fullName;
-          
-          // Mock successful signup OTP sending
-          console.log('🔄 Using development fallback - sending signup OTP');
-          return { 
-            message: "✅ OTP sent successfully for signup", 
-            otpId: 'mock-signup-otp-id-' + Date.now(),
-            success: true
-          };
-        }
-        
-        if (endpoint === '/api/auth/verify-otp' && options.method === 'POST') {
-          const body = JSON.parse(options.body as string);
-          const email = body.email;
-          
-          // Mock successful OTP verification
-          return {
-            message: "✅ OTP verified successfully",
-            role: email.includes('teacher') ? 'teacher' : 'student',
-            token: 'mock-verified-token-' + Date.now()
-          };
-        }
-        
-        if (endpoint === '/api/signup' && options.method === 'POST') {
-          const body = JSON.parse(options.body as string);
-          const email = body.email;
-          const name = body.fullName;
-          
-          // Mock successful signup OTP sending
-          return { message: "✅ OTP sent successfully", otpId: 'mock-signup-otp-id-' + Date.now() };
-        }
-        
-        if (endpoint === '/api/signup/verify-otp' && options.method === 'POST') {
-          const body = JSON.parse(options.body as string);
-          const email = body.email;
-          const name = body.name;
-          
-          // Mock successful signup OTP verification
-          return {
-            message: "✅ Account created successfully",
-            token: 'mock-verified-token-' + Date.now(),
-            userId: 'mock-user-' + Date.now(),
-            responseTime: 100
-          };
-        }
-      }
-      
       throw error;
     }
   }
