@@ -839,6 +839,10 @@ const Settings = () => {
     </Animated.View>
   );
 
+  function setIsChecked(value: boolean): void | Promise<void> {
+    throw new Error("Function not implemented.");
+  }
+
   return (
     // Web Layout - Enhanced with Amazing Features
     Platform.OS === 'web' ? (
