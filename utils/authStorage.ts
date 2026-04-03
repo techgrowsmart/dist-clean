@@ -70,18 +70,9 @@ export const getAuthToken = async (): Promise<string | null> => {
 
 export const clearAllStorage = async () => {
     try {
-        if (Platform.OS === "web") {
-            console.log("🌐 Clearing web localStorage and sessionStorage...");
-            localStorage.clear();
-            sessionStorage.clear();
-        } else {
-            console.log("📱 Clearing mobile AsyncStorage...");
-            await AsyncStorage.clear();
-        }
-        console.log("✅ All storage data cleared successfully");
+        await AsyncStorage.clear();
+        console.log("✅ All AsyncStorage data cleared");
     } catch (error) {
         console.error("❌ Error clearing all data:", error);
-        throw error;
     }
 };
-  

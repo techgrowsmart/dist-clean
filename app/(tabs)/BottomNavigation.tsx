@@ -122,6 +122,11 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
              currentPath.includes("favorites") ||
              currentPath.includes("Favorites");
     }
+    // For Billing tab matching
+    if (tabPath === "Billing") {
+      return currentPath.includes("Billing") || 
+             currentPath.includes("billing");
+    }
     // For exact path matching for other tabs
     return currentPath === tabPath;
   };
@@ -181,6 +186,12 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
         path: "/StudentDashBoard/Profile",
         exactPath: "/StudentDashBoard/Profile"
       },
+      { 
+        name: "Billing", 
+        icon: <AntDesign name="creditcard" size={36} color={getTabColor("/(tabs)/Billing")} />, 
+        path: "/(tabs)/Billing",
+        exactPath: "/(tabs)/Billing"
+      },
     ],
     teacher: [
       { 
@@ -200,6 +211,12 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
         icon: <PersonIcon width={iconSize} height={iconSize} color={getTabColor("/TeacherDashBoard/Profile2")} />, 
         path: "/TeacherDashBoard/Profile2",
         exactPath: "/TeacherDashBoard/Profile2"
+      },
+      { 
+        name: "Billing", 
+        icon: <AntDesign name="creditcard" size={36} color={getTabColor("/(tabs)/TeacherDashBoard/Billing")} />, 
+        path: "/(tabs)/TeacherDashBoard/Billing",
+        exactPath: "/(tabs)/TeacherDashBoard/Billing"
       },
     ],
   };

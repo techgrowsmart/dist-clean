@@ -49,37 +49,25 @@ const Billing = () => {
       const authData = await getAuthData();
       if (!authData?.token) return;
       
-      // Mock billing data - replace with actual API call
-      const mockBillingData = [
-        {
-          id: '1',
-          date: '2024-03-15',
-          description: 'Monthly Subscription',
-          amount: '₹1,999',
-          status: 'Paid',
-          type: 'subscription'
+      // TODO: Replace with actual API endpoint
+      const response = await fetch(`${BASE_URL}/api/teacher/billing`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${authData.token}`,
+          'Content-Type': 'application/json',
         },
-        {
-          id: '2', 
-          date: '2024-02-15',
-          description: 'Subject Creation Fee',
-          amount: '₹299',
-          status: 'Paid',
-          type: 'one-time'
-        },
-        {
-          id: '3',
-          date: '2024-01-15',
-          description: 'Monthly Subscription',
-          amount: '₹1,999',
-          status: 'Paid',
-          type: 'subscription'
-        }
-      ];
-      
-      setBillingData(mockBillingData);
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setBillingData(data.billing || []);
+      } else {
+        console.error('Failed to load billing data:', response.statusText);
+        setBillingData([]);
+      }
     } catch (error) {
       console.error('Error loading billing data:', error);
+      setBillingData([]);
     } finally {
       setLoading(false);
     }
@@ -202,27 +190,44 @@ const Billing = () => {
                   <View style={styles.loadingContainer}>
                     <Text style={styles.loadingText}>Loading billing information...</Text>
                   </View>
+                ) : billingData.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyText}>No billing records found</Text>
+                    <Text style={styles.emptySubtext}>Your payment history will appear here</Text>
+                  </View>
                 ) : (
-                  <FlatList
-                    data={billingData}
-                    renderItem={renderBillingItem}
-                    keyExtractor={(item) => item.id}
-                    contentContainerStyle={styles.listContainer}
-                    showsVerticalScrollIndicator={false}
-                  />
+                  <>
+                    <FlatList
+                      data={billingData}
+                      renderItem={renderBillingItem}
+                      keyExtractor={(item) => item.id}
+                      contentContainerStyle={styles.listContainer}
+                      showsVerticalScrollIndicator={false}
+                    />
+                    
+                    <View style={styles.summarySection}>
+                      <Text style={styles.summaryTitle}>Payment Summary</Text>
+                      <View style={styles.summaryRow}>
+                        <Text style={styles.summaryLabel}>Total Paid:</Text>
+                        <Text style={styles.summaryValue}>
+                          ₹{billingData
+                            .filter(item => item.status === 'Paid')
+                            .reduce((sum, item) => sum + parseFloat(item.amount.replace('₹', '').replace(',', '')), 0)
+                            .toLocaleString('en-IN')}
+                        </Text>
+                      </View>
+                      <View style={styles.summaryRow}>
+                        <Text style={styles.summaryLabel}>Pending:</Text>
+                        <Text style={styles.summaryValue}>
+                          ₹{billingData
+                            .filter(item => item.status === 'Pending')
+                            .reduce((sum, item) => sum + parseFloat(item.amount.replace('₹', '').replace(',', '')), 0)
+                            .toLocaleString('en-IN')}
+                        </Text>
+                      </View>
+                    </View>
+                  </>
                 )}
-                
-                <View style={styles.summarySection}>
-                  <Text style={styles.summaryTitle}>Payment Summary</Text>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Total Paid:</Text>
-                    <Text style={styles.summaryValue}>₹4,297</Text>
-                  </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Next Payment:</Text>
-                    <Text style={styles.summaryValue}>April 15, 2024</Text>
-                  </View>
-                </View>
               </View>
             </ScrollView>
           </View>
@@ -408,6 +413,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#666',
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
   },
 })
 

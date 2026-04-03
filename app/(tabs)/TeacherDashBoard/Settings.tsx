@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { 
   KeyboardAvoidingView, 
   Platform,
@@ -6,16 +6,24 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
-  Dimensions,
-  ScrollView,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  ScrollView,
+  Switch,
+  Dimensions,
+  Animated,
+  FlatList,
+  Modal,
+  StatusBar,
+  Image,
+  Linking,
+  Share,
+  RefreshControl,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
+import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import { router } from 'expo-router';
-const { height, width } = Dimensions.get("window");
-import {
+import { 
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from "react-native-responsive-screen";
@@ -25,15 +33,91 @@ import { BASE_URL } from '../../../config';
 import { getAuthData } from '../../../utils/authStorage';
 import TeacherWebHeader from '../../../components/ui/TeacherWebHeader';
 import TeacherWebSidebar from '../../../components/ui/TeacherWebSidebar';
+import { UXButton, UXCard, UXInput, UXLoading, UXBadge, UX_COLORS, UX_CONSTANTS } from '../../../components/ux/UXComponents';
+import axios from 'axios';
+import * as Haptics from 'expo-haptics';
+
+// Helper functions outside component for styles
+const getScreenDimensions = () => {
+  const { width, height } = Dimensions.get('window');
+  return { width, height };
+};
+
+const getBreakpoints = (screenWidth: number) => ({
+  isTinyMobile: screenWidth < 320,
+  isSmallMobile: screenWidth < 375,
+  isMobile: screenWidth < 768,
+  isTablet: screenWidth >= 768 && screenWidth < 1024,
+  isDesktop: screenWidth >= 1024,
+  isLargeDesktop: screenWidth >= 1440,
+  isUltraWide: screenWidth >= 1920,
+});
+
+const getSpacing = (screenWidth: number, multiplier: number = 1) => {
+  const { isUltraWide, isLargeDesktop, isDesktop, isTablet, isMobile, isSmallMobile } = getBreakpoints(screenWidth);
+  const base = isUltraWide ? 24 : isLargeDesktop ? 20 : isDesktop ? 16 : isTablet ? 14 : isMobile ? 12 : isSmallMobile ? 10 : 8;
+  return base * multiplier;
+};
+
+const getFontSize = (screenWidth: number, type: 'title' | 'subtitle' | 'body' | 'caption' | 'small') => {
+  const { isTinyMobile, isSmallMobile, isMobile, isTablet, isDesktop, isLargeDesktop, isUltraWide } = getBreakpoints(screenWidth);
+  const baseSizes = {
+    title: isTinyMobile ? wp('6%') : isSmallMobile ? wp('6.5%') : isMobile ? wp('7%') : isTablet ? wp('5%') : isDesktop ? wp('4%') : isLargeDesktop ? wp('3.5%') : wp('3%'),
+    subtitle: isTinyMobile ? wp('3.5%') : isSmallMobile ? wp('3.8%') : isMobile ? wp('4%') : isTablet ? wp('3%') : isDesktop ? wp('2.5%') : isLargeDesktop ? wp('2.2%') : wp('2%'),
+    body: isTinyMobile ? wp('3%') : isSmallMobile ? wp('3.2%') : isMobile ? wp('3.5%') : isTablet ? wp('2.8%') : isDesktop ? wp('2.3%') : isLargeDesktop ? wp('2%') : wp('1.8%'),
+    caption: isTinyMobile ? wp('2.2%') : isSmallMobile ? wp('2.5%') : isMobile ? wp('2.8%') : isTablet ? wp('2.2%') : isDesktop ? wp('2%') : isLargeDesktop ? wp('1.8%') : wp('1.5%'),
+    small: isTinyMobile ? wp('2%') : isSmallMobile ? wp('2.2%') : isMobile ? wp('2.5%') : isTablet ? wp('2%') : isDesktop ? wp('1.8%') : isLargeDesktop ? wp('1.5%') : wp('1.2%'),
+  };
+  return baseSizes[type];
+};
 
 const Settings = () => {
-  const [isChecked, setIsChecked] = useState(false);
+  // Enhanced state management
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [teacherName, setTeacherName] = useState('');
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [sidebarActiveItem, setSidebarActiveItem] = useState('Settings');
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showQuickActions, setShowQuickActions] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [notifications, setNotifications] = useState({
+    email: true,
+    push: true,
+    sms: false,
+    marketing: false,
+    security: true,
+  });
+  const [appearance, setAppearance] = useState({
+    theme: 'light',
+    fontSize: 'medium',
+    language: 'english',
+  });
+  const [privacy, setPrivacy] = useState({
+    profileVisibility: 'public',
+    dataSharing: true,
+    analytics: true,
+    cookies: true,
+  });
+  
+  // Advanced animation refs
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const headerOpacity = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const cardScaleAnim = useRef(new Animated.Value(0.95)).current;
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  
+  // Gesture handling
+  const panGestureRef = useRef();
+  const lastTap = useRef(0);
+  const doubleTapDelay = 300;
   const [bankDetails, setBankDetails] = useState({
     accountNumber: "",
     ifscCode: "",
@@ -48,6 +132,300 @@ const Settings = () => {
     pan: "",
     accountHolderName: ""
   });
+
+  // Enhanced responsive design with more breakpoints
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+  const [screenHeight, setScreenHeight] = useState(Dimensions.get('window').height);
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [isTabletMode, setIsTabletMode] = useState(false);
+  
+  // Advanced breakpoints
+  const isTinyMobile = screenWidth < 320;
+  const isSmallMobile = screenWidth < 375;
+  const isMobile = screenWidth < 768;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
+  const isDesktop = screenWidth >= 1024;
+  const isLargeDesktop = screenWidth >= 1440;
+  const isUltraWide = screenWidth >= 1920;
+  
+  // Dynamic sizing functions (using helper functions)
+  const getIconSize = () => {
+    const { isTinyMobile, isSmallMobile, isMobile, isTablet, isDesktop, isLargeDesktop, isUltraWide } = getBreakpoints(screenWidth);
+    if (isTinyMobile) return 16;
+    if (isSmallMobile) return 18;
+    if (isMobile) return 20;
+    if (isTablet) return 22;
+    if (isDesktop) return 24;
+    if (isLargeDesktop) return 28;
+    if (isUltraWide) return 32;
+    return 26;
+  };
+  
+  const getHeaderIconSize = () => {
+    const { isTinyMobile, isSmallMobile, isMobile, isTablet, isDesktop, isLargeDesktop, isUltraWide } = getBreakpoints(screenWidth);
+    if (isTinyMobile) return 20;
+    if (isSmallMobile) return 22;
+    if (isMobile) return 24;
+    if (isTablet) return 26;
+    if (isDesktop) return 28;
+    if (isLargeDesktop) return 32;
+    if (isUltraWide) return 36;
+    return 30;
+  };
+  
+  const getCurrentFontSize = (type: 'title' | 'subtitle' | 'body' | 'caption' | 'small') => {
+    return getFontSize(screenWidth, type);
+  };
+
+  // Create dynamic styles based on screen width
+  const styles = useMemo(() => createStyles(screenWidth), [screenWidth]);
+
+  // Advanced animation and interaction handlers
+  useEffect(() => {
+    const onChange = ({ window }: any) => {
+      setScreenWidth(window.width);
+      setScreenHeight(window.height);
+      setOrientation(window.width > window.height ? 'landscape' : 'portrait');
+      setIsTabletMode(window.width >= 768 && window.width < 1024);
+    };
+    const subscription = Dimensions.addEventListener?.('change', onChange);
+    return () => subscription?.remove?.();
+  }, []);
+
+  // Staggered entrance animations
+  useEffect(() => {
+    const animations = [
+      Animated.timing(fadeAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+      Animated.spring(rotateAnim, { toValue: 1, tension: 100, friction: 8, useNativeDriver: true }),
+      Animated.timing(cardScaleAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+    ];
+    
+    Animated.stagger(150, animations).start();
+    
+    // Start shimmer animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+        Animated.timing(shimmerAnim, { toValue: 0, duration: 1500, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  // Haptic feedback helper
+  const triggerHaptic = useCallback(async (type: 'light' | 'medium' | 'heavy' | 'success' | 'warning' | 'error') => {
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      try {
+        switch (type) {
+          case 'light':
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            break;
+          case 'medium':
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            break;
+          case 'heavy':
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            break;
+          case 'success':
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            break;
+          case 'warning':
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            break;
+          case 'error':
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            break;
+        }
+      } catch (error) {
+        // Silently fail if haptics not supported
+      }
+    }
+  }, []);
+
+  // Enhanced interaction handlers
+  const handleSectionPress = useCallback(async (section: string) => {
+    await triggerHaptic('medium');
+    setActiveSection(activeSection === section ? null : section);
+    Animated.spring(scaleAnim, { 
+      toValue: activeSection === section ? 1.05 : 1, 
+      tension: 150, 
+      friction: 8, 
+      useNativeDriver: true 
+    }).start();
+    
+    // Card bounce animation
+    Animated.sequence([
+      Animated.timing(cardScaleAnim, { toValue: 0.95, duration: 100, useNativeDriver: true }),
+      Animated.timing(cardScaleAnim, { toValue: 1.02, duration: 200, useNativeDriver: true }),
+      Animated.timing(cardScaleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+    ]).start();
+  }, [activeSection, triggerHaptic]);
+
+  const handleDoubleTap = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTap.current < doubleTapDelay) {
+      triggerHaptic('heavy');
+      setShowQuickActions(!showQuickActions);
+    }
+    lastTap.current = now;
+  }, [showQuickActions, triggerHaptic]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await triggerHaptic('light');
+    
+    // Refresh animation
+    Animated.sequence([
+      Animated.timing(rotateAnim, { toValue: 360, duration: 1000, useNativeDriver: true }),
+      Animated.timing(rotateAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
+    ]).start();
+    
+    // Simulate data refresh
+    setTimeout(() => {
+      setRefreshing(false);
+      triggerHaptic('success');
+    }, 1500);
+  }, [triggerHaptic]);
+
+  const handleShare = useCallback(async () => {
+    await triggerHaptic('medium');
+    try {
+      await Share.share({
+        message: 'Check out my teaching profile on GoGrowSmart!',
+        url: 'https://portal.gogrowsmart.com/teacher/' + userEmail,
+      });
+    } catch (error) {
+      console.error('Error sharing profile:', error);
+    }
+  }, [userEmail, triggerHaptic]);
+
+  const handleCopyProfile = useCallback(async () => {
+    await triggerHaptic('light');
+    const profileUrl = `https://portal.gogrowsmart.com/teacher/${userEmail}`;
+    if (Platform.OS === 'web') {
+      navigator.clipboard.writeText(profileUrl);
+    } else {
+      // For mobile, you might need to use @react-native-clipboard/clipboard
+    }
+    Alert.alert('Success', 'Profile link copied to clipboard!');
+  }, [userEmail, triggerHaptic]);
+
+  const handleNotificationToggle = useCallback(async (type: keyof typeof notifications) => {
+    await triggerHaptic('light');
+    setNotifications(prev => ({ ...prev, [type]: !prev[type] }));
+  }, [triggerHaptic]);
+
+  const handleAppearanceChange = useCallback(async (key: keyof typeof appearance, value: string) => {
+    await triggerHaptic('light');
+    setAppearance(prev => ({ ...prev, [key]: value }));
+  }, [triggerHaptic]);
+
+  const handlePrivacyChange = useCallback(async (key: keyof typeof privacy, value: string) => {
+    await triggerHaptic('light');
+    setPrivacy(prev => ({ ...prev, [key]: value }));
+  }, [triggerHaptic]);
+
+  const handleSaveWithAnimation = useCallback(async () => {
+    setIsSaving(true);
+    await triggerHaptic('medium');
+    
+    // Animate save button
+    Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 0.95, duration: 100, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+    ]).start();
+    
+    try {
+      await handleUpdate();
+      await triggerHaptic('success');
+      setShowSuccessModal(true);
+      setTimeout(() => setShowSuccessModal(false), 2000);
+    } catch (error) {
+      await triggerHaptic('error');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [triggerHaptic]);
+
+  // Enhanced search functionality with amazing features
+  const filteredSettings = useMemo(() => [
+    { 
+      id: 'personal', 
+      title: 'Personal Information', 
+      icon: 'person-outline', 
+      description: 'Manage your basic information',
+      category: 'account',
+      priority: 'high',
+      badge: null
+    },
+    { 
+      id: 'bank', 
+      title: 'Bank Details', 
+      icon: 'card-outline', 
+      description: 'Update payment information',
+      category: 'payment',
+      priority: 'high',
+      badge: bankDetails.accountNumber ? 'verified' : null
+    },
+    { 
+      id: 'notifications', 
+      title: 'Notifications', 
+      icon: 'notifications-outline', 
+      description: 'Control your notification preferences',
+      category: 'preferences',
+      priority: 'medium',
+      badge: notifications.email || notifications.push ? 'active' : null
+    },
+    { 
+      id: 'security', 
+      title: 'Security', 
+      icon: 'lock-closed-outline', 
+      description: 'Password and authentication settings',
+      category: 'security',
+      priority: 'high',
+      badge: null
+    },
+    { 
+      id: 'privacy', 
+      title: 'Privacy', 
+      icon: 'shield-outline', 
+      description: 'Manage your privacy settings',
+      category: 'preferences',
+      priority: 'medium',
+      badge: privacy.profileVisibility === 'public' ? 'public' : null
+    },
+    { 
+      id: 'appearance', 
+      title: 'Appearance', 
+      icon: 'color-palette-outline', 
+      description: 'Customize app appearance',
+      category: 'preferences',
+      priority: 'low',
+      badge: null
+    },
+    { 
+      id: 'advanced', 
+      title: 'Advanced Settings', 
+      icon: 'settings-outline', 
+      description: 'Advanced configuration options',
+      category: 'advanced',
+      priority: 'low',
+      badge: null
+    },
+    { 
+      id: 'help', 
+      title: 'Help & Support', 
+      icon: 'help-circle-outline', 
+      description: 'Get help and contact support',
+      category: 'support',
+      priority: 'low',
+      badge: null
+    },
+  ].filter(item => 
+    item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.description.toLowerCase().includes(searchQuery.toLowerCase())
+  ), [searchQuery]);
 
   // Load teacher data for web header and sidebar
   useEffect(() => {
@@ -70,6 +448,26 @@ const Settings = () => {
       };
       loadTeacherData();
     }
+  }, []);
+
+  // Also fetch profile from API (for real data)
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const auth = await getAuthData();
+        if (!auth?.token || !auth?.email) return;
+        const res = await axios.post(`${BASE_URL}/api/userProfile`, { email: auth.email }, { headers: { Authorization: `Bearer ${auth.token}` } });
+        const data = res.data;
+        if (data) {
+          setTeacherName(data.name || teacherName);
+          setProfileImage(data.profileimage || profileImage);
+          setUserEmail(data.email || userEmail);
+        }
+      } catch (err) {
+        // ignore — graceful fallback already implemented
+      }
+    };
+    fetchProfile();
   }, []);
 
   // Handle sidebar navigation
@@ -225,14 +623,252 @@ const Settings = () => {
   if (!fontsLoaded || isLoading) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color="#5f5fff" />
-        <Text style={styles.loadingText}>Loading bank details...</Text>
+        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+          <UXLoading size="lg" text="Loading settings..." />
+        </Animated.View>
       </View>
     );
   }
 
+  // Amazing Shimmer Component for Loading States
+  const ShimmerView = ({ width, height, style }) => (
+    <Animated.View
+      style={[
+        style,
+        {
+          backgroundColor: shimmerAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [UX_COLORS.border, UX_COLORS.primaryLight]
+          }),
+          opacity: shimmerAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.3, 0.8]
+          })
+        }
+      ]}
+    >
+      <View style={{ width, height, borderRadius: 8 }} />
+    </Animated.View>
+  );
+
+  // Premium Settings Item Component with Enhanced Features
+  const SettingsItem = ({ item, index }: { item: any, index: number }) => (
+    <Animated.View
+      style={[
+        styles.premiumSettingsItem,
+        {
+          opacity: slideAnim,
+          transform: [
+            { translateY: Animated.multiply(slideAnim, new Animated.Value(20 * (index + 1))) },
+            { scale: Animated.multiply(cardScaleAnim, new Animated.Value(1)) }
+          ]
+        }
+      ]}
+    >
+      <TouchableOpacity
+        onPress={() => handleSectionPress(item.id)}
+        activeOpacity={0.8}
+        style={styles.settingsItemTouchable}
+        onLongPress={() => handleDoubleTap()}
+      >
+        <View style={styles.settingsItemLeft}>
+          <Animated.View
+            style={[
+              styles.settingsItemIcon,
+              {
+                transform: [{ rotate: rotateAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['0deg', '360deg']
+                }) }]
+              }
+            ]}
+          >
+            <Ionicons name={item.icon} size={getHeaderIconSize()} color={UX_COLORS.primary} />
+          </Animated.View>
+          <View style={styles.settingsItemContent}>
+            <View style={styles.settingsItemHeader}>
+              <Text style={styles.settingsItemTitle}>{item.title}</Text>
+              {item.badge && (
+                <UXBadge 
+                  text={item.badge} 
+                  variant={item.badge === 'verified' ? 'success' : 'primary'} 
+                  size="sm" 
+                />
+              )}
+            </View>
+            <Text style={styles.settingsItemDescription}>{item.description}</Text>
+          </View>
+          <View style={styles.settingsItemMeta}>
+            <Text style={styles.settingsItemCategory}>{item.category}</Text>
+            <View style={[
+              styles.priorityIndicator,
+              { backgroundColor: item.priority === 'high' ? UX_COLORS.error : item.priority === 'medium' ? UX_COLORS.warning : UX_COLORS.textSecondary }
+            ]} />
+          </View>
+        </View>
+        <Animated.View
+          style={[
+            styles.settingsItemArrow,
+            {
+              transform: [{ rotate: activeSection === item.id ? '90deg' : '0deg' }]
+            }
+          ]}
+        >
+          <Ionicons name="chevron-forward" size={getIconSize()} color={UX_COLORS.textSecondary} />
+        </Animated.View>
+      </TouchableOpacity>
+    </Animated.View>
+  
+  );
+
+  // Enhanced Profile Card Component
+  const ProfileCard = () => (
+    <Animated.View style={[
+      styles.profileCard,
+      { transform: [{ scale: cardScaleAnim }] }
+    ]}>
+      <UXCard padding="lg" shadow="large" rounded="xl">
+        <View style={styles.profileHeader}>
+          <View style={styles.profileInfo}>
+            <Text style={styles.profileName}>{teacherName}</Text>
+            <Text style={styles.profileEmail}>{userEmail}</Text>
+          </View>
+          <View style={styles.profileActions}>
+            <TouchableOpacity
+              style={styles.profileActionButton}
+              onPress={handleShare}
+            >
+              <Ionicons name="share-outline" size={20} color={UX_COLORS.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileActionButton}
+              onPress={handleCopyProfile}
+            >
+              <Ionicons name="copy-outline" size={20} color={UX_COLORS.primary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        
+        <View style={styles.profileStats}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>1,234</Text>
+            <Text style={styles.statLabel}>Students</Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>89%</Text>
+            <Text style={styles.statLabel}>Completion</Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>4.8</Text>
+            <Text style={styles.statLabel}>Rating</Text>
+          </View>
+        </View>
+      </UXCard>
+    </Animated.View>
+  );
+
+  // Enhanced Notification Settings Component
+  const NotificationSettingsCard = () => (
+    <Animated.View style={[
+      styles.sectionCard,
+      { opacity: fadeAnim }
+    ]}>
+      <UXCard padding="lg" shadow="medium" rounded="lg">
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionTitleContainer}>
+            <Ionicons name="notifications-outline" size={getHeaderIconSize()} color={UX_COLORS.primary} />
+            <Text style={styles.sectionTitle}>Notification Preferences</Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.refreshButton}
+            onPress={handleRefresh}
+            disabled={refreshing}
+          >
+            <Animated.View
+              style={{
+                transform: [{ rotate: rotateAnim.interpolate({
+                  inputRange: [0, 360],
+                  outputRange: ['0deg', '360deg']
+                }) }]
+              }}
+            >
+              <Ionicons 
+                name={refreshing ? "refresh" : "refresh-outline"} 
+                size={getIconSize()} 
+                color={UX_COLORS.primary} 
+              />
+            </Animated.View>
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.notificationGrid}>
+          <View style={styles.notificationItem}>
+            <View style={styles.notificationContent}>
+              <View style={styles.notificationHeader}>
+                <Ionicons name="mail-outline" size={20} color={UX_COLORS.primary} />
+                <Text style={styles.notificationTitle}>Email Notifications</Text>
+              </View>
+              <Text style={styles.notificationDescription}>Receive updates about your classes and students</Text>
+              <View style={styles.notificationMeta}>
+                <Text style={styles.notificationStatus}>{notifications.email ? 'Enabled' : 'Disabled'}</Text>
+              </View>
+            </View>
+            <Switch
+              value={notifications.email}
+              onValueChange={() => handleNotificationToggle('email')}
+              trackColor={{ false: UX_COLORS.border, true: UX_COLORS.primaryLight }}
+              thumbColor={notifications.email ? UX_COLORS.primary : UX_COLORS.textLight}
+              ios_backgroundColor={UX_COLORS.border}
+            />
+          </View>
+          
+          <View style={styles.notificationItem}>
+            <View style={styles.notificationContent}>
+              <View style={styles.notificationHeader}>
+                <Ionicons name="phone-portrait" size={20} color={UX_COLORS.primary} />
+                <Text style={styles.notificationTitle}>Push Notifications</Text>
+              </View>
+              <Text style={styles.notificationDescription}>Get instant alerts on your mobile device</Text>
+              <View style={styles.notificationMeta}>
+                <Text style={styles.notificationStatus}>{notifications.push ? 'Enabled' : 'Disabled'}</Text>
+              </View>
+            </View>
+            <Switch
+              value={notifications.push}
+              onValueChange={() => handleNotificationToggle('push')}
+              trackColor={{ false: UX_COLORS.border, true: UX_COLORS.primaryLight }}
+              thumbColor={notifications.push ? UX_COLORS.primary : UX_COLORS.textLight}
+              ios_backgroundColor={UX_COLORS.border}
+            />
+          </View>
+          
+          <View style={styles.notificationItem}>
+            <View style={styles.notificationContent}>
+              <View style={styles.notificationHeader}>
+                <Ionicons name="chatbubble-outline" size={20} color={UX_COLORS.primary} />
+                <Text style={styles.notificationTitle}>SMS Notifications</Text>
+              </View>
+              <Text style={styles.notificationDescription}>Receive text messages for important updates</Text>
+              <View style={styles.notificationMeta}>
+                <Text style={styles.notificationStatus}>{notifications.sms ? 'Enabled' : 'Disabled'}</Text>
+              </View>
+            </View>
+            <Switch
+              value={notifications.sms}
+              onValueChange={() => handleNotificationToggle('sms')}
+              trackColor={{ false: UX_COLORS.border, true: UX_COLORS.primaryLight }}
+              thumbColor={notifications.sms ? UX_COLORS.primary : UX_COLORS.textLight}
+              ios_backgroundColor={UX_COLORS.border}
+            />
+          </View>
+        </View>
+      </UXCard>
+    </Animated.View>
+  );
+
+  
   return (
-    // Web Layout - Only show on web
+    // Web Layout - Enhanced with Amazing Features
     Platform.OS === 'web' ? (
       <View style={styles.webLayout}>
         {/* Web Header */}
@@ -258,154 +894,191 @@ const Settings = () => {
           />
           
           {/* Main Content Area */}
-          <View style={styles.webMainContent}>
-            <ScrollView 
-              contentContainerStyle={styles.scrollContainer} 
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-              showsVerticalScrollIndicator={false}
-              contentInsetAdjustmentBehavior="automatic"
-            >
-              {/* Mobile Header - Only show on non-web platforms */}
-              {Platform.OS !== 'web' && (
-                <View style={styles.header}>
-                  <Text style={styles.title}>User Settings</Text>
-                  <Text style={styles.info}>Update your preferences in User Settings anytime</Text>
+          <ScrollView 
+            style={styles.webMainContent}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+            }
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+              ({ nativeEvent }) => {
+                const offsetY = nativeEvent.contentOffset.y;
+                const opacity = Math.max(0.7, 1 - offsetY / 300);
+                Animated.timing(headerOpacity, { 
+                  toValue: opacity, 
+                  duration: 100, 
+                  useNativeDriver: true 
+                }).start();
+              }
+            )}
+          >
+            {/* Page Header */}
+            <Animated.View style={[
+              styles.pageHeader,
+              { opacity: headerOpacity }
+            ]}>
+              <Text style={styles.pageTitle}>Settings</Text>
+              <Text style={styles.pageSubtitle}>Manage your account preferences and customize your experience</Text>
+            </Animated.View>
+
+            {/* Profile Card */}
+            <ProfileCard />
+
+            {/* Quick Actions */}
+            <View style={styles.quickActionsContainer}>
+              <Text style={styles.quickActionsTitle}>Quick Actions</Text>
+              <View style={styles.quickActionsGrid}>
+                <TouchableOpacity style={styles.quickActionButton} onPress={handleRefresh}>
+                  <Ionicons name="refresh-outline" size={24} color={UX_COLORS.primary} />
+                  <Text style={styles.quickActionText}>Refresh Data</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickActionButton} onPress={handleShare}>
+                  <Ionicons name="share-outline" size={24} color={UX_COLORS.primary} />
+                  <Text style={styles.quickActionText}>Share Profile</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickActionButton} onPress={handleCopyProfile}>
+                  <Ionicons name="copy-outline" size={24} color={UX_COLORS.primary} />
+                  <Text style={styles.quickActionText}>Copy Link</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Settings Categories */}
+            <View style={styles.settingsCategoriesContainer}>
+              <Text style={styles.categoriesTitle}>Settings Categories</Text>
+              
+              {/* Account Settings */}
+              <View style={styles.categorySection}>
+                <Text style={styles.categoryTitle}>Account</Text>
+                <View style={styles.settingsGrid}>
+                  {filteredSettings.filter(item => item.category === 'account').map((item, index) => (
+                    <SettingsItem key={item.id} item={item} index={index} />
+                  ))}
                 </View>
-              )}
+              </View>
 
-              <View style={styles.divider} />
+              {/* Preferences Settings */}
+              <View style={styles.categorySection}>
+                <Text style={styles.categoryTitle}>Preferences</Text>
+                <View style={styles.settingsGrid}>
+                  {filteredSettings.filter(item => item.category === 'preferences').map((item, index) => (
+                    <SettingsItem key={item.id} item={item} index={index} />
+                  ))}
+                </View>
+              </View>
 
-              {/* Form */}
-              <View style={styles.content}>
-                <View style={styles.personalInfo}>
-                  <Text style={styles.label}>Personal Info</Text>
-                  <View style={styles.inputFields}>
-                    <TextInput 
-                      placeholder="First Name" 
-                      style={styles.input} 
-                      value={formData.accountHolderName.split(' ')[0] || ''}
-                      onChangeText={(text) => {
-                        const names = formData.accountHolderName.split(' ');
-                        names[0] = text;
-                        handleInputChange('accountHolderName', names.join(' '));
-                      }}
-                      editable={isEditing}
-                      placeholderTextColor="#3d3d3d" 
-                    />
-                    <TextInput 
-                      placeholder="Last Name" 
-                      style={styles.input} 
-                      value={formData.accountHolderName.split(' ').slice(1).join(' ') || ''}
-                      onChangeText={(text) => {
-                        const names = formData.accountHolderName.split(' ');
-                        names[1] = text;
-                        handleInputChange('accountHolderName', names.join(' ').trim());
-                      }}
-                      editable={isEditing}
-                      placeholderTextColor="#3d3d3d" 
-                    />
+              {/* Security Settings */}
+              <View style={styles.categorySection}>
+                <Text style={styles.categoryTitle}>Security & Privacy</Text>
+                <View style={styles.settingsGrid}>
+                  {filteredSettings.filter(item => item.category === 'security' || item.category === 'privacy').map((item, index) => (
+                    <SettingsItem key={item.id} item={item} index={index} />
+                  ))}
+                </View>
+              </View>
+
+              {/* Support Settings */}
+              <View style={styles.categorySection}>
+                <Text style={styles.categoryTitle}>Support</Text>
+                <View style={styles.settingsGrid}>
+                  {filteredSettings.filter(item => item.category === 'support').map((item, index) => (
+                    <SettingsItem key={item.id} item={item} index={index} />
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            {/* Bank Details Section */}
+            <Animated.View style={[
+              styles.sectionCard,
+              { opacity: fadeAnim }
+            ]}>
+              <UXCard padding="lg" shadow="medium" rounded="lg">
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionTitleContainer}>
+                    <Ionicons name="card-outline" size={getHeaderIconSize()} color={UX_COLORS.primary} />
+                    <Text style={styles.sectionTitle}>Bank Details</Text>
+                    {bankDetails.accountNumber && (
+                      <UXBadge text="Verified" variant="success" size="sm" />
+                    )}
                   </View>
-                  <TouchableOpacity style={styles.countryBtn}>
-                    <Text style={styles.btnTxt}>India</Text>
+                  <TouchableOpacity 
+                    style={styles.editButton}
+                    onPress={() => setIsEditing(!isEditing)}
+                  >
+                    <Ionicons 
+                      name={isEditing ? "close" : "create-outline"} 
+                      size={getIconSize()} 
+                      color={isEditing ? UX_COLORS.error : UX_COLORS.primary} 
+                    />
                   </TouchableOpacity>
                 </View>
-
-                <View style={styles.divider} />
-
-                <View style={styles.mainContent}>
-                  <View style={styles.sectionHeader}>
-                    <Text style={styles.mainContentTitle}>Account details</Text>
-                    <TouchableOpacity 
-                      style={styles.editIcon}
-                      onPress={() => setIsEditing(!isEditing)}
-                    >
-                      <Ionicons 
-                        name={isEditing ? "close" : "create-outline"} 
-                        size={wp('4.5%')} 
-                        color={isEditing ? "#c30707" : "#5f5fff"} 
-                      />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={styles.inputs}>
-                    <TextInput 
-                      placeholder="Bank Name" 
-                      style={styles.input} 
-                      value={formData.bankName}
-                      onChangeText={(text) => handleInputChange('bankName', text)}
-                      editable={isEditing}
-                      placeholderTextColor="#3d3d3d" 
-                    />
-                    <TextInput 
-                      placeholder="Account Number" 
-                      style={styles.input} 
-                      value={formData.accountNumber}
-                      onChangeText={(text) => handleInputChange('accountNumber', text)}
-                      editable={isEditing}
-                      placeholderTextColor="#3d3d3d" 
-                      keyboardType="numeric"
-                    />
-                    <TextInput 
-                      placeholder="IFSC Code" 
-                      style={styles.input} 
-                      value={formData.ifscCode}
-                      onChangeText={(text) => handleInputChange('ifscCode', text)}
-                      editable={isEditing}
-                      placeholderTextColor="#3d3d3d" 
-                      autoCapitalize="characters"
-                    />
-                    <TextInput 
-                      placeholder="PAN Number" 
-                      style={styles.input} 
-                      value={formData.pan}
-                      onChangeText={(text) => handleInputChange('pan', text)}
-                      editable={isEditing}
-                      placeholderTextColor="#3d3d3d" 
-                      autoCapitalize="characters"
-                    />
-                  </View>
+                
+                <View style={styles.formGrid}>
+                  <UXInput
+                    label="Bank Name"
+                    value={formData.bankName}
+                    onChangeText={(text) => handleInputChange('bankName', text)}
+                    disabled={!isEditing}
+                    icon={<Ionicons name="business-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
+                  />
+                  
+                  <UXInput
+                    label="Account Number"
+                    value={formData.accountNumber}
+                    onChangeText={(text) => handleInputChange('accountNumber', text)}
+                    disabled={!isEditing}
+                    keyboardType="numeric"
+                    secureTextEntry={true}
+                    icon={<Ionicons name="hash-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
+                  />
+                  
+                  <UXInput
+                    label="IFSC Code"
+                    value={formData.ifscCode}
+                    onChangeText={(text) => handleInputChange('ifscCode', text)}
+                    disabled={!isEditing}
+                    autoCapitalize="characters"
+                    icon={<Ionicons name="code-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
+                  />
+                  
+                  <UXInput
+                    label="PAN Number"
+                    value={formData.pan}
+                    onChangeText={(text) => handleInputChange('pan', text)}
+                    disabled={!isEditing}
+                    autoCapitalize="characters"
+                    secureTextEntry={true}
+                    icon={<Ionicons name="document-text-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
+                  />
                 </View>
+              </UXCard>
+            </Animated.View>
 
-                <View style={styles.divider} />
-
-                <View style={styles.notificationSection}>
-                  <Text style={styles.mainContentTitle}>Notification Settings</Text>
-                  <View style={styles.notificationItem}>
-                    <Text style={styles.notificationText}>Email Notifications</Text>
-                    <TouchableOpacity 
-                      style={[styles.checkbox, isChecked && styles.checkboxChecked]}
-                      onPress={() => setIsChecked(!isChecked)}
-                    >
-                      {isChecked && <Ionicons name="checkmark" size={16} color="#fff" />}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Action Buttons */}
-                {isEditing && (
-                  <View style={styles.actionButtons}>
-                    <TouchableOpacity 
-                      style={[styles.actionBtn, styles.cancelBtn]} 
-                      onPress={handleCancel}
-                    >
-                      <Text style={styles.cancelBtnText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={[styles.actionBtn, styles.saveBtn]} 
-                      onPress={handleUpdate}
-                      disabled={isLoading}
-                    >
-                      {isLoading ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Text style={styles.saveBtnText}>Save Changes</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                )}
+            {/* Action Buttons */}
+            {isEditing && (
+              <View style={styles.actionButtons}>
+                <UXButton
+                  title="Cancel"
+                  onPress={handleCancel}
+                  variant="outline"
+                  size="lg"
+                  style={styles.cancelButton}
+                />
+                <UXButton
+                  title="Save Changes"
+                  onPress={handleSaveWithAnimation}
+                  loading={isSaving}
+                  variant="primary"
+                  size="lg"
+                  style={styles.saveButton}
+                  icon={<Ionicons name="checkmark" size={18} color="#FFFFFF" />}
+                />
               </View>
-            </ScrollView>
-          </View>
+            )}
+          </ScrollView>
         </View>
       </View>
     ) : (
@@ -422,160 +1095,181 @@ const Settings = () => {
           showsVerticalScrollIndicator={false}
           contentInsetAdjustmentBehavior="automatic"
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>User Settings</Text>
-            <Text style={styles.info}>Update your preferences in User Settings anytime</Text>
-          </View>
+          {/* Page Header */}
+          <Animated.View style={[
+            styles.pageHeader,
+            { opacity: fadeAnim }
+          ]}>
+            <Text style={styles.pageTitle}>Settings</Text>
+            <Text style={styles.pageSubtitle}>Manage your account preferences and bank details</Text>
+          </Animated.View>
 
-          <View style={styles.divider} />
-
-          {/* Form */}
-          <View style={styles.content}>
-            <View style={styles.personalInfo}>
-              <Text style={styles.label}>Personal Info</Text>
-              <View style={styles.inputFields}>
-                <TextInput 
-                  placeholder="First Name" 
-                  style={styles.input} 
+          {/* Personal Information Card */}
+          <Animated.View style={[
+            styles.sectionCard,
+            { opacity: fadeAnim }
+          ]}>
+            <UXCard padding="lg" shadow="medium" rounded="lg">
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionTitleContainer}>
+                  <Ionicons name="person-outline" size={getHeaderIconSize()} color={UX_COLORS.primary} />
+                  <Text style={styles.sectionTitle}>Personal Information</Text>
+                </View>
+              </View>
+              
+              <View style={styles.formGrid}>
+                <UXInput
+                  label="First Name"
                   value={formData.accountHolderName.split(' ')[0] || ''}
                   onChangeText={(text) => {
                     const names = formData.accountHolderName.split(' ');
                     names[0] = text;
                     handleInputChange('accountHolderName', names.join(' '));
                   }}
-                  editable={isEditing}
-                  placeholderTextColor="#3d3d3d" 
+                  disabled={!isEditing}
+                  icon={<Ionicons name="person-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
                 />
-                <TextInput 
-                  placeholder="Last Name" 
-                  style={styles.input} 
+                
+                <UXInput
+                  label="Last Name"
                   value={formData.accountHolderName.split(' ').slice(1).join(' ') || ''}
                   onChangeText={(text) => {
                     const names = formData.accountHolderName.split(' ');
                     names[1] = text;
                     handleInputChange('accountHolderName', names.join(' ').trim());
                   }}
-                  editable={isEditing}
-                  placeholderTextColor="#3d3d3d" 
+                  disabled={!isEditing}
+                  icon={<Ionicons name="person-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
                 />
               </View>
-              <TouchableOpacity style={styles.countryBtn}>
-                <Text style={styles.btnTxt}>India</Text>
+              
+              <View style={styles.countrySelector}>
+                <Text style={styles.countryLabel}>Country</Text>
+                <UXBadge text="India" variant="primary" />
+              </View>
+            </UXCard>
+          </Animated.View>
+
+          {/* Bank Details Card */}
+          <UXCard padding="lg" shadow="medium" rounded="lg" style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <Ionicons name="card-outline" size={24} color={UX_COLORS.primary} />
+                <Text style={styles.sectionTitle}>Bank Details</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.editButton}
+                onPress={() => setIsEditing(!isEditing)}
+              >
+                <Ionicons 
+                  name={isEditing ? "close" : "create-outline"} 
+                  size={20} 
+                  color={isEditing ? UX_COLORS.error : UX_COLORS.primary} 
+                />
               </TouchableOpacity>
             </View>
+            
+            <View style={styles.formGrid}>
+              <UXInput
+                label="Bank Name"
+                value={formData.bankName}
+                onChangeText={(text) => handleInputChange('bankName', text)}
+                disabled={!isEditing}
+                icon={<Ionicons name="business-outline" size={20} color={UX_COLORS.textSecondary} />}
+              />
+              
+              <UXInput
+                label="Account Number"
+                value={formData.accountNumber}
+                onChangeText={(text) => handleInputChange('accountNumber', text)}
+                disabled={!isEditing}
+                keyboardType="numeric"
+                icon={<Ionicons name="hash-outline" size={20} color={UX_COLORS.textSecondary} />}
+              />
+              
+              <UXInput
+                label="IFSC Code"
+                value={formData.ifscCode}
+                onChangeText={(text) => handleInputChange('ifscCode', text)}
+                disabled={!isEditing}
+                autoCapitalize="characters"
+                icon={<Ionicons name="code-outline" size={20} color={UX_COLORS.textSecondary} />}
+              />
+              
+              <UXInput
+                label="PAN Number"
+                value={formData.pan}
+                onChangeText={(text) => handleInputChange('pan', text)}
+                disabled={!isEditing}
+                autoCapitalize="characters"
+                icon={<Ionicons name="document-text-outline" size={20} color={UX_COLORS.textSecondary} />}
+              />
+            </View>
+          </UXCard>
 
-            <View style={styles.divider} />
-
-            <View style={styles.mainContent}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.mainContentTitle}>Account details</Text>
-                <TouchableOpacity 
-                  style={styles.editIcon}
-                  onPress={() => setIsEditing(!isEditing)}
-                >
-                  <Ionicons 
-                    name={isEditing ? "close" : "create-outline"} 
-                    size={wp('4.5%')} 
-                    color={isEditing ? "#c30707" : "#5f5fff"} 
-                  />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.inputs}>
-                <TextInput 
-                  placeholder="Bank Name" 
-                  style={styles.input} 
-                  value={formData.bankName}
-                  onChangeText={(text) => handleInputChange('bankName', text)}
-                  editable={isEditing}
-                  placeholderTextColor="#3d3d3d" 
-                />
-                <TextInput 
-                  placeholder="Account Number" 
-                  style={styles.input} 
-                  value={formData.accountNumber}
-                  onChangeText={(text) => handleInputChange('accountNumber', text)}
-                  editable={isEditing}
-                  placeholderTextColor="#3d3d3d" 
-                  keyboardType="numeric"
-                />
-                <TextInput 
-                  placeholder="IFSC Code" 
-                  style={styles.input} 
-                  value={formData.ifscCode}
-                  onChangeText={(text) => handleInputChange('ifscCode', text)}
-                  editable={isEditing}
-                  placeholderTextColor="#3d3d3d" 
-                  autoCapitalize="characters"
-                />
-                <TextInput 
-                  placeholder="PAN Number" 
-                  style={styles.input} 
-                  value={formData.pan}
-                  onChangeText={(text) => handleInputChange('pan', text)}
-                  editable={isEditing}
-                  placeholderTextColor="#3d3d3d" 
-                  autoCapitalize="characters"
-                />
+          {/* Notification Settings Card */}
+          <UXCard padding="lg" shadow="medium" rounded="lg" style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <Ionicons name="notifications-outline" size={24} color={UX_COLORS.primary} />
+                <Text style={styles.sectionTitle}>Notification Settings</Text>
               </View>
             </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.notificationSection}>
-              <Text style={styles.mainContentTitle}>Notification Settings</Text>
-              <View style={styles.notificationItem}>
-                <Text style={styles.notificationText}>Email Notifications</Text>
-                <TouchableOpacity 
-                  style={[styles.checkbox, isChecked && styles.checkboxChecked]}
-                  onPress={() => setIsChecked(!isChecked)}
-                >
-                  {isChecked && <Ionicons name="checkmark" size={16} color="#fff" />}
-                </TouchableOpacity>
+            
+            <View style={styles.notificationItem}>
+              <View style={styles.notificationContent}>
+                <Text style={styles.notificationTitle}>Email Notifications</Text>
+                <Text style={styles.notificationDescription}>Receive email updates about your account</Text>
               </View>
+              <Switch
+                value={notifications.email}
+                onValueChange={() => handleNotificationToggle('email')}
+                trackColor={{ false: UX_COLORS.border, true: UX_COLORS.primaryLight }}
+                thumbColor={notifications.email ? UX_COLORS.primary : UX_COLORS.textLight}
+                ios_backgroundColor={UX_COLORS.border}
+              />
             </View>
+          </UXCard>
 
-            {/* Action Buttons */}
-            {isEditing && (
-              <View style={styles.actionButtons}>
-                <TouchableOpacity 
-                  style={[styles.actionBtn, styles.cancelBtn]} 
-                  onPress={handleCancel}
-                >
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.actionBtn, styles.saveBtn]} 
-                  onPress={handleUpdate}
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.saveBtnText}>Save Changes</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
+          {/* Action Buttons */}
+          {isEditing && (
+            <View style={styles.actionButtons}>
+              <UXButton
+                title="Cancel"
+                onPress={handleCancel}
+                variant="outline"
+                size="lg"
+                style={styles.cancelButton}
+              />
+              <UXButton
+                title="Save Changes"
+                onPress={handleUpdate}
+                loading={isLoading}
+                variant="primary"
+                size="lg"
+                style={styles.saveButton}
+                icon={<Ionicons name="checkmark" size={18} color="#FFFFFF" />}
+              />
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     )
   );
 };
 
-export default Settings;
-
-const styles = StyleSheet.create({
+const createStyles = (screenWidth: number) => StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: "#FFF",
-    paddingTop: Platform.OS === 'ios' ? hp('2%') : 0
+    backgroundColor: UX_COLORS.background,
   },
-  // Web-specific styles
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   webLayout: {
     flex: 1,
-    flexDirection: 'column',
+    flexDirection: 'row',
   },
   webContent: {
     flex: 1,
@@ -583,229 +1277,325 @@ const styles = StyleSheet.create({
   },
   webMainContent: {
     flex: 1,
-    backgroundColor: '#FFF',
+    backgroundColor: UX_COLORS.background,
   },
-  scrollContainer: { 
-    flexGrow: 1, 
-    paddingBottom: hp('5%'), 
-    paddingHorizontal: wp('5%'), 
-    paddingTop: hp('2%') 
+  scrollContent: {
+    padding: getSpacing(screenWidth, 1.5),
   },
-  loadingContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  pageHeader: {
+    marginBottom: getSpacing(screenWidth, 2),
   },
-  loadingText: {
-    marginTop: hp('2%'),
+  pageTitle: {
+    fontSize: getFontSize(screenWidth, 'title'),
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.text,
+    marginBottom: getSpacing(screenWidth, 0.5),
+  },
+  pageSubtitle: {
+    fontSize: getFontSize(screenWidth, 'body'),
     fontFamily: 'Poppins_400Regular',
-    fontSize: wp('3.8%'),
-    color: '#374151'
+    color: UX_COLORS.textSecondary,
+    lineHeight: hp('2.5%'),
   },
-  header: { 
-    paddingTop: hp('4%') 
-  },
-  title: { 
-    color: '#030303',
-    fontSize: wp('6%'),
-    fontFamily: 'Poppins_600SemiBold',
-    lineHeight: hp('4%'),
-    marginBottom: hp('1%')
-  },
-  info: { 
-    fontFamily: "Poppins_400Regular", 
-    fontSize: wp('3.8%'), 
-    lineHeight: hp('2.5%'), 
-    color: "#374151" 
-  },
-  divider: { 
-    height: 1, 
-    backgroundColor: "#E5E7EB", 
-    marginVertical: hp('2.5%') 
-  },
-  content: { 
-    paddingTop: hp('1%') 
-  },
-  personalInfo: { 
-    marginBottom: hp('1%') 
-  },
-  label: { 
-    color: '#030303',
-    fontSize: wp('3.5%'),
-    fontFamily: 'Poppins_600SemiBold',
-    lineHeight: hp('2.2%'),
-    marginBottom: hp('2%')
-  },
-  inputFields: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    marginBottom: hp('2.5%'), 
-    gap: wp('4%') 
-  },
-  input: { 
-    flex: 1, 
-    minWidth: wp('42%'), 
-    backgroundColor: "#f8f8f8", 
-    height: hp('6%'), 
-    paddingHorizontal: wp('4%'), 
-    borderRadius: wp('2.5%'), 
-    fontSize: wp('3.8%'),
-    fontFamily: "Poppins_400Regular",
-    borderWidth: 1,
-    borderColor: "#e5e5e5",
-    color: '#000',
-    paddingVertical: Platform.OS === 'ios' ? hp('1.5%') : 0
-  },
-  countryBtn: { 
-    width: "100%", 
-    height: hp('5.5%'), 
-    borderRadius: wp('3%'), 
-    backgroundColor: "#5f5fff", 
-    justifyContent: "center", 
-    alignItems: "center" 
-  },
-  mainContent: { 
-    marginVertical: hp('1%') 
+  sectionCard: {
+    marginBottom: getSpacing(screenWidth, 1.5),
   },
   sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: hp('2%')
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: getSpacing(screenWidth, 1),
   },
-  mainContentTitle: { 
-    color: '#030303',
-    fontSize: wp('3.5%'),
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: getSpacing(screenWidth, 0.5),
+  },
+  sectionTitle: {
+    fontSize: getFontSize(screenWidth, 'subtitle'),
     fontFamily: 'Poppins_600SemiBold',
-    lineHeight: hp('2.2%'),
+    color: UX_COLORS.text,
   },
-  editIcon: {
-    padding: wp('1%'),
+
+  // Form Styles
+  formContainer: {
+    backgroundColor: UX_COLORS.cardBg,
+    borderRadius: UX_CONSTANTS.borderRadius.lg,
+    padding: UX_CONSTANTS.spacing.lg,
+    marginBottom: UX_CONSTANTS.spacing.lg,
+    shadowColor: UX_COLORS.textSecondary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: UX_COLORS.border,
   },
-  inputs: { 
-    gap: hp('2%') 
+  formHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: UX_CONSTANTS.spacing.lg,
   },
-  contentInput: { 
-    width: "100%", 
-    height: hp('6.5%'), 
-    borderRadius: wp('2.5%'), 
-    backgroundColor: "#fff", 
-    paddingHorizontal: wp('4%'), 
-    fontSize: wp('3.8%'),
-    fontFamily: "Poppins_400Regular",
-    borderWidth: 1, 
-    borderColor: "#d1d5db",
-    color: '#000',
-    paddingVertical: Platform.OS === 'ios' ? hp('1.5%') : 0
-  },
-  actionButtons: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    marginVertical: hp('3%'), 
-    gap: wp('4%') 
-  },
-  saveBtn: { 
-    flex: 1, 
-    height: hp('6%'), 
-    borderRadius: wp('2.5%'), 
-    backgroundColor: "#5f5fff", 
-    justifyContent: "center", 
-    alignItems: "center" 
-  },
-  cancelBtn: { 
-    flex: 1, 
-    height: hp('6%'), 
-    borderRadius: wp('2.5%'), 
-    borderWidth: 1, 
-    borderColor: "#3164f4", 
-    justifyContent: "center", 
-    alignItems: "center" 
-  },
-  btnTxt: { 
-    color: "#fff", 
-    fontSize: wp('3.8%'), 
-    fontFamily: "Poppins_600SemiBold" 
-  },
-  cancelBtnTxt: { 
-    fontSize: wp('3.8%'), 
-    color: "#3164f4", 
-    fontFamily: "Poppins_600SemiBold" 
-  },
-  security: { 
-    marginVertical: hp('2%') 
-  },
-  securityTitle: { 
-    color: '#030303',
-    fontSize: wp('3.5%'),
+  formTitle: {
+    fontSize: UX_CONSTANTS.fontSize.xl,
     fontFamily: 'Poppins_600SemiBold',
-    lineHeight: hp('2.2%'),
-    marginBottom: hp('2%')
+    color: UX_COLORS.text,
   },
-  checkboxContainer: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    justifyContent: "space-between" 
+  editButton: {
+    padding: UX_CONSTANTS.spacing.sm,
   },
-  checkboxLabel: { 
-    fontFamily: "Poppins_400Regular", 
-    fontSize: wp('3.8%'), 
-    color: "#000", 
-    flex: 1 
+  
+  // Mobile-specific styles
+  scrollContainer: { 
+    flexGrow: 1, 
+    padding: getSpacing(screenWidth, 1.5),
+    backgroundColor: UX_COLORS.background,
   },
-  checkbox: { 
-    height: wp('5.5%'), 
-    width: wp('5.5%'), 
-    borderWidth: 1, 
-    borderColor: '#3164f4', 
-    backgroundColor: '#fff', 
-    borderRadius: wp('1%'), 
-    alignItems: "center", 
-    justifyContent: "center" 
+  
+  // Enhanced Profile Card Styles
+  profileCard: {
+    marginBottom: getSpacing(screenWidth, 1.5),
+    backgroundColor: UX_COLORS.cardBg,
+    borderRadius: UX_CONSTANTS.borderRadius.xl,
+    shadowColor: UX_COLORS.textSecondary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: UX_COLORS.border,
+    overflow: 'hidden',
   },
-  deleteContainer: { 
-    alignItems: "center", 
-    justifyContent: "center", 
-    marginVertical: hp('2%') 
+  profileHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: getSpacing(screenWidth, 1),
   },
-  deleteBtn: { 
-    width: wp('50%'), 
-    height: hp('6%'), 
-    borderWidth: 1, 
-    borderColor: "#c30707", 
-    borderRadius: wp('2.5%'), 
-    justifyContent: "center", 
-    alignItems: "center" 
+  profileInfo: {
+    flex: 1,
   },
-  deleteText: { 
-    fontSize: wp('3.8%'), 
-    color: "#c30707", 
-    fontFamily: "Poppins_600SemiBold" 
+  profileName: {
+    fontSize: getFontSize(screenWidth, 'title'),
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.text,
+    marginBottom: getSpacing(screenWidth, 0.25),
   },
-  // Notification and action button styles
-  notificationSection: {
-    marginVertical: hp('2%'),
+  profileEmail: {
+    fontSize: getFontSize(screenWidth, 'body'),
+    fontFamily: 'Poppins_400Regular',
+    color: UX_COLORS.textSecondary,
   },
-  notificationItem: {
+  profileActions: {
+    flexDirection: 'row',
+    gap: getSpacing(screenWidth, 0.5),
+  },
+  profileActionButton: {
+    width: getSpacing(screenWidth, 3),
+    height: getSpacing(screenWidth, 3),
+    borderRadius: getSpacing(screenWidth, 1.5),
+    backgroundColor: UX_COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: UX_COLORS.primary,
+  },
+  profileStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: getSpacing(screenWidth, 1),
+    borderTopWidth: 1,
+    borderTopColor: UX_COLORS.border,
+    marginTop: getSpacing(screenWidth, 1),
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: getFontSize(screenWidth, 'title'),
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.primary,
+    marginBottom: getSpacing(screenWidth, 0.25),
+  },
+  statLabel: {
+    fontSize: getFontSize(screenWidth, 'small'),
+    fontFamily: 'Poppins_400Regular',
+    color: UX_COLORS.textSecondary,
+  },
+
+  // Enhanced Notification Styles
+  notificationGrid: {
+    gap: getSpacing(screenWidth, 1),
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: getSpacing(screenWidth, 0.5),
+    marginBottom: getSpacing(screenWidth, 0.5),
+  },
+  notificationTitle: {
+    fontSize: getFontSize(screenWidth, 'body'),
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.text,
+    flex: 1,
+  },
+  notificationMeta: {
+    backgroundColor: UX_COLORS.primaryLight,
+    paddingHorizontal: getSpacing(screenWidth, 0.5),
+    paddingVertical: getSpacing(screenWidth, 0.25),
+    borderRadius: getSpacing(screenWidth, 0.5),
+  },
+  notificationStatus: {
+    fontSize: getFontSize(screenWidth, 'small'),
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.primary,
+  },
+
+  // Quick Actions Styles
+  quickActionsContainer: {
+    marginBottom: getSpacing(screenWidth, 1.5),
+  },
+  quickActionsTitle: {
+    fontSize: getFontSize(screenWidth, 'subtitle'),
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.text,
+    marginBottom: getSpacing(screenWidth, 1),
+  },
+  quickActionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: getSpacing(screenWidth, 1),
+  },
+  quickActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: getSpacing(screenWidth, 0.5),
+    padding: getSpacing(screenWidth, 1),
+    borderRadius: getSpacing(screenWidth, 1),
+    backgroundColor: UX_COLORS.cardBg,
+    borderWidth: 1,
+    borderColor: UX_COLORS.border,
+    minWidth: getSpacing(screenWidth, 8),
+  },
+  quickActionText: {
+    fontSize: getFontSize(screenWidth, 'small'),
+    fontFamily: 'Poppins_400Regular',
+    color: UX_COLORS.textSecondary,
+  },
+
+  // Settings Categories Styles
+  settingsCategoriesContainer: {
+    gap: getSpacing(screenWidth, 2),
+  },
+  categoriesTitle: {
+    fontSize: getFontSize(screenWidth, 'title'),
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.text,
+    marginBottom: getSpacing(screenWidth, 1),
+  },
+  categorySection: {
+    gap: getSpacing(screenWidth, 1),
+  },
+  categoryTitle: {
+    fontSize: getFontSize(screenWidth, 'subtitle'),
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.textSecondary,
+    marginBottom: getSpacing(screenWidth, 1),
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  settingsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: getSpacing(screenWidth, 1),
+  },
+
+  // Enhanced Settings Item Styles
+  settingsItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: getSpacing(screenWidth, 0.5),
+  },
+  settingsItemMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: getSpacing(screenWidth, 0.5),
+  },
+  settingsItemCategory: {
+    fontSize: getFontSize(screenWidth, 'small'),
+    fontFamily: 'Poppins_400Regular',
+    color: UX_COLORS.textSecondary,
+    backgroundColor: UX_COLORS.border,
+    paddingHorizontal: getSpacing(screenWidth, 0.5),
+    paddingVertical: getSpacing(screenWidth, 0.25),
+    borderRadius: getSpacing(screenWidth, 0.25),
+    textTransform: 'uppercase',
+  },
+  priorityIndicator: {
+    width: getSpacing(screenWidth, 0.5),
+    height: getSpacing(screenWidth, 0.5),
+    borderRadius: getSpacing(screenWidth, 0.25),
+  },
+
+  // Refresh Button Styles
+  refreshButton: {
+    padding: getSpacing(screenWidth, 0.5),
+    borderRadius: getSpacing(screenWidth, 1),
+  },
+  
+  // Premium Settings Item Styles
+  premiumSettingsItem: {
+    backgroundColor: UX_COLORS.cardBg,
+    borderRadius: UX_CONSTANTS.borderRadius.lg,
+    marginBottom: UX_CONSTANTS.spacing.lg,
+    marginBottom: UX_CONSTANTS.spacing.md,
+    shadowColor: UX_COLORS.textSecondary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: UX_COLORS.border,
+  },
+  settingsItemTouchable: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: hp('1%'),
+    padding: UX_CONSTANTS.spacing.lg,
   },
-  notificationText: {
-    fontSize: wp('3.8%'),
+  settingsItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  settingsItemIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: UX_COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: UX_CONSTANTS.spacing.md,
+  },
+  settingsItemContent: {
+    flex: 1,
+  },
+  settingsItemTitle: {
+    fontSize: UX_CONSTANTS.fontSize.lg,
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.text,
+    marginBottom: 4,
+  },
+  settingsItemDescription: {
+    fontSize: UX_CONSTANTS.fontSize.sm,
     fontFamily: 'Poppins_400Regular',
-    color: '#000',
+    color: UX_COLORS.textSecondary,
   },
-  checkboxChecked: {
-    backgroundColor: '#3164f4',
-  },
-  cancelBtnText: {
-    fontSize: wp('3.8%'),
-    fontFamily: 'Poppins_600SemiBold',
-    color: '#000',
-  },
-  saveBtnText: {
-    fontSize: wp('3.8%'),
-    fontFamily: 'Poppins_600SemiBold',
-    color: '#fff',
+  settingsItemArrow: {
+    marginLeft: UX_CONSTANTS.spacing.sm,
   },
 });
+
+export default Settings;

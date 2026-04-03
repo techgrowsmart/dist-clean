@@ -34,25 +34,40 @@ export default function EmailInputScreen() {
   ];
 
   const handleContinue = async () => {
-    if (!email.trim()) {
+    const trimmedEmail = email.trim();
+    
+    if (!trimmedEmail) {
       Alert.alert('Error', 'Please enter your email address');
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    // For signup, validate name is provided
+    if (!isLogin && !fullName.trim()) {
+      Alert.alert('Error', 'Please enter your full name');
       return;
     }
 
     setLoading(true);
 
     try {
-      // Try to send OTP for login/signup
-      const response = await authService.sendOTP(email, role);
+      // Try to send OTP for login/signup (without role for initial signup)
+      const response = await authService.sendOTP(trimmedEmail, '', !isLogin, fullName);
       
       // Check if it's a test user that bypasses OTP
       if (response.isTestUser && response.token) {
         // Store auth data and navigate directly to dashboard
         await authService.storeAuthData({
           role: response.role || role,
-          email: email,
+          email: trimmedEmail,
           token: response.token,
-          name: response.name || email.split('@')[0],
+          name: response.name || trimmedEmail.split('@')[0],
         });
         
         // Navigate to appropriate dashboard
@@ -68,33 +83,36 @@ export default function EmailInputScreen() {
       router.push({ 
         pathname: '/auth/OTPScreen' as any,
         params: { 
-          email: email, 
+          email: trimmedEmail, 
           isLogin: 'false', 
           role: role,
           otpId: response.otpId || '',
           isSignup: 'true',
           name: fullName,
-          phone: phoneNumber ? `${phoneCountry}${phoneNumber}` : ''
+          phone: phoneNumber ? `${phoneCountry}${phoneNumber}` : '+0000000000' // Default phone if not provided
         } 
       });
     } catch (error: any) {
       console.error('OTP sending error:', error);
       
-      // For any error in development mode, try signup directly
-      if (process.env.NODE_ENV === 'development') {
+      // Check if user is not registered and needs to signup
+      if (error.message.includes('not registered') || error.message.includes('sign up')) {
         try {
-          const signupResponse = await authService.signup(email, 'New User', role);
+          // For new users, initiate signup flow
+          const signupResponse = await authService.signup(trimmedEmail, fullName, role);
           
           if (signupResponse.otpId) {
             // Navigate to OTP verification screen for signup
             router.push({ 
               pathname: '/auth/OTPScreen' as any,
               params: { 
-                email: email, 
+                email: trimmedEmail, 
                 isLogin: 'false', 
                 role: role,
                 otpId: signupResponse.otpId || '',
-                isSignup: 'true'
+                isSignup: 'true',
+                name: fullName,
+                phone: phoneNumber ? `${phoneCountry}${phoneNumber}` : '+0000000000' // Default phone if not provided
               } 
             });
           } else {
@@ -176,7 +194,7 @@ export default function EmailInputScreen() {
                   </TouchableOpacity>
                   <TextInput
                     style={webStyles.phoneInput}
-                    placeholder="Phone number"
+                    placeholder="Phone number (optional)"
                     placeholderTextColor="#9CA3AF"
                     value={phoneNumber}
                     onChangeText={setPhoneNumber}
@@ -285,7 +303,7 @@ export default function EmailInputScreen() {
             </TouchableOpacity>
             <TextInput
               style={styles.mobileEmailInput}
-              placeholder="Phone number"
+              placeholder="Phone number (optional)"
               placeholderTextColor="#9CA3AF"
               value={phoneNumber}
               onChangeText={setPhoneNumber}
@@ -516,6 +534,39 @@ const webStyles = StyleSheet.create({
     color: '#7C4DDB',
     textDecorationLine: 'underline',
   },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 12,
+  },
+  roleOptions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  roleOption: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+  },
+  roleOptionSelected: {
+    borderColor: '#7C4DDB',
+    backgroundColor: '#F3F0FF',
+  },
+  roleOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  roleOptionTextSelected: {
+    color: '#7C4DDB',
+  },
 });
 
 // Mobile styles
@@ -648,5 +699,42 @@ const styles = StyleSheet.create({
   termsLink: {
     color: '#7C4DDB',
     textDecorationLine: 'underline',
+  },
+  mobileLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 12,
+  },
+  mobileRoleContainer: {
+    width: '100%',
+    marginBottom: 24,
+  },
+  mobileRoleOptions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  mobileRoleOption: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+  },
+  mobileRoleOptionSelected: {
+    borderColor: '#7C4DDB',
+    backgroundColor: '#F3F0FF',
+  },
+  mobileRoleOptionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  mobileRoleOptionTextSelected: {
+    color: '#7C4DDB',
   },
 });

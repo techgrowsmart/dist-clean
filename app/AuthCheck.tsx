@@ -14,14 +14,14 @@ export default function AuthCheck() {
 
                 if (authData && authData.token) {
                     if (authData.role === "teacher") {
-                        router.replace("/(tabs)/TeacherDashBoard/Teacher");
+                        router.replace("/(tabs)/TeacherDashBoard");
                     } else if (authData.role === "student") {
-                        router.replace("/(tabs)/StudentDashBoard/Student");
+                        router.replace("/(tabs)/StudentDashBoard");
                     } else {
-                        router.replace("/Login");
+                        router.replace("/auth/LoginOptionsScreen");
                     }
                 } else {
-                    router.replace("/Login");
+                    router.replace("/auth/LoginOptionsScreen");
                 }
                 setChecking(false);
             } catch (error) {

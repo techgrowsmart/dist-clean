@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
-const { width, height } = Dimensions.get('window');
+// use window width when needed via Dimensions.get('window') below
 
 const onboardingData = [
   {
