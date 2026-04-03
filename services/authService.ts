@@ -2,7 +2,7 @@ import { BASE_URL } from '../config';
 import { storeAuthData, getAuthData, clearAllStorage } from '../utils/authStorage';
 
 // Development mode flag
-const IS_DEVELOPMENT_MODE = false; // Always use real backend
+const IS_DEVELOPMENT_MODE = true; // Enable fallback due to backend 500 errors
 
 export interface LoginResponse {
   success: boolean;
@@ -126,13 +126,25 @@ class AuthService {
             };
           }
           
-          // For other emails, simulate OTP sending
-          console.log('🔄 Using development fallback - sending OTP');
+          // For other emails, simulate user not found to trigger signup
+          console.log('🔄 Using development fallback - user not found, triggering signup');
           return {
-            message: "✅ OTP sent successfully",
-            otpId: 'mock-otp-id-' + Date.now(),
-            isRegistered: true,
-            role: email.includes('teacher') ? 'teacher' : 'student',
+            message: "Your not registered. Please sign up first.",
+            isRegistered: false,
+          };
+        }
+        
+        if (endpoint === '/api/signup' && options.method === 'POST') {
+          const body = JSON.parse(options.body as string);
+          const email = body.email;
+          const name = body.fullName;
+          
+          // Mock successful signup OTP sending
+          console.log('🔄 Using development fallback - sending signup OTP');
+          return { 
+            message: "✅ OTP sent successfully for signup", 
+            otpId: 'mock-signup-otp-id-' + Date.now(),
+            success: true
           };
         }
         
