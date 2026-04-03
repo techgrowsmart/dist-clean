@@ -37,7 +37,7 @@ const menuItems = [
   { name: "Connect",         icon: <Ionicons name="chatbubble-ellipses-outline" size={20} /> },
   { name: "Share",               icon: <Ionicons name="share-social-outline" size={20} /> },
   { name: "Create Subject",      icon: <MaterialIcons name="add-circle" size={20} /> },
-  { name: "Billing",            icon: <Feather name="message-circle" size={20} /> },
+  { name: "Billing",            icon: <Ionicons name="card-outline" size={20} /> },
   { name: "Settings",           icon: <MaterialIcons name="settings" size={20} /> },
   { name: "Terms & Conditions", icon: <MaterialIcons name="description" size={20} /> },
   { name: "Privacy Policy",     icon: <MaterialIcons name="privacy-tip" size={20} /> },
