@@ -1,12 +1,12 @@
 import { Platform } from 'react-native';
 
-// Get API URL from environment with fallback to backend server
+// Get API URL from environment with fallback to production backend
 const getBaseUrl = () => {
   // Use environment variable if available
   let url = process.env.EXPO_PUBLIC_API_URL;
   
   if (!url) {
-    // For development and production, use the deployed backend server
+    // Always use production backend server
     url = "https://growsmartserver.gogrowsmart.com";
   }
 

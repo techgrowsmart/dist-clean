@@ -42,7 +42,7 @@ export default function EmailInputScreen() {
       } else {
         // For regular users, try login first, then signup if needed
         try {
-          const response = await authService.sendOTP(email, role);
+          const response = await authService.sendOTP(email, '', !isLogin, '');
           
           if (response.success) {
             // Navigate to OTP verification screen

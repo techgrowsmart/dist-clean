@@ -92,16 +92,19 @@ export default function OTPScreen() {
       if (isSignup) {
         // For signup, use provided name/phone (if any)
         const userName = signupName || email.split('@')[0];
-        response = await authService.verifySignupOTP(email, otpValue, userName, role, signupPhone);
+        response = await authService.verifySignupOTP(email, otpValue, userName, '', signupPhone);
       } else {
         // For login verification
         response = await authService.verifyOTP(email, otpValue, otpId);
       }
       
       if (response.success) {
-        // For signup verification, route to LoginOptionsScreen
+        // For signup verification, route to RoleSelectionScreen
         if (isSignup) {
-          router.replace('/auth/LoginOptionsScreen' as any);
+          router.replace({ 
+            pathname: '/auth/RoleSelectionScreen' as any,
+            params: { email: email }
+          });
         } else {
           // For login verification, navigate to appropriate dashboard
           if (response.user?.role === 'teacher') {
@@ -137,7 +140,7 @@ export default function OTPScreen() {
     if (!canResend) return;
 
     try {
-      const response = await authService.sendOTP(email, role);
+      const response = await authService.sendOTP(email, '', isSignup, signupName);
       
       if (response.success) {
         setTimer(60);

@@ -37,6 +37,40 @@ import { UXButton, UXCard, UXInput, UXLoading, UXBadge, UX_COLORS, UX_CONSTANTS 
 import axios from 'axios';
 import * as Haptics from 'expo-haptics';
 
+// Helper functions outside component for styles
+const getScreenDimensions = () => {
+  const { width, height } = Dimensions.get('window');
+  return { width, height };
+};
+
+const getBreakpoints = (screenWidth: number) => ({
+  isTinyMobile: screenWidth < 320,
+  isSmallMobile: screenWidth < 375,
+  isMobile: screenWidth < 768,
+  isTablet: screenWidth >= 768 && screenWidth < 1024,
+  isDesktop: screenWidth >= 1024,
+  isLargeDesktop: screenWidth >= 1440,
+  isUltraWide: screenWidth >= 1920,
+});
+
+const getSpacing = (screenWidth: number, multiplier: number = 1) => {
+  const { isUltraWide, isLargeDesktop, isDesktop, isTablet, isMobile, isSmallMobile } = getBreakpoints(screenWidth);
+  const base = isUltraWide ? 24 : isLargeDesktop ? 20 : isDesktop ? 16 : isTablet ? 14 : isMobile ? 12 : isSmallMobile ? 10 : 8;
+  return base * multiplier;
+};
+
+const getFontSize = (screenWidth: number, type: 'title' | 'subtitle' | 'body' | 'caption' | 'small') => {
+  const { isTinyMobile, isSmallMobile, isMobile, isTablet, isDesktop, isLargeDesktop, isUltraWide } = getBreakpoints(screenWidth);
+  const baseSizes = {
+    title: isTinyMobile ? wp('6%') : isSmallMobile ? wp('6.5%') : isMobile ? wp('7%') : isTablet ? wp('5%') : isDesktop ? wp('4%') : isLargeDesktop ? wp('3.5%') : wp('3%'),
+    subtitle: isTinyMobile ? wp('3.5%') : isSmallMobile ? wp('3.8%') : isMobile ? wp('4%') : isTablet ? wp('3%') : isDesktop ? wp('2.5%') : isLargeDesktop ? wp('2.2%') : wp('2%'),
+    body: isTinyMobile ? wp('3%') : isSmallMobile ? wp('3.2%') : isMobile ? wp('3.5%') : isTablet ? wp('2.8%') : isDesktop ? wp('2.3%') : isLargeDesktop ? wp('2%') : wp('1.8%'),
+    caption: isTinyMobile ? wp('2.2%') : isSmallMobile ? wp('2.5%') : isMobile ? wp('2.8%') : isTablet ? wp('2.2%') : isDesktop ? wp('2%') : isLargeDesktop ? wp('1.8%') : wp('1.5%'),
+    small: isTinyMobile ? wp('2%') : isSmallMobile ? wp('2.2%') : isMobile ? wp('2.5%') : isTablet ? wp('2%') : isDesktop ? wp('1.8%') : isLargeDesktop ? wp('1.5%') : wp('1.2%'),
+  };
+  return baseSizes[type];
+};
+
 const Settings = () => {
   // Enhanced state management
   const [isEditing, setIsEditing] = useState(false);
@@ -114,8 +148,9 @@ const Settings = () => {
   const isLargeDesktop = screenWidth >= 1440;
   const isUltraWide = screenWidth >= 1920;
   
-  // Dynamic sizing functions
+  // Dynamic sizing functions (using helper functions)
   const getIconSize = () => {
+    const { isTinyMobile, isSmallMobile, isMobile, isTablet, isDesktop, isLargeDesktop, isUltraWide } = getBreakpoints(screenWidth);
     if (isTinyMobile) return 16;
     if (isSmallMobile) return 18;
     if (isMobile) return 20;
@@ -127,6 +162,7 @@ const Settings = () => {
   };
   
   const getHeaderIconSize = () => {
+    const { isTinyMobile, isSmallMobile, isMobile, isTablet, isDesktop, isLargeDesktop, isUltraWide } = getBreakpoints(screenWidth);
     if (isTinyMobile) return 20;
     if (isSmallMobile) return 22;
     if (isMobile) return 24;
@@ -137,21 +173,12 @@ const Settings = () => {
     return 30;
   };
   
-  const getFontSize = (type: 'title' | 'subtitle' | 'body' | 'caption' | 'small') => {
-    const baseSizes = {
-      title: isTinyMobile ? wp('6%') : isSmallMobile ? wp('6.5%') : isMobile ? wp('7%') : isTablet ? wp('5%') : isDesktop ? wp('4%') : isLargeDesktop ? wp('3.5%') : wp('3%'),
-      subtitle: isTinyMobile ? wp('3.5%') : isSmallMobile ? wp('3.8%') : isMobile ? wp('4%') : isTablet ? wp('3%') : isDesktop ? wp('2.5%') : isLargeDesktop ? wp('2.2%') : wp('2%'),
-      body: isTinyMobile ? wp('3%') : isSmallMobile ? wp('3.2%') : isMobile ? wp('3.5%') : isTablet ? wp('2.8%') : isDesktop ? wp('2.3%') : isLargeDesktop ? wp('2%') : wp('1.8%'),
-      caption: isTinyMobile ? wp('2.2%') : isSmallMobile ? wp('2.5%') : isMobile ? wp('2.8%') : isTablet ? wp('2.2%') : isDesktop ? wp('2%') : isLargeDesktop ? wp('1.8%') : wp('1.5%'),
-      small: isTinyMobile ? wp('2%') : isSmallMobile ? wp('2.2%') : isMobile ? wp('2.5%') : isTablet ? wp('2%') : isDesktop ? wp('1.8%') : isLargeDesktop ? wp('1.5%') : wp('1.2%'),
-    };
-    return baseSizes[type];
+  const getCurrentFontSize = (type: 'title' | 'subtitle' | 'body' | 'caption' | 'small') => {
+    return getFontSize(screenWidth, type);
   };
 
-  const getSpacing = (multiplier: number = 1) => {
-    const base = isUltraWide ? 24 : isLargeDesktop ? 20 : isDesktop ? 16 : isTablet ? 14 : isMobile ? 12 : isSmallMobile ? 10 : 8;
-    return base * multiplier;
-  };
+  // Create dynamic styles based on screen width
+  const styles = useMemo(() => createStyles(screenWidth), [screenWidth]);
 
   // Advanced animation and interaction handlers
   useEffect(() => {
@@ -839,10 +866,7 @@ const Settings = () => {
     </Animated.View>
   );
 
-  function setIsChecked(value: boolean): void | Promise<void> {
-    throw new Error("Function not implemented.");
-  }
-
+  
   return (
     // Web Layout - Enhanced with Amazing Features
     Platform.OS === 'web' ? (
@@ -1198,10 +1222,10 @@ const Settings = () => {
                 <Text style={styles.notificationDescription}>Receive email updates about your account</Text>
               </View>
               <Switch
-                value={isChecked}
-                onValueChange={setIsChecked}
+                value={notifications.email}
+                onValueChange={() => handleNotificationToggle('email')}
                 trackColor={{ false: UX_COLORS.border, true: UX_COLORS.primaryLight }}
-                thumbColor={isChecked ? UX_COLORS.primary : UX_COLORS.textLight}
+                thumbColor={notifications.email ? UX_COLORS.primary : UX_COLORS.textLight}
                 ios_backgroundColor={UX_COLORS.border}
               />
             </View>
@@ -1234,22 +1258,18 @@ const Settings = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (screenWidth: number) => StyleSheet.create({
   container: { 
     flex: 1, 
     backgroundColor: UX_COLORS.background,
   },
   loadingContainer: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  
-  // Web Layout Styles
   webLayout: {
     flex: 1,
-    flexDirection: 'column',
-    backgroundColor: UX_COLORS.background,
+    flexDirection: 'row',
   },
   webContent: {
     flex: 1,
@@ -1260,118 +1280,82 @@ const styles = StyleSheet.create({
     backgroundColor: UX_COLORS.background,
   },
   scrollContent: {
-    padding: UX_CONSTANTS.spacing.xl,
+    padding: getSpacing(screenWidth, 1.5),
   },
-  
-  // Page Header
   pageHeader: {
-    marginBottom: UX_CONSTANTS.spacing.xxl,
+    marginBottom: getSpacing(screenWidth, 2),
   },
   pageTitle: {
-    fontSize: UX_CONSTANTS.fontSize.xxl,
+    fontSize: getFontSize(screenWidth, 'title'),
     fontFamily: 'Poppins_600SemiBold',
     color: UX_COLORS.text,
-    marginBottom: UX_CONSTANTS.spacing.sm,
+    marginBottom: getSpacing(screenWidth, 0.5),
   },
   pageSubtitle: {
-    fontSize: UX_CONSTANTS.fontSize.md,
+    fontSize: getFontSize(screenWidth, 'body'),
     fontFamily: 'Poppins_400Regular',
     color: UX_COLORS.textSecondary,
     lineHeight: hp('2.5%'),
   },
-  
-  // Section Cards
   sectionCard: {
-    marginBottom: UX_CONSTANTS.spacing.xl,
+    marginBottom: getSpacing(screenWidth, 1.5),
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: UX_CONSTANTS.spacing.lg,
+    marginBottom: getSpacing(screenWidth, 1),
   },
   sectionTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: UX_CONSTANTS.spacing.sm,
+    gap: getSpacing(screenWidth, 0.5),
   },
   sectionTitle: {
-    fontSize: UX_CONSTANTS.fontSize.lg,
+    fontSize: getFontSize(screenWidth, 'subtitle'),
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.text,
+  },
+
+  // Form Styles
+  formContainer: {
+    backgroundColor: UX_COLORS.cardBg,
+    borderRadius: UX_CONSTANTS.borderRadius.lg,
+    padding: UX_CONSTANTS.spacing.lg,
+    marginBottom: UX_CONSTANTS.spacing.lg,
+    shadowColor: UX_COLORS.textSecondary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: UX_COLORS.border,
+  },
+  formHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: UX_CONSTANTS.spacing.lg,
+  },
+  formTitle: {
+    fontSize: UX_CONSTANTS.fontSize.xl,
     fontFamily: 'Poppins_600SemiBold',
     color: UX_COLORS.text,
   },
   editButton: {
     padding: UX_CONSTANTS.spacing.sm,
-    borderRadius: UX_CONSTANTS.borderRadius.medium,
-    backgroundColor: UX_COLORS.background,
-  },
-  
-  // Form Layout
-  formGrid: {
-    gap: UX_CONSTANTS.spacing.md,
-  },
-  countrySelector: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: UX_CONSTANTS.spacing.md,
-    paddingTop: UX_CONSTANTS.spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: UX_COLORS.border,
-  },
-  countryLabel: {
-    fontSize: UX_CONSTANTS.fontSize.md,
-    fontFamily: 'Poppins_600SemiBold',
-    color: UX_COLORS.text,
-  },
-  
-  // Notification Settings
-  notificationItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: UX_CONSTANTS.spacing.md,
-  },
-  notificationContent: {
-    flex: 1,
-    marginRight: UX_CONSTANTS.spacing.md,
-  },
-  notificationTitle: {
-    fontSize: UX_CONSTANTS.fontSize.md,
-    fontFamily: 'Poppins_600SemiBold',
-    color: UX_COLORS.text,
-    marginBottom: UX_CONSTANTS.spacing.xs,
-  },
-  notificationDescription: {
-    fontSize: UX_CONSTANTS.fontSize.sm,
-    fontFamily: 'Poppins_400Regular',
-    color: UX_COLORS.textSecondary,
-    lineHeight: hp('2%'),
-  },
-  
-  // Action Buttons
-  actionButtons: {
-    flexDirection: 'row',
-    gap: UX_CONSTANTS.spacing.md,
-    marginTop: UX_CONSTANTS.spacing.xl,
-  },
-  cancelButton: {
-    flex: 1,
-  },
-  saveButton: {
-    flex: 1,
   },
   
   // Mobile-specific styles
   scrollContainer: { 
     flexGrow: 1, 
-    padding: getSpacing(1.5),
+    padding: getSpacing(screenWidth, 1.5),
     backgroundColor: UX_COLORS.background,
   },
   
   // Enhanced Profile Card Styles
   profileCard: {
-    marginBottom: getSpacing(1.5),
+    marginBottom: getSpacing(screenWidth, 1.5),
     backgroundColor: UX_COLORS.cardBg,
     borderRadius: UX_CONSTANTS.borderRadius.xl,
     shadowColor: UX_COLORS.textSecondary,
@@ -1387,30 +1371,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: getSpacing(1),
+    marginBottom: getSpacing(screenWidth, 1),
   },
   profileInfo: {
     flex: 1,
   },
   profileName: {
-    fontSize: getFontSize('title'),
+    fontSize: getFontSize(screenWidth, 'title'),
     fontFamily: 'Poppins_600SemiBold',
     color: UX_COLORS.text,
-    marginBottom: getSpacing(0.25),
+    marginBottom: getSpacing(screenWidth, 0.25),
   },
   profileEmail: {
-    fontSize: getFontSize('body'),
+    fontSize: getFontSize(screenWidth, 'body'),
     fontFamily: 'Poppins_400Regular',
     color: UX_COLORS.textSecondary,
   },
   profileActions: {
     flexDirection: 'row',
-    gap: getSpacing(0.5),
+    gap: getSpacing(screenWidth, 0.5),
   },
   profileActionButton: {
-    width: getSpacing(3),
-    height: getSpacing(3),
-    borderRadius: getSpacing(1.5),
+    width: getSpacing(screenWidth, 3),
+    height: getSpacing(screenWidth, 3),
+    borderRadius: getSpacing(screenWidth, 1.5),
     backgroundColor: UX_COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1420,111 +1404,111 @@ const styles = StyleSheet.create({
   profileStats: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingTop: getSpacing(1),
+    paddingTop: getSpacing(screenWidth, 1),
     borderTopWidth: 1,
     borderTopColor: UX_COLORS.border,
-    marginTop: getSpacing(1),
+    marginTop: getSpacing(screenWidth, 1),
   },
   statItem: {
     alignItems: 'center',
   },
   statValue: {
-    fontSize: getFontSize('title'),
+    fontSize: getFontSize(screenWidth, 'title'),
     fontFamily: 'Poppins_600SemiBold',
     color: UX_COLORS.primary,
-    marginBottom: getSpacing(0.25),
+    marginBottom: getSpacing(screenWidth, 0.25),
   },
   statLabel: {
-    fontSize: getFontSize('small'),
+    fontSize: getFontSize(screenWidth, 'small'),
     fontFamily: 'Poppins_400Regular',
     color: UX_COLORS.textSecondary,
   },
 
   // Enhanced Notification Styles
   notificationGrid: {
-    gap: getSpacing(1),
+    gap: getSpacing(screenWidth, 1),
   },
   notificationHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: getSpacing(0.5),
-    marginBottom: getSpacing(0.5),
+    gap: getSpacing(screenWidth, 0.5),
+    marginBottom: getSpacing(screenWidth, 0.5),
   },
   notificationTitle: {
-    fontSize: getFontSize('body'),
+    fontSize: getFontSize(screenWidth, 'body'),
     fontFamily: 'Poppins_600SemiBold',
     color: UX_COLORS.text,
     flex: 1,
   },
   notificationMeta: {
     backgroundColor: UX_COLORS.primaryLight,
-    paddingHorizontal: getSpacing(0.5),
-    paddingVertical: getSpacing(0.25),
-    borderRadius: getSpacing(0.5),
+    paddingHorizontal: getSpacing(screenWidth, 0.5),
+    paddingVertical: getSpacing(screenWidth, 0.25),
+    borderRadius: getSpacing(screenWidth, 0.5),
   },
   notificationStatus: {
-    fontSize: getFontSize('small'),
+    fontSize: getFontSize(screenWidth, 'small'),
     fontFamily: 'Poppins_600SemiBold',
     color: UX_COLORS.primary,
   },
 
   // Quick Actions Styles
   quickActionsContainer: {
-    marginBottom: getSpacing(1.5),
+    marginBottom: getSpacing(screenWidth, 1.5),
   },
   quickActionsTitle: {
-    fontSize: getFontSize('subtitle'),
+    fontSize: getFontSize(screenWidth, 'subtitle'),
     fontFamily: 'Poppins_600SemiBold',
     color: UX_COLORS.text,
-    marginBottom: getSpacing(1),
+    marginBottom: getSpacing(screenWidth, 1),
   },
   quickActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: getSpacing(1),
+    gap: getSpacing(screenWidth, 1),
   },
   quickActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: getSpacing(0.5),
-    padding: getSpacing(1),
-    borderRadius: getSpacing(1),
+    gap: getSpacing(screenWidth, 0.5),
+    padding: getSpacing(screenWidth, 1),
+    borderRadius: getSpacing(screenWidth, 1),
     backgroundColor: UX_COLORS.cardBg,
     borderWidth: 1,
     borderColor: UX_COLORS.border,
-    minWidth: getSpacing(8),
+    minWidth: getSpacing(screenWidth, 8),
   },
   quickActionText: {
-    fontSize: getFontSize('small'),
+    fontSize: getFontSize(screenWidth, 'small'),
     fontFamily: 'Poppins_400Regular',
     color: UX_COLORS.textSecondary,
   },
 
   // Settings Categories Styles
   settingsCategoriesContainer: {
-    gap: getSpacing(2),
+    gap: getSpacing(screenWidth, 2),
   },
   categoriesTitle: {
-    fontSize: getFontSize('title'),
+    fontSize: getFontSize(screenWidth, 'title'),
     fontFamily: 'Poppins_600SemiBold',
     color: UX_COLORS.text,
-    marginBottom: getSpacing(1),
+    marginBottom: getSpacing(screenWidth, 1),
   },
   categorySection: {
-    gap: getSpacing(1),
+    gap: getSpacing(screenWidth, 1),
   },
   categoryTitle: {
-    fontSize: getFontSize('subtitle'),
+    fontSize: getFontSize(screenWidth, 'subtitle'),
     fontFamily: 'Poppins_600SemiBold',
     color: UX_COLORS.textSecondary,
-    marginBottom: getSpacing(1),
+    marginBottom: getSpacing(screenWidth, 1),
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   settingsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: getSpacing(1),
+    gap: getSpacing(screenWidth, 1),
   },
 
   // Enhanced Settings Item Styles
@@ -1532,39 +1516,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: getSpacing(0.5),
+    marginBottom: getSpacing(screenWidth, 0.5),
   },
   settingsItemMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: getSpacing(0.5),
+    gap: getSpacing(screenWidth, 0.5),
   },
   settingsItemCategory: {
-    fontSize: getFontSize('small'),
+    fontSize: getFontSize(screenWidth, 'small'),
     fontFamily: 'Poppins_400Regular',
     color: UX_COLORS.textSecondary,
     backgroundColor: UX_COLORS.border,
-    paddingHorizontal: getSpacing(0.5),
-    paddingVertical: getSpacing(0.25),
-    borderRadius: getSpacing(0.25),
+    paddingHorizontal: getSpacing(screenWidth, 0.5),
+    paddingVertical: getSpacing(screenWidth, 0.25),
+    borderRadius: getSpacing(screenWidth, 0.25),
     textTransform: 'uppercase',
   },
   priorityIndicator: {
-    width: getSpacing(0.5),
-    height: getSpacing(0.5),
-    borderRadius: getSpacing(0.25),
+    width: getSpacing(screenWidth, 0.5),
+    height: getSpacing(screenWidth, 0.5),
+    borderRadius: getSpacing(screenWidth, 0.25),
   },
 
   // Refresh Button Styles
   refreshButton: {
-    padding: getSpacing(0.5),
-    borderRadius: getSpacing(1),
+    padding: getSpacing(screenWidth, 0.5),
+    borderRadius: getSpacing(screenWidth, 1),
   },
   
   // Premium Settings Item Styles
   premiumSettingsItem: {
     backgroundColor: UX_COLORS.cardBg,
     borderRadius: UX_CONSTANTS.borderRadius.lg,
+    marginBottom: UX_CONSTANTS.spacing.lg,
     marginBottom: UX_CONSTANTS.spacing.md,
     shadowColor: UX_COLORS.textSecondary,
     shadowOffset: { width: 0, height: 2 },

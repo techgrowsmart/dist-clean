@@ -57,8 +57,8 @@ export default function EmailInputScreen() {
     setLoading(true);
 
     try {
-      // Try to send OTP for login/signup
-      const response = await authService.sendOTP(trimmedEmail, role);
+      // Try to send OTP for login/signup (without role for initial signup)
+      const response = await authService.sendOTP(trimmedEmail, '', !isLogin, fullName);
       
       // Check if it's a test user that bypasses OTP
       if (response.isTestUser && response.token) {
@@ -534,6 +534,39 @@ const webStyles = StyleSheet.create({
     color: '#7C4DDB',
     textDecorationLine: 'underline',
   },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 12,
+  },
+  roleOptions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  roleOption: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+  },
+  roleOptionSelected: {
+    borderColor: '#7C4DDB',
+    backgroundColor: '#F3F0FF',
+  },
+  roleOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  roleOptionTextSelected: {
+    color: '#7C4DDB',
+  },
 });
 
 // Mobile styles
@@ -666,5 +699,42 @@ const styles = StyleSheet.create({
   termsLink: {
     color: '#7C4DDB',
     textDecorationLine: 'underline',
+  },
+  mobileLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 12,
+  },
+  mobileRoleContainer: {
+    width: '100%',
+    marginBottom: 24,
+  },
+  mobileRoleOptions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  mobileRoleOption: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+  },
+  mobileRoleOptionSelected: {
+    borderColor: '#7C4DDB',
+    backgroundColor: '#F3F0FF',
+  },
+  mobileRoleOptionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  mobileRoleOptionTextSelected: {
+    color: '#7C4DDB',
   },
 });

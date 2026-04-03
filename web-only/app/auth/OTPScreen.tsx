@@ -64,7 +64,7 @@ export default function OTPScreen() {
       if (isSignup) {
         // For signup, we need user name - let's use a default or get it from somewhere
         const userName = email.split('@')[0]; // Use email prefix as default name
-        response = await authService.verifySignupOTP(email, otpValue, userName, role);
+        response = await authService.verifySignupOTP(email, otpValue, userName, '');
       } else {
         // For login verification
         response = await authService.verifyOTP(email, otpValue, otpId);
@@ -112,7 +112,7 @@ export default function OTPScreen() {
     if (!canResend) return;
 
     try {
-      const response = await authService.sendOTP(email, role);
+      const response = await authService.sendOTP(email, '', isSignup, '');
       
       if (response.success) {
         setTimer(60);
