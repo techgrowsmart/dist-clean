@@ -186,6 +186,36 @@ const Settings = () => {
     ).start();
   }, []);
 
+  // Haptic feedback helper
+  const triggerHaptic = useCallback(async (type: 'light' | 'medium' | 'heavy' | 'success' | 'warning' | 'error') => {
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      try {
+        switch (type) {
+          case 'light':
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            break;
+          case 'medium':
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            break;
+          case 'heavy':
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            break;
+          case 'success':
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            break;
+          case 'warning':
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            break;
+          case 'error':
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            break;
+        }
+      } catch (error) {
+        // Silently fail if haptics not supported
+      }
+    }
+  }, []);
+
   // Enhanced interaction handlers
   const handleSectionPress = useCallback(async (section: string) => {
     await triggerHaptic('medium');
@@ -267,6 +297,28 @@ const Settings = () => {
   const handlePrivacyChange = useCallback(async (key: keyof typeof privacy, value: string) => {
     await triggerHaptic('light');
     setPrivacy(prev => ({ ...prev, [key]: value }));
+  }, [triggerHaptic]);
+
+  const handleSaveWithAnimation = useCallback(async () => {
+    setIsSaving(true);
+    await triggerHaptic('medium');
+    
+    // Animate save button
+    Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 0.95, duration: 100, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+    ]).start();
+    
+    try {
+      await handleUpdate();
+      await triggerHaptic('success');
+      setShowSuccessModal(true);
+      setTimeout(() => setShowSuccessModal(false), 2000);
+    } catch (error) {
+      await triggerHaptic('error');
+    } finally {
+      setIsSaving(false);
+    }
   }, [triggerHaptic]);
 
   // Enhanced search functionality with amazing features
