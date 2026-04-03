@@ -1178,8 +1178,6 @@ const Settings = () => {
   );
 };
 
-export default Settings;
-
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
@@ -1558,3 +1556,5 @@ const styles = StyleSheet.create({
     marginLeft: UX_CONSTANTS.spacing.sm,
   },
 });
+
+export default Settings;
