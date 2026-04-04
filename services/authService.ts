@@ -2,7 +2,7 @@ import { BASE_URL } from '../config';
 import { storeAuthData, getAuthData, clearAllStorage } from '../utils/authStorage';
 
 // Development mode flag
-const IS_DEVELOPMENT_MODE = false; // Use real production backend only
+const IS_DEVELOPMENT_MODE = false; // Disable development mode to use real SMTP OTP
 
 export interface LoginResponse {
   success: boolean;
@@ -43,6 +43,11 @@ export interface SignupResponse {
 class AuthService {
   private async makeRequest(endpoint: string, options: RequestInit = {}) {
     try {
+      // Use mock responses in development mode to avoid CORS issues
+      if (IS_DEVELOPMENT_MODE) {
+        return this.getMockResponse(endpoint, options);
+      }
+
       const url = `${BASE_URL}${endpoint}`;
       
       // Get auth token for authenticated requests
@@ -186,6 +191,8 @@ class AuthService {
       const email = body.email;
       const name = body.fullName;
       
+      console.log(`🧪 Mock signup for: ${email}, name: ${name}`);
+      
       return { 
         message: "✅ OTP sent successfully for signup", 
         otpId: 'mock-signup-otp-id-' + Date.now(),
@@ -209,8 +216,11 @@ class AuthService {
       const email = body.email;
       const name = body.name;
       
+      console.log(`🧪 Mock signup verification for: ${email}, name: ${name}`);
+      
       return {
         message: "✅ Account created successfully",
+        role: email.includes('teacher') ? 'teacher' : 'student',
         token: 'mock-verified-token-' + Date.now(),
         userId: 'mock-user-' + Date.now(),
         responseTime: 100
@@ -499,6 +509,17 @@ class AuthService {
       console.error('Test user login error:', error);
       throw error;
     }
+  }
+
+  // Helper method to store auth data
+  async storeAuthData(authData: {
+    role: string;
+    email: string;
+    token: string;
+    name?: string;
+    profileImage?: string;
+  }): Promise<void> {
+    await storeAuthData(authData);
   }
 }
 

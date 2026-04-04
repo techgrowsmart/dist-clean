@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ImageBackground, Dimensions, Platform, StatusBar, Animated, Alert } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { safeBack } from '../../utils/navigation';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useState } from 'react';
+import { Alert, Animated, Dimensions, ImageBackground, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { authService } from '../../services/authService';
+import { safeBack } from '../../utils/navigation';
 
 const { width, height } = Dimensions.get('window');
 
@@ -229,23 +229,19 @@ const webStyles = StyleSheet.create({
     padding: 40,
   },
   leftLogo: {
-    width: 100,
-    height: 100,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    backgroundColor: '#7C4DDB',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
+    boxShadow: '0 12px 20px rgba(0, 0, 0, 0.4)',
     elevation: 16,
   },
   leftLogoText: {
     fontSize: 40,
     fontWeight: '900',
-    color: '#3131b0',
   },
   brandTitle: {
     fontSize: 56,
@@ -253,9 +249,7 @@ const webStyles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 20,
-    textShadowColor: 'rgba(0, 0, 0, 0.4)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
+    ...(Platform.OS === 'web' && { textShadow: '2px 2px 6px rgba(0, 0, 0, 0.4)' }),
   },
   brandSubtitle: {
     fontSize: 20,
@@ -263,9 +257,7 @@ const webStyles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     letterSpacing: 3,
-    textShadowColor: 'rgba(0, 0, 0, 0.4)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    ...(Platform.OS === 'web' && { textShadow: '1px 1px 3px rgba(0, 0, 0, 0.4)' }),
   },
   rightColumn: {
     flex: 1,
@@ -331,10 +323,7 @@ const webStyles = StyleSheet.create({
     padding: 24,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: 'rgba(0, 0, 0, 0.05)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.05)',
     elevation: 6,
   },
   roleIcon: {
@@ -419,10 +408,7 @@ const styles = StyleSheet.create({
     padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: 'rgba(0, 0, 0, 0.05)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
     elevation: 4,
   },
   mobileRoleIcon: {

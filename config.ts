@@ -6,8 +6,13 @@ const getBaseUrl = () => {
   let url = process.env.EXPO_PUBLIC_API_URL;
   
   if (!url) {
-    // Always use production backend server
-    url = "https://growsmartserver.gogrowsmart.com";
+    // For web development, use local backend to avoid CORS issues
+    if (Platform.OS === 'web') {
+      url = "http://localhost:3000"; // Local backend server
+    } else {
+      // For mobile development and production, use the deployed backend server
+      url = "https://growsmartserver.gogrowsmart.com";
+    }
   }
 
   // Handle localhost/127.0.0.1 for different platforms

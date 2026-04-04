@@ -1,5 +1,5 @@
-import React from 'react';
 import { FontAwesome } from '@expo/vector-icons';
+import React from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface Post {
@@ -147,7 +147,7 @@ const ThoughtsCard: React.FC<ThoughtsCardProps> = ({ post, onLike, onComment, on
 };
 
 const s = StyleSheet.create({
-  card: { backgroundColor: '#fff', borderRadius: 16, marginHorizontal: 8, marginVertical: 8, paddingTop: 16, paddingHorizontal: 16, paddingBottom: 0, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
+  card: { backgroundColor: '#fff', borderRadius: 16, marginHorizontal: 8, marginVertical: 8, paddingTop: 16, paddingHorizontal: 16, paddingBottom: 0, boxShadow: '0 2px 8px rgba(0, 0, 0, 0.07)', elevation: 3 },
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   avatar: { width: 52, height: 52, borderRadius: 26, marginRight: 12 },
   avatarFallback: { backgroundColor: '#4A7BF7', justifyContent: 'center', alignItems: 'center' },

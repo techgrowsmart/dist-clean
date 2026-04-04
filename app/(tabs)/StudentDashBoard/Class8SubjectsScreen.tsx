@@ -1,37 +1,35 @@
-import React, { useState, useEffect, useCallback } from 'react';
 import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  Image,
-  TouchableOpacity,
-  SafeAreaView,
-  ActivityIndicator,
-  Platform,
-  ImageBackground,
-  FlatList,
-  TextInput,
-  Modal,
-  Dimensions,
-  Alert,
-} from 'react-native';
-import {
-  useFonts,
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    useFonts,
 } from '@expo-google-fonts/poppins';
-import { Ionicons, MaterialIcons, FontAwesome } from '@expo/vector-icons';
-import { widthPercentageToDP as wp } from 'react-native-responsive-screen';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { FontAwesome, Ionicons, MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Image,
+    ImageBackground,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import WebSidebar from '../../../components/ui/WebSidebar';
 import { BASE_URL } from '../../../config';
 import { getAuthData } from '../../../utils/authStorage';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import ThoughtsCard from './ThoughtsCard';
-import WebSidebar from '../../../components/ui/WebSidebar';
 
 // --- Constants & Colors ---
 const COLORS = {
@@ -842,15 +840,12 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     gap: 12,
   },
-  subjectCardWrapper: {
-    width: '31.5%',
+  subjectCard: {
+    width: '48%',
     height: 120,
     marginBottom: 0,
     borderRadius: 14,
-    shadowColor: 'rgba(0,0,0,0.06)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
+    boxShadow: '0 4px 10px rgba(0, 0, 0, 0.06)',
     elevation: 3,
   },
   subjectCardImageBg: {

@@ -1,27 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Image, StyleSheet, Dimensions, ActivityIndicator, Alert, TextInput, Pressable, Platform, SafeAreaView, Modal } from 'react-native';
-import { Ionicons, MaterialCommunityIcons, Feather, FontAwesome5, FontAwesome } from '@expo/vector-icons';
-import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
-import { useRouter } from 'expo-router';
-import { getAuthData } from "../../../utils/authStorage";
+import { Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, useFonts } from '@expo-google-fonts/poppins';
+import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import { BASE_URL } from "../../../config";
-import { db } from "../../../firebaseConfig";
-import { collection, getDocs, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Dimensions, Image, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  withDelay,
-  FadeInRight,
-  FadeInLeft,
+    FadeInLeft,
+    FadeInRight
 } from 'react-native-reanimated';
-import WebSidebar from "../../../components/ui/WebSidebar";
 import WebNavbar from "../../../components/ui/WebNavbar";
+import WebSidebar from "../../../components/ui/WebSidebar";
+import { BASE_URL } from "../../../config";
+import { getAuthData } from "../../../utils/authStorage";
 import ThoughtsCard from './ThoughtsCard';
-import ContactsScreen from '../Messages/ContactsScreen';
 
 // Global Design Tokens from ConnectScreen
 const COLORS = {
@@ -707,7 +699,7 @@ const ws = StyleSheet.create({
   header: { height: 56, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#fff', zIndex: 10 },
   logo: { fontSize: 18, fontWeight: 'bold', color: '#4A7BF7', fontFamily: 'Poppins_700Bold', marginRight: 20, minWidth: 110 },
   searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8f9fa', borderRadius: 20, paddingHorizontal: 12, height: 36, marginRight: 20 },
-  searchInput: { flex: 1, fontSize: 14, color: '#333', fontFamily: 'Poppins_400Regular', outline: 'none' },
+  searchInput: { flex: 1, fontSize: 14, color: '#333', fontFamily: 'Poppins_400Regular' },
   headerRight: { flexDirection: 'row', alignItems: 'center' },
   notifBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: '#dc3545', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center' },
   notifBadgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold', fontFamily: 'Poppins_600SemiBold' },

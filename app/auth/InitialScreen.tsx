@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ImageBackground, Dimensions, Platform, StatusBar, Animated, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Animated, Dimensions, ImageBackground, Linking, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 const windowWidth = width;
@@ -271,9 +271,7 @@ const webStyles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 20,
-    textShadowColor: 'rgba(0, 0, 0, 0.4)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
+    ...(Platform.OS === 'web' && { textShadow: '2px 2px 6px rgba(0, 0, 0, 0.4)' }),
   },
   brandSubtitle: {
     fontSize: 20,
@@ -281,9 +279,7 @@ const webStyles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     letterSpacing: 3,
-    textShadowColor: 'rgba(0, 0, 0, 0.4)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    ...(Platform.OS === 'web' && { textShadow: '1px 1px 3px rgba(0, 0, 0, 0.4)' }),
   },
   rightColumn: {
     flex: 1,

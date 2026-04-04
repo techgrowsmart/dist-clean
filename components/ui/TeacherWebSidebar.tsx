@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from "react";
-import { StyleSheet, Text, View, TouchableOpacity, Linking, Platform, ImageBackground, Image, ScrollView, Dimensions, Animated } from "react-native";
-import {  Ionicons, MaterialCommunityIcons, MaterialIcons } from "@expo/vector-icons";
-import Feather from '@expo/vector-icons/Feather';
-import { clearAllStorage } from "../../utils/authStorage";
-import Toast from "react-native-toast-message";
+import { Ionicons, MaterialCommunityIcons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import { Animated, Dimensions, Image, ImageBackground, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import Toast from "react-native-toast-message";
+import { clearAllStorage } from "../../utils/authStorage";
 
 type TeacherWebSidebarProps = {
   activeItem: string;
@@ -399,10 +398,7 @@ const s = StyleSheet.create({
     borderRightColor: C.border, 
     flex: 1,
     position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
     elevation: 8,
   },
   containerCollapsed: {
@@ -422,10 +418,7 @@ const s = StyleSheet.create({
     borderColor: C.border,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
+    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
     elevation: 4,
     zIndex: 1000,
   },
@@ -453,10 +446,7 @@ const s = StyleSheet.create({
   itemActive: { 
     backgroundColor: 'rgba(59, 130, 246, 0.08)',
     borderRadius: 12,
-    shadowColor: '#3B5BFE',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    boxShadow: '0 2px 8px rgba(59, 91, 254, 0.15)',
     elevation: 3,
   },
   iconWrap: { 
@@ -521,10 +511,7 @@ const s = StyleSheet.create({
     borderColor: C.divider, 
     padding: 10, 
     backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
+    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.06)',
     elevation: 3,
   },
   adLabel: { 
@@ -583,10 +570,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
+    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25)',
     elevation: 6,
     zIndex: 10000,
     minWidth: 100,

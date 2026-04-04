@@ -1,36 +1,32 @@
+import { Poppins_400Regular } from "@expo-google-fonts/poppins";
+import { Roboto_600SemiBold, useFonts } from "@expo-google-fonts/roboto";
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  Image,
-  Dimensions,
-  BackHandler,
-  ActivityIndicator,
-  StyleSheet,
-  Keyboard,
-  TouchableWithoutFeedback,
-  NativeEventSubscription,
-  Alert,
+    ActivityIndicator,
+    Alert,
+    BackHandler,
+    Dimensions,
+    FlatList,
+    Image,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
+import Toast from "react-native-toast-message";
 import Bars from "../../../assets/svgIcons/Bars";
-import PersonIcon from "../../../assets/svgIcons/Person";
-import ShareIcon from "../../../assets/svgIcons/Share";
-import CrossIcon from "../../../assets/svgIcons/CrossIcon";
-import { router } from "expo-router";
-import { Roboto_600SemiBold, useFonts } from "@expo-google-fonts/roboto";
-import { Poppins_400Regular } from "@expo-google-fonts/poppins";
 import ChatBg1 from "../../../assets/svgIcons/ChatBg1";
 import ChatBg2 from "../../../assets/svgIcons/ChatBg2";
 import ChatBg3 from "../../../assets/svgIcons/ChatBg3";
-import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
+import CrossIcon from "../../../assets/svgIcons/CrossIcon";
+import PersonIcon from "../../../assets/svgIcons/Person";
+import ShareIcon from "../../../assets/svgIcons/Share";
 import { isTablet } from "../../../utils/devices";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import Toast from "react-native-toast-message";
-import { useFocusEffect } from "@react-navigation/native";
 const { width } = Dimensions.get("window");
 
 interface Message {
@@ -711,10 +707,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#3131b0",
     borderRadius: 8,
     elevation: 5,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
     paddingVertical: 8,
     paddingHorizontal: 12,
     zIndex: 1000,
