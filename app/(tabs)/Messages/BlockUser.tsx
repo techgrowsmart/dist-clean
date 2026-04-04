@@ -1,25 +1,25 @@
 import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  Modal,
-  Pressable,
-} from 'react-native';
-import React, { useState } from 'react';
-import { useLocalSearchParams } from 'expo-router';
-import { Picker } from '@react-native-picker/picker';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { useFonts } from 'expo-font';
-import {
-  Raleway_300Light,
-  Raleway_400Regular,
-  Raleway_600SemiBold,
-  Raleway_700Bold,
+    Raleway_300Light,
+    Raleway_400Regular,
+    Raleway_600SemiBold,
+    Raleway_700Bold,
 } from '@expo-google-fonts/raleway';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Picker } from '@react-native-picker/picker';
+import { useFonts } from 'expo-font';
+import { useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
+import {
+    Image,
+    Modal,
+    Pressable,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import Flag from '../../../assets/svgIcons/Flag';
-import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 
 const BlockUser = () => {
   // Load fonts unconditionally at the top
@@ -167,10 +167,7 @@ const styles = StyleSheet.create({
   justifyContent: 'center', 
   marginTop: hp('1.2%'), 
   elevation: 2, 
-  shadowColor: '#000', 
-  shadowOffset: { width: 0, height: 2 }, 
-  shadowOpacity: 0.25, 
-  shadowRadius: 3.84, 
+  boxShadow: '0 2px 3.84px rgba(0, 0, 0, 0.25)', 
   width: '110%',
   marginHorizontal: -wp('7%') 
 },
@@ -202,10 +199,7 @@ modalBox: {
   borderBottomWidth: wp('0.3%'),
   borderColor: '#21338e', 
   padding: wp('5%'), 
-  shadowColor: '#21338e',
-  shadowOffset: { width: 2, height: 2 },
-  shadowOpacity: 1,
-  shadowRadius: 0,
+  boxShadow: '2px 2px 0px #21338e',
   elevation: 4,
   alignItems: 'center', 
   position: 'relative' 

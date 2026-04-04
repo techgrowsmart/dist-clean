@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ImageBackground, Dimensions, Platform, StatusBar, TextInput, ActivityIndicator, Alert } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useState } from 'react';
+import { ActivityIndicator, Alert, Dimensions, ImageBackground, Platform, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { BASE_URL } from '../../config';
 import { authService } from '../../services/authService';
 import { safeBack } from '../../utils/navigation';
 
@@ -12,6 +13,9 @@ export default function EmailInputScreen() {
   const params = useLocalSearchParams();
   const isWeb = Platform.OS === 'web';
   
+  const [errorName, setErrorName] = useState("");
+  const [errorPhone, setErrorPhone] = useState("");
+  const [errorEmail, setErrorEmail] = useState("");
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [isLogin, setIsLogin] = useState(params.type === 'login' || false);
@@ -34,96 +38,146 @@ export default function EmailInputScreen() {
   ];
 
   const handleContinue = async () => {
+    let isValid = true;
+    setErrorName(""); setErrorPhone(""); setErrorEmail("");
+
     const trimmedEmail = email.trim();
     
-    if (!trimmedEmail) {
-      Alert.alert('Error', 'Please enter your email address');
-      return;
+    // Validation for signup
+    if (!isLogin) {
+      if (!fullName.trim()) { 
+        setErrorName("Full Name is required."); 
+        isValid = false; 
+      }
+      if (!phoneNumber.trim()) { 
+        setErrorPhone("Phone Number is required."); 
+        isValid = false; 
+      }
     }
-
+    
+    if (!trimmedEmail) { 
+      setErrorEmail("Email is required."); 
+      isValid = false; 
+    }
+    
     // Basic email validation
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!emailRegex.test(trimmedEmail)) {
-      Alert.alert('Error', 'Please enter a valid email address');
-      return;
+    if (trimmedEmail && !emailRegex.test(trimmedEmail)) {
+      setErrorEmail("Please enter a valid email address");
+      isValid = false;
     }
-
-    // For signup, validate name is provided
-    if (!isLogin && !fullName.trim()) {
-      Alert.alert('Error', 'Please enter your full name');
-      return;
-    }
+    
+    if (!isValid) return;
 
     setLoading(true);
 
     try {
-      // Try to send OTP for login/signup (without role for initial signup)
-      const response = await authService.sendOTP(trimmedEmail, '', !isLogin, fullName);
-      
-      // Check if it's a test user that bypasses OTP
-      if (response.isTestUser && response.token) {
-        // Store auth data and navigate directly to dashboard
-        await authService.storeAuthData({
-          role: response.role || role,
-          email: trimmedEmail,
-          token: response.token,
-          name: response.name || trimmedEmail.split('@')[0],
+      if (!isLogin) {
+        // For signup: Use the same API call as SignUp.tsx
+        const response = await fetch(`${BASE_URL}/api/signup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            fullName: fullName, 
+            phonenumber: phoneCountry + phoneNumber, 
+            email: trimmedEmail 
+          }), 
         });
+  
+        const data = await response.json();
         
-        // Navigate to appropriate dashboard
-        if (response.role === 'teacher') {
-          router.replace('/(tabs)/TeacherDashBoard' as any);
+        if (response.ok) {
+          Alert.alert("Success", "OTP Sent! Check your email.");
+          router.push({
+            pathname: "/auth/OTPScreen" as any,
+            params: { 
+              email: trimmedEmail, 
+              isLogin: 'false', 
+              role: role,
+              otpId: data.otpId || '',
+              isSignup: 'true',
+              name: fullName,
+              phone: phoneCountry + phoneNumber
+            } 
+          });
         } else {
-          router.replace('/(tabs)/StudentDashBoard' as any);
-        }
-        return;
-      }
-      
-      // For regular users, navigate to OTP verification screen
-      router.push({ 
-        pathname: '/auth/OTPScreen' as any,
-        params: { 
-          email: trimmedEmail, 
-          isLogin: 'false', 
-          role: role,
-          otpId: response.otpId || '',
-          isSignup: 'true',
-          name: fullName,
-          phone: phoneNumber ? `${phoneCountry}${phoneNumber}` : '+0000000000' // Default phone if not provided
-        } 
-      });
-    } catch (error: any) {
-      console.error('OTP sending error:', error);
-      
-      // Check if user is not registered and needs to signup
-      if (error.message.includes('not registered') || error.message.includes('sign up')) {
-        try {
-          // For new users, initiate signup flow
-          const signupResponse = await authService.signup(trimmedEmail, fullName, role);
-          
-          if (signupResponse.otpId) {
-            // Navigate to OTP verification screen for signup
-            router.push({ 
-              pathname: '/auth/OTPScreen' as any,
-              params: { 
-                email: trimmedEmail, 
-                isLogin: 'false', 
-                role: role,
-                otpId: signupResponse.otpId || '',
-                isSignup: 'true',
-                name: fullName,
-                phone: phoneNumber ? `${phoneCountry}${phoneNumber}` : '+0000000000' // Default phone if not provided
-              } 
-            });
+          if (data.alreadyRegistered) {
+            Alert.alert("Error", data.message || "Signup failed!");
           } else {
-            Alert.alert('Error', 'Failed to initiate signup');
+            Alert.alert("Error", data.message || "Signup failed!");
           }
-        } catch (signupError: any) {
-          console.error('Direct signup error:', signupError);
-          Alert.alert('Error', signupError.message || 'Failed to signup');
         }
       } else {
-        Alert.alert('Error', error.message || 'Failed to send OTP');
+        // For login: Use existing OTP logic
+        const response = await authService.sendOTP(trimmedEmail, '', false);
+        
+        // Check if it's a test user that bypasses OTP
+        if (response.isTestUser && response.token) {
+          // Store auth data and navigate directly to dashboard
+          await authService.storeAuthData({
+            role: response.role || role,
+            email: trimmedEmail,
+            token: response.token,
+            name: response.name || trimmedEmail.split('@')[0],
+          });
+          
+          // Navigate to appropriate dashboard
+          if (response.role === 'teacher') {
+            router.replace('/(tabs)/TeacherDashBoard' as any);
+          } else {
+            router.replace('/(tabs)/StudentDashBoard' as any);
+          }
+          return;
+        }
+        
+        // For regular users, navigate to OTP verification screen
+        router.push({ 
+          pathname: '/auth/OTPScreen' as any,
+          params: { 
+            email: trimmedEmail, 
+            isLogin: 'false', 
+            role: role,
+            otpId: response.otpId || '',
+            isSignup: 'false'
+          } 
+        });
+      }
+    } catch (error: any) {
+      console.error('Error:', error);
+      
+      if (!isLogin) {
+        Alert.alert("Error", error.message || "Something went wrong.");
+      } else {
+        // Check if user is not registered and needs to signup
+        if (error.message.includes('not registered') || error.message.includes('sign up')) {
+          try {
+            // For new users, initiate signup flow
+            const signupResponse = await authService.signup(trimmedEmail, fullName, role);
+            
+            if (signupResponse.otpId) {
+              // Navigate to OTP verification screen for signup
+              router.push({ 
+                pathname: '/auth/OTPScreen' as any,
+                params: { 
+                  email: trimmedEmail, 
+                  isLogin: 'false', 
+                  role: role,
+                  otpId: signupResponse.otpId || '',
+                  isSignup: 'true',
+                  name: fullName,
+                  phone: phoneNumber ? `${phoneCountry}${phoneNumber}` : '+0000000000' // Default phone if not provided
+                } 
+              });
+            } else {
+              Alert.alert('Error', 'Failed to initiate signup');
+            }
+          } catch (signupError: any) {
+            console.error('Direct signup error:', signupError);
+            Alert.alert('Error', signupError.message || 'Failed to signup');
+          }
+        } else {
+          Alert.alert('Error', error.message || 'Failed to send OTP');
+        }
       }
     } finally {
       setLoading(false);
@@ -175,14 +229,18 @@ export default function EmailInputScreen() {
               {!isLogin && (
                 <View style={webStyles.inputContainer}>
                   <TextInput
-                    style={webStyles.emailInput}
+                    style={[webStyles.emailInput, errorName ? webStyles.inputError : null]}
                     placeholder="Full name"
                     placeholderTextColor="#9CA3AF"
                     value={fullName}
-                    onChangeText={setFullName}
+                    onChangeText={(text) => { 
+                      setFullName(text); 
+                      if (text.trim()) setErrorName(""); 
+                    }}
                     autoCapitalize="words"
                     autoCorrect={false}
                   />
+                  {errorName ? <Text style={webStyles.errorText}>{errorName}</Text> : null}
                 </View>
               )}
 
@@ -193,29 +251,37 @@ export default function EmailInputScreen() {
                     <Text style={webStyles.countryPickerText}>{phoneCountry}</Text>
                   </TouchableOpacity>
                   <TextInput
-                    style={webStyles.phoneInput}
-                    placeholder="Phone number (optional)"
+                    style={[webStyles.phoneInput, errorPhone ? webStyles.inputError : null]}
+                    placeholder="Phone number"
                     placeholderTextColor="#9CA3AF"
                     value={phoneNumber}
-                    onChangeText={setPhoneNumber}
+                    onChangeText={(text) => { 
+                      setPhoneNumber(text); 
+                      if (text.trim()) setErrorPhone(""); 
+                    }}
                     keyboardType="phone-pad"
                     autoCapitalize="none"
                     autoCorrect={false}
                   />
                 </View>
               )}
+              {errorPhone ? <Text style={webStyles.errorText}>{errorPhone}</Text> : null}
 
               <View style={webStyles.inputContainer}>
                 <TextInput
-                  style={webStyles.emailInput}
+                  style={[webStyles.emailInput, errorEmail ? webStyles.inputError : null]}
                   placeholder="Enter your email address"
                   placeholderTextColor="#9CA3AF"
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(text) => { 
+                    setEmail(text); 
+                    if (text.trim()) setErrorEmail(""); 
+                  }}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
+                {errorEmail ? <Text style={webStyles.errorText}>{errorEmail}</Text> : null}
               </View>
 
               <TouchableOpacity 
@@ -229,6 +295,7 @@ export default function EmailInputScreen() {
                   <Text style={webStyles.continueButtonText}>Continue</Text>
                 )}
               </TouchableOpacity>
+
 
               {/* Country dropdown list */}
               {countryDropdownOpen && (
@@ -285,15 +352,19 @@ export default function EmailInputScreen() {
         {/* Name (signup only) */}
         {!isLogin && (
           <TextInput
-            style={styles.mobileEmailInput}
+            style={[styles.mobileEmailInput, errorName ? styles.mobileInputError : null]}
             placeholder="Full name"
             placeholderTextColor="#9CA3AF"
             value={fullName}
-            onChangeText={setFullName}
+            onChangeText={(text) => { 
+              setFullName(text); 
+              if (text.trim()) setErrorName(""); 
+            }}
             autoCapitalize="words"
             autoCorrect={false}
           />
         )}
+        {errorName ? <Text style={styles.mobileErrorText}>{errorName}</Text> : null}
 
         {/* Phone (signup only) */}
         {!isLogin && (
@@ -302,29 +373,37 @@ export default function EmailInputScreen() {
               <Text style={styles.mobileCountryPickerText}>{phoneCountry}</Text>
             </TouchableOpacity>
             <TextInput
-              style={styles.mobileEmailInput}
-              placeholder="Phone number (optional)"
+              style={[styles.mobileEmailInput, errorPhone ? styles.mobileInputError : null]}
+              placeholder="Phone number"
               placeholderTextColor="#9CA3AF"
               value={phoneNumber}
-              onChangeText={setPhoneNumber}
+              onChangeText={(text) => { 
+                setPhoneNumber(text); 
+                if (text.trim()) setErrorPhone(""); 
+              }}
               keyboardType="phone-pad"
               autoCapitalize="none"
               autoCorrect={false}
             />
           </View>
         )}
+        {errorPhone ? <Text style={styles.mobileErrorText}>{errorPhone}</Text> : null}
 
         {/* Email Input */}
         <TextInput
-          style={styles.mobileEmailInput}
+          style={[styles.mobileEmailInput, errorEmail ? styles.mobileInputError : null]}
           placeholder="Enter your email address"
           placeholderTextColor="#9CA3AF"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(text) => { 
+            setEmail(text); 
+            if (text.trim()) setErrorEmail(""); 
+          }}
           keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
         />
+        {errorEmail ? <Text style={styles.mobileErrorText}>{errorEmail}</Text> : null}
 
         {/* Continue Button */}
         <TouchableOpacity 
@@ -338,6 +417,7 @@ export default function EmailInputScreen() {
             <Text style={styles.mobileContinueButtonText}>Continue</Text>
           )}
         </TouchableOpacity>
+
 
         {/* Country dropdown list (mobile) */}
         {countryDropdownOpen && (
@@ -468,6 +548,16 @@ const webStyles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     color: '#1A1A1A',
   },
+  inputError: {
+    borderColor: 'red',
+    borderWidth: 2,
+  },
+  errorText: {
+    color: 'red',
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 8,
+  },
   countryList: {
     width: '100%',
     maxHeight: 200,
@@ -483,10 +573,6 @@ const webStyles = StyleSheet.create({
   },
   countryItemText: {
     color: '#1A1A1A',
-  },
-  inputContainer: {
-    width: '100%',
-    marginBottom: 32,
   },
   emailInput: {
     backgroundColor: '#F9FAFB',
@@ -505,21 +591,34 @@ const webStyles = StyleSheet.create({
     borderRadius: 16,
     width: '100%',
     alignItems: 'center',
-    shadowColor: '#7C4DDB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    boxShadow: '0 4px 8px rgba(124, 77, 219, 0.3)',
     elevation: 8,
   },
   disabledButton: {
     backgroundColor: '#D1D5DB',
-    shadowColor: 'transparent',
+    boxShadow: 'none',
     elevation: 0,
   },
   continueButtonText: {
     color: 'white',
     fontSize: 18,
     fontWeight: '700',
+  },
+  directSignupButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#7C4DDB',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  directSignupButtonText: {
+    color: '#7C4DDB',
+    fontSize: 16,
+    fontWeight: '600',
   },
   termsSection: {
     alignItems: 'center',
@@ -665,6 +764,17 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
     width: '100%',
   },
+  mobileInputError: {
+    borderColor: 'red',
+    borderWidth: 2,
+  },
+  mobileErrorText: {
+    color: 'red',
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 8,
+    width: '100%',
+  },
   mobileContinueButton: {
     backgroundColor: '#7C4DDB',
     paddingVertical: 18,
@@ -673,22 +783,36 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 300,
     alignItems: 'center',
-    shadowColor: '#7C4DDB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    boxShadow: '0 4px 8px rgba(124, 77, 219, 0.3)',
     elevation: 8,
     marginBottom: 24,
   },
   mobileDisabledButton: {
     backgroundColor: '#D1D5DB',
-    shadowColor: 'transparent',
+    boxShadow: 'none',
     elevation: 0,
   },
   mobileContinueButtonText: {
     color: 'white',
     fontSize: 18,
     fontWeight: '700',
+  },
+  mobileDirectSignupButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#7C4DDB',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 300,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  mobileDirectSignupButtonText: {
+    color: '#7C4DDB',
+    fontSize: 16,
+    fontWeight: '600',
   },
   mobileTermsText: {
     fontSize: 12,

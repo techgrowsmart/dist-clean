@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
 import { FontAwesome } from '@expo/vector-icons';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Dimensions, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Dimensions, Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BASE_URL } from '../../config';
 
 interface TeacherPost {
@@ -256,12 +256,6 @@ const s = StyleSheet.create({
     paddingTop: 20, 
     paddingHorizontal: 20, 
     paddingBottom: 0, 
-    shadowColor: '#000000', 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.08, 
-    shadowRadius: 12, 
-    elevation: 6,
-    // Enhanced responsive shadow
     shadowColor: Platform.OS === 'ios' ? '#000000' : '#000000',
     shadowOffset: Platform.OS === 'ios' ? { width: 0, height: 4 } : { width: 0, height: 6 },
     shadowOpacity: Platform.OS === 'ios' ? 0.08 : 0.12,
@@ -301,10 +295,8 @@ const s = StyleSheet.create({
     color: '#fff', 
     fontWeight: '700', 
     fontFamily: 'Poppins_700Bold',
-    // Enhanced text shadow
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    // Enhanced text shadow for web only
+    ...(Platform.OS === 'web' && { textShadow: '0 1px 2px rgba(0, 0, 0, 0.2)' }),
     // Responsive font size will be set dynamically
   },
   headerText: { flex: 1 },
@@ -351,21 +343,17 @@ const s = StyleSheet.create({
   },
   imgGridItem: { 
     flex: 1, 
-    height: 200, 
     borderRadius: 10,
     // Responsive height
     height: Platform.OS === 'web' ? 180 : 200,
   },
   imgFull: { 
-    height: 240,
     // Responsive height
     height: Platform.OS === 'web' ? 220 : 240,
   },
   imgStrip: { marginBottom: 14 },
   imgStripContent: { gap: 6, paddingRight: 4 },
   imgStripItem: { 
-    width: 100, 
-    height: 120, 
     borderRadius: 10,
     // Responsive size
     width: Platform.OS === 'web' ? 90 : 100,
@@ -379,9 +367,7 @@ const s = StyleSheet.create({
     alignItems: 'center', 
     borderTopWidth: 1, 
     borderTopColor: 'rgba(0, 0, 0, 0.06)', 
-    paddingVertical: 16, 
     paddingHorizontal: 4,
-    gap: 2,
     // Enhanced responsive footer
     paddingVertical: Platform.OS === 'web' ? 18 : 16,
     gap: Platform.OS === 'web' ? 4 : 2,

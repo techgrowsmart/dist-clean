@@ -1,47 +1,47 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import { useLocalSearchParams } from "expo-router";
 import BottomNavigation from "../../../app/(tabs)/BottomNavigation";
 import { BASE_URL } from "../../../config";
 import { db } from "../../../firebaseConfig";
 import { getAuthData } from "../../../utils/authStorage";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
-import { useLocalSearchParams } from "expo-router";
 import { usePushNotifications } from "../../../utils/usePushNotifications";
 
 import {
-  collection,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  query,
-  where,
+    collection,
+    getDocs,
+    onSnapshot,
+    orderBy,
+    query,
+    where,
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
-  FlatList,
-  Modal,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  Image,
-  Dimensions,
-  Platform,
-  StatusBar,
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    Modal,
+    Platform,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
+import { useFonts } from "@expo-google-fonts/poppins";
+import { Roboto_400Regular } from '@expo-google-fonts/roboto';
+import { widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import ConnectionRequestItem from "../Messages/components/ConnectionRequestItem";
 import ContactItem from "../Messages/components/ContactItem";
 import SearchBar from "../Messages/components/SearchBar";
 import ChatScreen from "./ChatScreen";
-import {Roboto_400Regular} from '@expo-google-fonts/roboto'
-import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
-import { useFonts } from "@expo-google-fonts/poppins";
 
 import {
-  Poppins_400Regular,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
+    Poppins_400Regular,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
 } from "@expo-google-fonts/poppins";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -790,10 +790,7 @@ growsmartText: {
     borderBottomWidth: 1, 
     borderBottomColor: "#e9ecef", 
     elevation: 2, 
-    shadowColor: "#000", 
-    shadowOffset: { width: 0, height: 2 }, 
-    shadowOpacity: 0.1, 
-    shadowRadius: 4 
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)' 
   },
   tab: { 
     flex: 1, 

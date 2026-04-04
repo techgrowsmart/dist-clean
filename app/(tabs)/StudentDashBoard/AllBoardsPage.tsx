@@ -1,33 +1,33 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  Image,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  TextInput,
-  ActivityIndicator,
-  Platform,
-  FlatList,
-  Dimensions,
-  SafeAreaView,
-  ImageBackground,
-  Alert,
-  Modal,
-} from 'react-native';
-import { useRouter } from 'expo-router';
+import { Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold, useFonts } from '@expo-google-fonts/poppins';
 import { FontAwesome, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
-import { getAuthData } from "../../../utils/authStorage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import { BASE_URL } from "../../../config";
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    ImageBackground,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import BackButton from "../../../components/BackButton";
 import WebNavbar from '../../../components/ui/WebNavbar';
 import WebSidebar from '../../../components/ui/WebSidebar';
+import { BASE_URL } from "../../../config";
+import { getAuthData } from "../../../utils/authStorage";
 import ThoughtsCard from './ThoughtsCard';
-import { Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold, useFonts } from '@expo-google-fonts/poppins';
 
 const { width } = Dimensions.get("window");
 
@@ -859,10 +859,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: 140, 
-    shadowColor: 'rgba(0,0,0,0.03)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
+    boxShadow: '0 4px 10px rgba(0, 0, 0, 0.03)',
     elevation: 2,
   },
   boardLogo: {
@@ -1295,10 +1292,7 @@ const styles = StyleSheet.create({
     width: '90%',
     maxWidth: 400,
     maxHeight: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
+    boxShadow: '0 10px 20px rgba(0, 0, 0, 0.25)',
     elevation: 10,
   },
   modalTitle: {

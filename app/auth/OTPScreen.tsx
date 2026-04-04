@@ -25,6 +25,15 @@ export default function OTPScreen() {
   const [timer, setTimer] = useState(120);
   const [canResend, setCanResend] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [isDevelopmentMode, setIsDevelopmentMode] = useState(false);
+
+  // Check if we're in development mode and show helper text
+  useEffect(() => {
+    // Check if running on localhost:8081 (development)
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost' && window.location.port === '8081') {
+      setIsDevelopmentMode(true);
+    }
+  }, []);
 
   // Auto-login for known test users to bypass OTP screen
   useEffect(() => {
@@ -197,6 +206,15 @@ export default function OTPScreen() {
                 <Text style={webStyles.emailText}>{email}</Text>
               </Text>
 
+              {/* Development Mode Helper - Removed for production */}
+              {false && (
+                <View style={webStyles.devHelperContainer}>
+                  <Text style={webStyles.devHelperText}>
+                    🧪 Development Mode: Enter any 4-digit code (e.g., 1234)
+                  </Text>
+                </View>
+              )}
+
               {/* OTP Input Circles */}
               <View style={webStyles.otpContainer}>
                 {otp.map((digit, index) => (
@@ -266,7 +284,7 @@ export default function OTPScreen() {
 
         {/* OTP Title */}
         <Text style={styles.mobileOtpTitle}>
-          kjb Your Email
+          Verify Your Email
         </Text>
 
         {/* OTP Description */}
@@ -274,6 +292,15 @@ export default function OTPScreen() {
           We've sent a 4-digit verification code to{'\n'}
           <Text style={styles.emailText}>{email}</Text>
         </Text>
+
+        {/* Mobile Development Mode Helper - Removed for production */}
+        {false && (
+          <View style={styles.mobileDevHelperContainer}>
+            <Text style={styles.mobileDevHelperText}>
+              🧪 Development Mode: Enter any 4-digit code (e.g., 1234)
+            </Text>
+          </View>
+        )}
 
         {/* OTP Input Circles */}
         <View style={styles.mobileOtpContainer}>
@@ -396,6 +423,21 @@ const webStyles = StyleSheet.create({
     color: '#7C4DDB',
     fontWeight: '600',
   },
+  devHelperContainer: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 24,
+    width: '100%',
+  },
+  devHelperText: {
+    fontSize: 14,
+    color: '#92400E',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
   otpContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -513,6 +555,21 @@ const styles = StyleSheet.create({
   emailText: {
     color: '#7C4DDB',
     fontWeight: '600',
+  },
+  mobileDevHelperContainer: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 24,
+    width: '100%',
+  },
+  mobileDevHelperText: {
+    fontSize: 12,
+    color: '#92400E',
+    textAlign: 'center',
+    fontWeight: '500',
   },
   mobileOtpContainer: {
     flexDirection: 'row',

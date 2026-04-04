@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ImageBackground, Dimensions, Platform, StatusBar, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { Animated, Dimensions, ImageBackground, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -206,10 +206,7 @@ const webStyles = StyleSheet.create({
     marginBottom: 16,
     width: '100%',
     alignItems: 'center',
-    shadowColor: '#7C4DDB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    boxShadow: '0 4px 8px rgba(124, 77, 219, 0.3)',
     elevation: 8,
   },
   signupButtonText: {
@@ -226,6 +223,8 @@ const webStyles = StyleSheet.create({
     borderRadius: 16,
     width: '100%',
     alignItems: 'center',
+    boxShadow: '0 4px 8px rgba(124, 77, 219, 0.3)',
+    elevation: 8,
   },
   loginButtonText: {
     color: '#7C4DDB',
@@ -273,10 +272,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    shadowColor: '#7C4DDB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    boxShadow: '0 4px 8px rgba(124, 77, 219, 0.3)',
     elevation: 8,
   },
   mobileLogoText: {
@@ -314,10 +310,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 300,
     alignItems: 'center',
-    shadowColor: '#7C4DDB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    boxShadow: '0 4px 8px rgba(124, 77, 219, 0.3)',
     elevation: 8,
   },
   signupButtonText: {
