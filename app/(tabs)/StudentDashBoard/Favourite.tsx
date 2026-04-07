@@ -10,16 +10,17 @@ import {
   View,
   ActivityIndicator,
   Alert,
+  Platform,
 } from "react-native";
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
-import { 
+import {
   OpenSans_600SemiBold,
   OpenSans_300Light,
   OpenSans_400Regular,
 } from '@expo-google-fonts/open-sans';
-import { 
+import {
   Poppins_400Regular,
   Poppins_600SemiBold,
   Poppins_700Bold,
@@ -484,6 +485,7 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
       <Sidebar
         visible={isSidebarVisible}
         onClose={() => setIsSidebarVisible(false)}
+        activeItem={activeMenu}
         activeSubText={activeSubText}
         setActiveSubText={setActiveSubText}
         studentName={studentName}
@@ -802,10 +804,27 @@ const styles = StyleSheet.create({
     borderRadius: 5, 
     backgroundColor: "#ffffff", 
     marginHorizontal: 0, 
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 35,
+    ...Platform.select({
+ 
+      web: {
+ 
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+ 
+      },
+ 
+      default: {
+ 
+        shadowColor: '#000',
+ 
+        shadowOffset: { width: 0, height: 4 },
+ 
+        shadowOpacity: 0.3,
+ 
+        shadowRadius: 8,
+ 
+      },
+ 
+    }),
     elevation: 4
   },
   pageNum: { 
@@ -833,10 +852,27 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff", 
     marginHorizontal: wp("1.06%"), 
     elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 35,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
   },
   rightArrow: { 
     height: wp("8%"), 
@@ -847,9 +883,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff", 
     marginHorizontal: wp("1.06%"), 
     elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 35,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
   },
 });

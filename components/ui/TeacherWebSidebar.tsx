@@ -37,7 +37,7 @@ const menuItems = [
   { name: "Share",               icon: <Ionicons name="share-social-outline" size={20} /> },
   { name: "Create Subject",      icon: <MaterialIcons name="add-circle" size={20} /> },
   { name: "Billing",            icon: <Ionicons name="card-outline" size={20} /> },
-  { name: "Settings",           icon: <MaterialIcons name="settings" size={20} /> },
+  // { name: "Settings",           icon: <MaterialIcons name="settings" size={20} /> },
   { name: "Terms & Conditions", icon: <MaterialIcons name="description" size={20} /> },
   { name: "Privacy Policy",     icon: <MaterialIcons name="privacy-tip" size={20} /> },
   { name: "Contact Us",         icon: <MaterialIcons name="contact-phone" size={20} /> },
@@ -59,6 +59,11 @@ const TeacherWebSidebar = ({
   const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
   const [isCollapsed, setIsCollapsed] = useState(propCollapsed || false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+
+  // Responsive breakpoints
+  const isMobile = screenWidth < 768;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
+  const isDesktop = screenWidth >= 1024;
 
   // Auto-collapse on small screens
   useEffect(() => {
@@ -201,6 +206,12 @@ const TeacherWebSidebar = ({
     const [isHovered, setIsHovered] = useState(false);
     const animatedValue = animatedValues.current[name] || new Animated.Value(0);
 
+    // Responsive sizing
+    const iconSize = shouldCollapse ? (isMobile ? 20 : 22) : (isMobile ? 18 : 20);
+    const itemPadding = shouldCollapse ? (isMobile ? 8 : 8) : (isMobile ? 10 : 12);
+    const itemMargin = shouldCollapse ? (isMobile ? 2 : 4) : (isMobile ? 6 : 8);
+    const fontSize = shouldCollapse ? 0 : (isMobile ? 13 : 14);
+
     const handleHoverIn = () => {
       setIsHovered(true);
       Animated.timing(animatedValue, {
@@ -238,18 +249,33 @@ const TeacherWebSidebar = ({
       <TouchableOpacity 
         onPress={() => handleItemPress(name)} 
         activeOpacity={0.7}
+        style={[
+          s.item, 
+          isActive && s.itemActive, 
+          shouldCollapse && s.itemCollapsed,
+          { 
+            paddingVertical: itemPadding,
+            marginHorizontal: itemMargin,
+            marginBottom: 2,
+            minHeight: shouldCollapse ? (isMobile ? 40 : 44) : 'auto'
+          }
+        ]}
       >
         <Animated.View 
-          style={[s.item, isActive && s.itemActive, shouldCollapse && s.itemCollapsed, animatedStyle]}
+          style={[animatedStyle]}
         >
           <View style={[s.iconWrap, shouldCollapse && s.iconWrapCollapsed]}>
             {React.cloneElement(iconEl as React.ReactElement, { 
               color: isActive ? C.primary : C.text,
-              size: shouldCollapse ? 22 : 20 
+              size: iconSize 
             } as any)}
           </View>
           {!shouldCollapse && (
-            <Animated.Text style={[s.itemText, isActive && s.itemTextActive]}>
+            <Animated.Text style={[
+              s.itemText, 
+              isActive && s.itemTextActive,
+              { fontSize }
+            ]}>
               {name}
             </Animated.Text>
           )}

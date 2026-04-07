@@ -1,11 +1,12 @@
 import React from 'react';
-import {
-    View, Text, TouchableOpacity, ScrollView, TextInput, StyleSheet, Image, Dimensions, Platform
+import { 
+    View, Text, TouchableOpacity, ScrollView, TextInput, StyleSheet, Image, Dimensions,
+    Platform
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useFonts, Poppins_400Regular, Poppins_600SemiBold } from '@expo-google-fonts/poppins';
+import {   useRouter } from 'expo-router';
+import {   useFonts, Poppins_400Regular, Poppins_600SemiBold } from '@expo-google-fonts/poppins';
 import * as SplashScreen from 'expo-splash-screen';
-import {Checkbox} from "expo-checkbox";
+import {  Checkbox} from "expo-checkbox";
 
 SplashScreen.preventAutoHideAsync();
 

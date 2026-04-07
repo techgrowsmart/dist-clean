@@ -19,9 +19,12 @@ const BackButton: React.FC<BackButtonProps> = ({
   const router = useRouter();
 
   const handlePress = () => {
+    console.log('BackButton handlePress called');
     if (onPress) {
+      console.log('Using custom onPress');
       onPress();
     } else {
+      console.log('Using default router.back()');
       router.back();
     }
   };
@@ -43,11 +46,13 @@ const BackButton: React.FC<BackButtonProps> = ({
 
 const styles = StyleSheet.create({
   backButton: {
-    padding: 8,
-    borderRadius: 20,
+    padding: 12,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    // Remove background to match app's clean style
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    minWidth: 48,
+    minHeight: 48,
   },
 });
 

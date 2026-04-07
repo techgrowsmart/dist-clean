@@ -653,7 +653,7 @@ useEffect(() => {
             />
           ) : (
             <View style={styles.emptyStateContainer}>
-              <Text style={styles.noContactsText}>No conversations yet</Text>
+              <Text style={styles.emptyStateText}>No conversations yet</Text>
             </View>
           )
         )}
@@ -681,7 +681,7 @@ useEffect(() => {
             />
           ) : (
             <View style={styles.emptyStateContainer}>
-              <Text style={styles.noContactsText}>No conversations yet</Text>
+              <Text style={styles.emptyStateText}>No conversations yet</Text>
             </View>
           )
         )}

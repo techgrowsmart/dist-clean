@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { 
+import {
+  Platform,
   View, 
   Text, 
   StyleSheet, 
@@ -349,10 +350,27 @@ const styles = StyleSheet.create({
     padding: wp("4%"), 
     marginBottom: hp("2%"),  
     height: hp("11%"),
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 2,
   },
   

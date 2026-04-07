@@ -4,7 +4,10 @@ import { useRouter } from 'expo-router';
 import { getAuthData } from '../../../utils/authStorage';
 import axios from 'axios';
 import { BASE_URL } from '../../../config';
-import { TeacherThoughtsBackground } from '../../../components/ui/TeacherThoughtsCard';
+import TeacherThoughtsCard, { TeacherThoughtsBackground } from '../../../components/ui/TeacherThoughtsCard';
+import TeacherPostComposer from '../../../components/ui/TeacherPostComposer';
+import TeacherWebHeader from '../../../components/ui/TeacherWebHeader';
+import TeacherWebSidebar from '../../../components/ui/TeacherWebSidebar';
 import { UXButton, UXCard, UXLoading, UXBadge, UX_COLORS, UX_CONSTANTS } from '../../../components/ux/UXComponents';
 import {
   useFonts,
@@ -14,8 +17,6 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import WebHeader from '../../../components/ui/TeacherWebHeader';
-import WebSidebar from '../../../components/ui/TeacherWebSidebar';
 
 
 // Global Design Tokens
@@ -50,8 +51,267 @@ const StudentsEnrolled = () => {
   const [sidebarActiveItem, setSidebarActiveItem] = useState("My Students");
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [isWeb, setIsWeb] = useState(Platform.OS === 'web');
-  const [isMobile, setIsMobile] = useState(Dimensions.get('window').width < 768);
+  
+  // Responsive state
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+  const [screenHeight, setScreenHeight] = useState(Dimensions.get('window').height);
+  const isMobile = screenWidth < 768;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
+  const isDesktop = screenWidth >= 1024;
+  const isSmallMobile = screenWidth < 480;
+  
+  // Dynamic font sizes
+  const getFontSize = (mobile: number, tablet: number, desktop: number) => {
+    if (isSmallMobile) return mobile * 0.9;
+    if (isMobile) return mobile;
+    if (isTablet) return tablet;
+    return desktop;
+  };
+  
+  // Dynamic spacing
+  const getSpacing = (mobile: number, tablet: number, desktop: number) => {
+    if (isSmallMobile) return mobile * 0.8;
+    if (isMobile) return mobile;
+    if (isTablet) return tablet;
+    return desktop;
+  };
+  
+  // Thoughts state
+  const [posts, setPosts] = useState<any[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [userProfileCache, setUserProfileCache] = useState<Map<string, { name: string; profilePic: string }>>(new Map());
+  
+  // Thoughts panel – collapsed by default on mobile / native
+  const [isThoughtsCollapsed, setIsThoughtsCollapsed] = useState(
+    Platform.OS !== 'web' || screenWidth < 768
+  );
+  
+  // ── Thoughts panel – shown on web desktop only ─────────────────────────────
+  const showThoughtsPanel = Platform.OS === 'web' && !isMobile;
 
+  // Fetch user profile using the same API as RightScreen
+  const fetchUserProfile = async (token: string, email: string) => {
+    try {
+      console.log('🔍 Fetching user profile from AstraDB for:', email);
+      
+      // Check cache first
+      if (userProfileCache.has(email)) {
+        console.log('✅ Using cached profile for:', email);
+        return userProfileCache.get(email)!;
+      }
+      
+      // Try AstraDB test table first for real user data (same as RightScreen)
+      const response = await axios.post(`${BASE_URL}/api/userProfile`, { 
+        email: email,
+        source: 'astraDB'
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.data) {
+        // Try different possible field names for profile picture (same as RightScreen)
+        const profilePic = response.data.profileimage || response.data.profilePic || response.data.profilepic || response.data.profile_image;
+        
+        // Try different possible field names for user name (same as RightScreen)
+        const userName = response.data.name || response.data.userName || response.data.fullname || response.data.fullName || response.data.displayName;
+        
+        console.log('✅ User profile from AstraDB:', { name: userName, profilePic: profilePic });
+        
+        if (profilePic || userName) {
+          // Ensure we have a proper URL format for profile image
+          let finalProfilePic = profilePic;
+          if (finalProfilePic && !finalProfilePic.startsWith('http') && !finalProfilePic.startsWith('/')) {
+            finalProfilePic = `/${finalProfilePic}`;
+          }
+          
+          const profileData = { name: userName || 'Unknown User', profilePic: finalProfilePic || '' };
+          
+          // Cache the result
+          setUserProfileCache(prev => new Map(prev.set(email, profileData)));
+          
+          return profileData;
+        } else {
+          console.log('⚠️ No profile image or name found in response');
+        }
+      }
+    } catch (error) {
+      console.log('❌ Profile fetch error:', error);
+      // Don't show alert for profile image fetch error as it's not critical
+    }
+    
+    return { name: 'Unknown User', profilePic: '' };
+  };
+  
+  // Enhanced function to fetch and cache multiple user profiles (same as RightScreen)
+  const fetchUserProfilesForPosts = async (posts: any[], token: string) => {
+    const uniqueEmails = [...new Set(posts.map(post => post.author.email))];
+    
+    const profilePromises = uniqueEmails.map(async (email) => {
+      if (!userProfileCache.has(email)) {
+        return await fetchUserProfile(token, email);
+      }
+      return null;
+    });
+    
+    await Promise.all(profilePromises);
+  };
+
+  // Profile image helper (same as RightScreen)
+  const getProfileImageSource = (profilePic?: string) => {
+    if (!profilePic) { 
+      return null; // Will show initials instead
+    }
+    
+    // Handle different profile image formats
+    if (typeof profilePic === 'string') {
+      // If it's already a full URL (http/https/file)
+      if (profilePic.startsWith('http') || profilePic.startsWith('file://')) {
+        return { uri: profilePic };
+      }
+      
+      // If it's a relative path starting with /
+      if (profilePic.startsWith('/')) {
+        return { uri: `${BASE_URL}${profilePic}` };
+      }
+      
+      // If it's a relative path without leading /
+      if (profilePic.includes('uploads/') || profilePic.includes('images/')) {
+        return { uri: `${BASE_URL}/${profilePic}` };
+      }
+      
+      // Default case - treat as relative path
+      return { uri: `${BASE_URL}/${profilePic}` };
+    }
+    
+    return null;
+  };
+
+  // Helper functions for thoughts display
+  const initials = (name: string) => {
+    return name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : 'U';
+  };
+
+  const resolvePostAuthor = (post: any) => {
+    if (!post) {
+      return {
+        name: teacherName || 'Unknown Teacher',
+        pic: profileImage,
+        role: 'teacher'
+      };
+    }
+    
+    const email = post.author?.email;
+    if (!email) return { name: 'Unknown User', pic: null, role: 'Unknown' };
+    
+    const userProfile = userProfileCache.get(email) || { name: 'Unknown User', profilePic: '' };
+    const name = userProfile.name || post.author?.name || 'Unknown User';
+    const pic: string | null = userProfile.profilePic || post.author?.profile_pic || null;
+    const role = post.author?.role || 'teacher';
+    
+    return { name, pic, role };
+  };
+
+  // Fetch posts for Thoughts section (same structure as RightScreen)
+  const fetchPosts = async (token: string) => {
+    try {
+      console.log('🔄 Fetching posts with token:', token ? 'Token exists' : 'No token');
+      console.log('🌐 BASE_URL:', BASE_URL);
+      
+      setPostsLoading(true);
+      const response = await axios.get(`${BASE_URL}/api/posts/all`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      console.log('📥 Posts response:', response.data);
+      
+      if (response.data?.success && Array.isArray(response.data.data)) {
+        // Fetch comments for each post (same as RightScreen)
+        const postsWithComments = await Promise.all(
+          response.data.data.map(async (post: any) => {
+            try {
+              const commentsResponse = await axios.get(`${BASE_URL}/api/posts/${post.id}/comments`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              
+              const comments = commentsResponse.data.success ? commentsResponse.data.data : [];
+              
+              return {
+                ...post,
+                postImage: post.postImage && !post.postImage.startsWith('http')
+                  ? `${BASE_URL}${post.postImage.startsWith('/') ? '' : '/'}${post.postImage}`
+                  : post.postImage,
+                createdAt: post.createdAt, // Keep original format for TeacherThoughtsCard
+                isLiked: post.isLiked || false,
+                comments: comments.map((comment: any) => ({
+                  ...comment,
+                  createdAt: comment.createdAt,
+                  isLiked: false
+                }))
+              };
+            } catch (error) {
+              console.error('Error fetching comments for post:', post.id, error);
+              return {
+                ...post,
+                postImage: post.postImage && !post.postImage.startsWith('http')
+                  ? `${BASE_URL}${post.postImage.startsWith('/') ? '' : '/'}${post.postImage}`
+                  : post.postImage,
+                createdAt: post.createdAt,
+                isLiked: post.isLiked || false,
+                comments: []
+              };
+            }
+          })
+        );
+        
+        // Fetch user profiles for all post authors (same as RightScreen)
+        await fetchUserProfilesForPosts(postsWithComments, token);
+        
+        setPosts(postsWithComments);
+      } else {
+        setPosts([]);
+      }
+      setPostsLoading(false);
+    } catch (error: any) {
+      console.error('❌ Error fetching posts:', error);
+      console.error('❌ Error response:', error.response?.data);
+      console.error('❌ Error status:', error.response?.status);
+      setPosts([]);
+      setPostsLoading(false);
+    }
+  };
+  
+  // Handle post creation
+  const handleCreatePost = async (content: string) => {
+    if (!authToken || !auth?.email) return;
+    
+    try {
+      const response = await axios.post(`${BASE_URL}/api/posts/create`, {
+        content,
+        authorEmail: auth.email,
+        authorName: teacherName,
+        postType: 'teacher'
+      }, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.data.success) {
+        await fetchPosts(authToken);
+      }
+    } catch (error) {
+      console.error('Error creating post:', error);
+    }
+  };
+  
   // Fetch enrolled students
   const fetchStudents = async () => {
     try {
@@ -103,6 +363,11 @@ const StudentsEnrolled = () => {
         }
         
         setStudents(studentData);
+        
+        // Also fetch posts if authenticated
+        if (authData?.token) {
+          await fetchPosts(authData.token);
+        }
       }
     } catch (error) {
       console.error('Error in fetchStudents:', error);
@@ -123,7 +388,8 @@ const StudentsEnrolled = () => {
     
     // Listen for dimension changes
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
-      setIsMobile(window.width < 768);
+      setScreenWidth(window.width);
+      setScreenHeight(window.height);
     });
     
     return () => subscription.remove();
@@ -184,44 +450,62 @@ const StudentsEnrolled = () => {
 
   return (
     <View style={styles.container}>
-      {isWeb && (
-        <WebHeader 
+      {/* ── Top header ── */}
+      <TeacherWebHeader teacherName={teacherName} profileImage={profileImage} />
+
+      {/* ── Body: sidebar + content area ── */}
+      <View style={styles.contentLayout}>
+        <TeacherWebSidebar
           teacherName={teacherName}
           profileImage={profileImage}
+          activeItem={sidebarActiveItem}
+          onItemPress={handleSelect}
+          userEmail={auth?.email || ''}
         />
-      )}
-      
-      <View style={styles.contentLayout}>
-        {isWeb && (
-          <WebSidebar 
-            teacherName={teacherName}
-            profileImage={profileImage}
-            activeItem={sidebarActiveItem}
-            onItemPress={handleSelect}
-            userEmail={auth?.email || ''}
-          />
-        )}
-        
-        <View style={[styles.mainWrapper, isWeb && styles.webMainWrapper]}>
-          <TeacherThoughtsBackground>
-            <ScrollView 
-              style={styles.contentContainer}
-              refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-              }
-              showsVerticalScrollIndicator={false}
-            >
+
+        {/* ── Main wrapper: center + right panel in a ROW ── */}
+        <View style={styles.mainWrapper}>
+
+          {/* ── Content Columns ── */}
+          <View style={styles.contentColumns}>
+
+            {/* ── CENTER: scrollable content ── */}
+            <View style={styles.centerContent}>
+              <ScrollView 
+                style={styles.mainScroll} 
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+              >
               {/* Page Header */}
-              <View style={styles.pageHeader}>
-                <View>
-                  <Text style={styles.pageTitle} selectable={false}>Enrolled Students</Text>
-                  <Text style={styles.pageSubtitle} selectable={false}>
+              <View style={[
+                styles.pageHeader,
+                isMobile && styles.pageHeaderMobile,
+                isSmallMobile && styles.pageHeaderSmallMobile
+              ]}>
+                <View style={styles.pageHeaderContent}>
+                  <Text style={[
+                    styles.pageTitle,
+                    isMobile && styles.pageTitleMobile,
+                    isSmallMobile && styles.pageTitleSmallMobile
+                  ]} selectable={false}>Enrolled Students</Text>
+                  <Text style={[
+                    styles.pageSubtitle,
+                    isMobile && styles.pageSubtitleMobile
+                  ]} selectable={false}>
                     Manage and view your enrolled students
                   </Text>
                 </View>
                 {students.length > 0 && (
-                  <View style={styles.statsBadge}>
-                    <Text style={styles.statsBadgeText}>{students.length} Students</Text>
+                  <View style={[
+                    styles.statsBadge,
+                    isMobile && styles.statsBadgeMobile
+                  ]}>
+                    <Text style={[
+                      styles.statsBadgeText,
+                      isMobile && styles.statsBadgeTextMobile
+                    ]}>{students.length} Students</Text>
                   </View>
                 )}
               </View>
@@ -240,32 +524,64 @@ const StudentsEnrolled = () => {
                 </View>
               ) : (
                 /* Empty State */
-                <View style={styles.emptyContainer}>
-                  <View style={styles.emptyIconContainer}>
-                    <View style={styles.emptyIconBackground}>
-                      <Ionicons name="people-outline" size={64} color={COLORS.textSecondary} />
-                      <View style={styles.emptyIconOverlay}>
-                        <Ionicons name="link-outline" size={20} color={COLORS.primaryBlue} />
+                <View style={[
+                  styles.emptyContainer,
+                  isMobile && styles.emptyContainerMobile
+                ]}>
+                  <View style={[
+                    styles.emptyIconContainer,
+                    isMobile && styles.emptyIconContainerMobile
+                  ]}>
+                    <View style={[
+                      styles.emptyIconBackground,
+                      isMobile && styles.emptyIconBackgroundMobile
+                    ]}>
+                      <Ionicons 
+                        name="people-outline" 
+                        size={isMobile ? 48 : 64} 
+                        color={COLORS.textSecondary} 
+                      />
+                      <View style={[
+                        styles.emptyIconOverlay,
+                        isMobile && styles.emptyIconOverlayMobile
+                      ]}>
+                        <Ionicons 
+                          name="link-outline" 
+                          size={isMobile ? 16 : 20} 
+                          color={COLORS.primaryBlue} 
+                        />
                       </View>
                     </View>
                   </View>
                   
-                  <Text style={styles.emptyTitle} selectable={false}>No students found</Text>
-                  <Text style={styles.emptyDescription} selectable={false}>
+                  <Text style={[
+                    styles.emptyTitle,
+                    isMobile && styles.emptyTitleMobile
+                  ]} selectable={false}>No students found</Text>
+                  <Text style={[
+                    styles.emptyDescription,
+                    isMobile && styles.emptyDescriptionMobile
+                  ]} selectable={false}>
                     You haven't enrolled any students yet. Start by sharing your course or subject link.
                   </Text>
                   
-                  <TouchableOpacity style={styles.shareButton}>
-                    <Ionicons name="share-outline" size={20} color={COLORS.white} style={{ marginRight: 8 }} />
-                    <Text style={styles.shareButtonText} selectable={false}>Share Subject</Text>
-                  </TouchableOpacity>
+                    <Ionicons 
+                      name="share-outline" 
+                      size={isMobile ? 18 : 20} 
+                      color={COLORS.white} 
+                      style={{ marginRight: 8 }} 
+                    />
                 </View>
               )}
-            </ScrollView>
-          </TeacherThoughtsBackground>
+                </ScrollView>
+              </View>
+
+            </View>
+
+
+          </View>
         </View>
       </View>
-    </View>
   );
 };
 
@@ -336,6 +652,22 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
   },
+  webContentLayout: {
+    flexDirection: 'row',
+  },
+  mobileContentLayout: {
+    flexDirection: 'column',
+  },
+  mainContent: {
+    flex: 1,
+  },
+  webMainContent: {
+    flex: 1,
+    marginRight: 24,
+  },
+  mobileMainContent: {
+    flex: 1,
+  },
   mainWrapper: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -343,6 +675,7 @@ const styles = StyleSheet.create({
   webMainWrapper: {
     marginLeft: 280,
   },
+  // Responsive Page Header
   pageHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -353,16 +686,42 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
     backgroundColor: COLORS.cardBg,
   },
+  pageHeaderMobile: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  pageHeaderSmallMobile: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  pageHeaderContent: {
+    flex: 1,
+  },
   pageTitle: {
     fontSize: 28,
     fontFamily: 'Poppins_700Bold',
     color: COLORS.textDark,
     marginBottom: 4,
   },
+  pageTitleMobile: {
+    fontSize: 24,
+    marginBottom: 2,
+  },
+  pageTitleSmallMobile: {
+    fontSize: 20,
+    marginBottom: 2,
+  },
   pageSubtitle: {
     fontSize: 16,
     fontFamily: 'Poppins_400Regular',
     color: COLORS.textSecondary,
+  },
+  pageSubtitleMobile: {
+    fontSize: 14,
   },
   statsBadge: {
     backgroundColor: COLORS.primaryBlue,
@@ -370,10 +729,18 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 20,
   },
+  statsBadgeMobile: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
+  },
   statsBadgeText: {
     fontSize: 12,
     fontFamily: 'Poppins_600SemiBold',
     color: COLORS.white,
+  },
+  statsBadgeTextMobile: {
+    fontSize: 11,
   },
   contentContainer: {
     flex: 1,
@@ -403,10 +770,17 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+    }),
     elevation: 3,
   },
   studentCardMobile: {
@@ -503,7 +877,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: COLORS.white,
   },
-  // Empty State Styles
+  // Responsive Empty State
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -511,8 +885,15 @@ const styles = StyleSheet.create({
     paddingVertical: 80,
     paddingHorizontal: 40,
   },
+  emptyContainerMobile: {
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
   emptyIconContainer: {
     marginBottom: 32,
+  },
+  emptyIconContainerMobile: {
+    marginBottom: 24,
   },
   emptyIconBackground: {
     width: 120,
@@ -522,6 +903,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+  },
+  emptyIconBackgroundMobile: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
   },
   emptyIconOverlay: {
     position: 'absolute',
@@ -536,12 +922,23 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: COLORS.primaryBlue,
   },
+  emptyIconOverlayMobile: {
+    top: 6,
+    right: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+  },
   emptyTitle: {
     fontSize: 24,
     fontFamily: 'Poppins_600SemiBold',
     color: COLORS.textDark,
     marginBottom: 12,
     textAlign: 'center',
+  },
+  emptyTitleMobile: {
+    fontSize: 20,
+    marginBottom: 8,
   },
   emptyDescription: {
     fontSize: 16,
@@ -551,6 +948,12 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     lineHeight: 24,
     maxWidth: 400,
+  },
+  emptyDescriptionMobile: {
+    fontSize: 14,
+    marginBottom: 24,
+    lineHeight: 20,
+    maxWidth: 300,
   },
   shareButton: {
     backgroundColor: COLORS.primaryBlue,
@@ -565,14 +968,154 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  shareButtonMobile: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
   shareButtonText: {
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
     color: COLORS.white,
   },
+  shareButtonTextMobile: {
+    fontSize: 14,
+  },
+  // Thoughts Section Styles
+  thoughtsSection: {
+    width: 380,
+    minWidth: 320,
+    maxWidth: 420,
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  thoughtsSectionTitle: {
+    fontSize: 18,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textDark,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  thoughtsScrollView: {
+    flex: 1,
+    maxHeight: '100%',
+  },
+  thoughtsList: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  thoughtsLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  thoughtsLoadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textSecondary,
+  },
+  thoughtsEmptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  thoughtsEmptyText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textSecondary,
+  },
   // Legacy styles (keeping for compatibility)
   emptyText: {
     fontSize: 16,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+
+  // Dashboard layout styles (matching TutorDashboardWeb)
+  contentColumns: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  centerContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  mainScroll: {
+    flex: 1,
+  },
+  rightPanel: {
+    width: 380,
+    marginLeft: 20,
+    paddingLeft: 20,
+    borderLeftWidth: 1,
+    borderLeftColor: COLORS.border,
+  },
+  rightPanelCollapsed: {
+    width: 52,
+    paddingHorizontal: 8,
+  },
+  rightPanelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  rightPanelTitleContainer: {
+    flex: 1,
+  },
+  rightPanelTitle: {
+    fontSize: 18,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textDark,
+  },
+  collapseBtn: {
+    padding: 6,
+    borderRadius: 8,
+  },
+
+  // ── Mobile thoughts panel (inline, below main content) ───────────────────
+  mobileThoughtsPanel: {
+    backgroundColor: '#FAFBFC',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+
+  // ── Thoughts feed ─────────────────────────────────────────────────────────
+  composerWrapper: {
+    marginBottom: 16,
+  },
+  postWrapper: {
+    marginBottom: 4,
+  },
+  emptyState: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 48,
+  },
+  emptyStateTitle: {
+    fontSize: 16,
+    fontFamily: 'Poppins_500Medium',
+    color: COLORS.textDark,
+    marginTop: 14,
+    marginBottom: 6,
+  },
+  emptyStateText: {
+    fontSize: 13,
     fontFamily: 'Poppins_400Regular',
     color: COLORS.textSecondary,
     textAlign: 'center',

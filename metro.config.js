@@ -27,6 +27,16 @@ module.exports = (async () => {
           inlineRequires: true,
         },
       }),
+      // Optimize for web builds
+      minifierConfig: {
+        keep_fnames: true,
+        mangle: {
+          keep_fnames: true,
+        },
+      },
     },
+    // Optimize bundling for web
+    maxWorkers: 2,
+    resetCache: true,
   };
 });

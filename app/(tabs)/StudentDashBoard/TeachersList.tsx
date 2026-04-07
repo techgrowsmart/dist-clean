@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -13,7 +14,6 @@ import {
   Modal,
   Alert,
   TextInput,
-  Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { FontAwesome, Ionicons, AntDesign, MaterialIcons } from '@expo/vector-icons';
@@ -88,6 +88,7 @@ export default function TeachersList({
   const boardName = propBoardName || params.boardName as string;
   const selectedClass = propSelectedClass || params.selectedClass as string;
   const selectedSubject = propSelectedSubject || params.selectedSubject as string;
+  const showAllTutors = params.showAllTutors === 'true';
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_600SemiBold,
@@ -102,8 +103,8 @@ export default function TeachersList({
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
-  const [activeMenu, setActiveMenu] = useState("Teachers");
-  const [sidebarActiveItem, setSidebarActiveItem] = useState("Teachers");
+  const [activeMenu, setActiveMenu] = useState("Home");
+  const [sidebarActiveItem, setSidebarActiveItem] = useState("Home");
 
   const isDesktop = Platform.OS === 'web' && Dimensions.get('window').width >= 1024;
 
@@ -128,9 +129,9 @@ export default function TeachersList({
 
   useEffect(() => {
     console.log("🚀 useEffect triggered!");
-    console.log("📋 Props received:", { boardName, selectedClass, selectedSubject });
+    console.log("📋 Props received:", { boardName, selectedClass, selectedSubject, showAllTutors });
     fetchTeachers();
-  }, [boardName, selectedClass, selectedSubject]);
+  }, [boardName, selectedClass, selectedSubject, showAllTutors]);
 
   // Fetch posts for ThoughtsCard (web only)
   useEffect(() => {
@@ -184,6 +185,51 @@ export default function TeachersList({
   }, []);
 
   const fetchTeachers = async () => {
+    // If showAllTutors is true, fetch all subject teachers regardless of board/class/subject
+    if (showAllTutors) {
+      setLoading(true);
+      try {
+        const auth = await getAuthData();
+        if (!auth || !auth.token) {
+          console.error("No authentication token found");
+          setLoading(false);
+          return;
+        }
+        const headers = {
+          Authorization: `Bearer ${auth.token}`,
+          "Content-Type": "application/json",
+        };
+        const res = await fetch(`${BASE_URL}/api/teachers`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            category: "Subject teacher"
+          }),
+        });
+        const data = await res.json();
+        console.log("🔍 ALL TEACHERS API RESPONSE:", JSON.stringify(data, null, 2));
+        
+        if (data.success && data.data) {
+          setTeachers(data.data);
+          setCurrentPage(1);
+          setLoading(false);
+          return;
+        } else {
+          setTeachers([]);
+          setCurrentPage(1);
+          setLoading(false);
+          return;
+        }
+      } catch (error) {
+        console.error("Error fetching all teachers:", error);
+        setTeachers([]);
+        setCurrentPage(1);
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Original logic for board/class/subject specific teachers
     if (!boardName || !selectedClass || !selectedSubject) {
       setLoading(false);
       return;

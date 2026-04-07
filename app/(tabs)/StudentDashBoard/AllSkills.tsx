@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Platform,
   View,
   Text,
   Image,
@@ -8,7 +9,6 @@ import {
   StyleSheet,
   TextInput,
   ActivityIndicator,
-  Platform,
   FlatList,
   Dimensions,
 } from 'react-native';
@@ -21,20 +21,20 @@ import BackButton from "../../../components/BackButton";
 
 const { width } = Dimensions.get("window");
 
-// Mock data for skills
+// Mock data for skills with official images
 const mockSkills = [
-  { id: 1, name: 'Music', icon: '🎵', color: '#FF6B6B', count: 45 },
-  { id: 2, name: 'Art & Craft', icon: '🎨', color: '#4ECDC4', count: 32 },
-  { id: 3, name: 'Dance', icon: '💃', color: '#45B7D1', count: 28 },
-  { id: 4, name: 'Yoga & Fitness', icon: '🧘', color: '#96CEB4', count: 36 },
-  { id: 5, name: 'Photography', icon: '📷', color: '#FFEAA7', count: 19 },
-  { id: 6, name: 'Cooking', icon: '👨‍🍳', color: '#DDA0DD', count: 24 },
-  { id: 7, name: 'Writing', icon: '✍️', color: '#98D8C8', count: 21 },
-  { id: 8, name: 'Languages', icon: '🌍', color: '#F7DC6F', count: 33 },
-  { id: 9, name: 'Technology', icon: '💻', color: '#BB8FCE', count: 27 },
-  { id: 10, name: 'Sports', icon: '⚽', color: '#85C1E2', count: 31 },
-  { id: 11, name: 'Gardening', icon: '🌱', color: '#82E0AA', count: 15 },
-  { id: 12, name: 'Public Speaking', icon: '🎤', color: '#F8B739', count: 18 },
+  { id: 1, name: 'Music', image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=300&fit=crop', color: '#FF6B6B', count: 45 },
+  { id: 2, name: 'Art & Craft', image: 'https://images.unsplash.com/photo-1585115397848-55da82956c20?w=400&h=300&fit=crop', color: '#4ECDC4', count: 32 },
+  { id: 3, name: 'Dance', image: 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=400&h=300&fit=crop', color: '#45B7D1', count: 28 },
+  { id: 4, name: 'Yoga & Fitness', image: 'https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=400&h=300&fit=crop', color: '#96CEB4', count: 36 },
+  { id: 5, name: 'Photography', image: 'https://images.unsplash.com/photo-1502780402662-acc01917ac2e?w=400&h=300&fit=crop', color: '#FFEAA7', count: 19 },
+  { id: 6, name: 'Cooking', image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&h=300&fit=crop', color: '#DDA0DD', count: 24 },
+  { id: 7, name: 'Writing', image: 'https://images.unsplash.com/photo-1455390582262-044cdead277a?w=400&h=300&fit=crop', color: '#98D8C8', count: 21 },
+  { id: 8, name: 'Languages', image: 'https://images.unsplash.com/photo-1526473222669-274c1dfb6323?w=400&h=300&fit=crop', color: '#F7DC6F', count: 33 },
+  { id: 9, name: 'Technology', image: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&h=300&fit=crop', color: '#BB8FCE', count: 27 },
+  { id: 10, name: 'Sports', image: 'https://images.unsplash.com/photo-1552667466-07770ae110d0?w=400&h=300&fit=crop', color: '#85C1E2', count: 31 },
+  { id: 11, name: 'Gardening', image: 'https://images.unsplash.com/photo-1585859168304-45c7b6e5d4e2?w=400&h=300&fit=crop', color: '#82E0AA', count: 15 },
+  { id: 12, name: 'Public Speaking', image: 'https://images.unsplash.com/photo-1432821598592-099ed5b31f2b?w=400&h=300&fit=crop', color: '#F8B739', count: 18 },
 ];
 
 export default function AllSkills({ onBack, onSkillSelect, category = "Skill teacher" }: {
@@ -113,9 +113,7 @@ export default function AllSkills({ onBack, onSkillSelect, category = "Skill tea
                 style={[styles.webSkillCard, { backgroundColor: skill.color + '20' }]}
                 onPress={() => handleSkillPress(skill.name)}
               >
-                <View style={[styles.webSkillIcon, { backgroundColor: skill.color }]}>
-                  <Text style={styles.webSkillIconText}>{skill.icon}</Text>
-                </View>
+                <Image source={{ uri: skill.image }} style={styles.webSkillImage} />
                 <Text style={styles.webSkillName}>{skill.name}</Text>
                 <Text style={styles.webSkillCount}>{skill.count} Teachers</Text>
               </TouchableOpacity>
@@ -164,9 +162,7 @@ export default function AllSkills({ onBack, onSkillSelect, category = "Skill tea
             style={[styles.mobileSkillCard, { backgroundColor: item.color + '20' }]}
             onPress={() => handleSkillPress(item.name)}
           >
-            <View style={[styles.mobileSkillIcon, { backgroundColor: item.color }]}>
-              <Text style={styles.mobileSkillIconText}>{item.icon}</Text>
-            </View>
+            <Image source={{ uri: item.image }} style={styles.mobileSkillImage} />
             <Text style={styles.mobileSkillName}>{item.name}</Text>
             <Text style={styles.mobileSkillCount}>{item.count} Teachers</Text>
           </TouchableOpacity>
@@ -257,16 +253,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e8e8e8',
   },
-  webSkillIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+  webSkillImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
     marginBottom: 8,
-  },
-  webSkillIconText: {
-    fontSize: 20,
+    resizeMode: 'cover',
   },
   webSkillName: {
     fontSize: 12,
@@ -353,16 +345,12 @@ const styles = StyleSheet.create({
     borderColor: '#e8e8e8',
     minHeight: 120,
   },
-  mobileSkillIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
+  mobileSkillImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
     marginBottom: 10,
-  },
-  mobileSkillIconText: {
-    fontSize: 24,
+    resizeMode: 'cover',
   },
   mobileSkillName: {
     fontSize: 14,

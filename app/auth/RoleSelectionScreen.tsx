@@ -11,6 +11,8 @@ export default function RoleSelectionScreen() {
   const params = useLocalSearchParams();
   const isWeb = Platform.OS === 'web';
   const email = params.email as string || '';
+  const name = params.name as string || '';
+  const phone = params.phone as string || '';
   const [studentScale] = useState(new Animated.Value(1));
   const [teacherScale] = useState(new Animated.Value(1));
   const [loading, setLoading] = useState(false);
@@ -36,15 +38,20 @@ export default function RoleSelectionScreen() {
       setLoading(true);
       try {
         await authService.updateRole(email, 'student');
-        // Navigate to student profile edit
-        router.push({ 
-          pathname: '/auth/StudentProfileEdit' as any, 
-          params: { email: email } 
-        });
       } catch (error: any) {
-        Alert.alert('Error', error.message || 'Failed to set role. Please try again.');
+        console.error('Update role error:', error);
+        // Continue to profile even if role update fails
       } finally {
         setLoading(false);
+        // Navigate to student profile page with name and phone
+        router.push({ 
+          pathname: '/(tabs)/StudentDashBoard/Profile' as any, 
+          params: { 
+            email: email,
+            name: name,
+            phone: phone
+          } 
+        });
       }
     });
   };
@@ -54,10 +61,14 @@ export default function RoleSelectionScreen() {
       setLoading(true);
       try {
         await authService.updateRole(email, 'teacher');
-        // Navigate to teacher registration step 2
+        // Navigate to teacher registration step 2 with name and phone
         router.push({ 
           pathname: '/auth/TeacherRegistration2' as any, 
-          params: { email: email } 
+          params: { 
+            email: email,
+            name: name,
+            phone: phone
+          } 
         });
       } catch (error: any) {
         Alert.alert('Error', error.message || 'Failed to set role. Please try again.');
@@ -84,11 +95,6 @@ export default function RoleSelectionScreen() {
           >
             <View style={webStyles.imageOverlay} />
             <View style={webStyles.overlayContent}>
-              <View style={webStyles.leftLogo}>
-                <Text style={webStyles.leftLogoText}>GS</Text>
-              </View>
-              <Text style={webStyles.brandTitle}>GoGrowSmart</Text>
-              <Text style={webStyles.brandSubtitle}>Choose Your Path</Text>
             </View>
           </ImageBackground>
         </View>

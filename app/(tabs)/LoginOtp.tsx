@@ -1,12 +1,12 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
+    Platform,
     ActivityIndicator,
     Alert,
     Image,
     Keyboard,
     KeyboardAvoidingView,
-    Platform,
     StyleSheet,
     Text,
     TextInput,
@@ -125,13 +125,11 @@ export default function LoginOtp() {
 
         Alert.alert("Success", "Login successful!");
         
-        setTimeout(() => {
-          if (data.role === "teacher") {
-            router.replace("/(tabs)/TeacherDashBoard/Teacher");
-          } else {
-            router.replace("/(tabs)/StudentDashBoard/Student");
-          }
-        }, 1000);
+        if (data.role === "teacher") {
+          router.replace("/(tabs)/TeacherDashBoard/Teacher");
+        } else {
+          router.replace("/(tabs)/StudentDashBoard/Student");
+        }
       } else {
         Alert.alert("Error", data.message || "Invalid OTP");
       }

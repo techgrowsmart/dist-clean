@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, ScrollView, StyleSheet, Alert, Dimensions } from 'react-native';
+import { View, Text, Image, ScrollView, StyleSheet, Alert, Dimensions, Platform } from 'react-native';
 import { db } from '../../../firebaseConfig';
 import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -142,10 +142,27 @@ const styles = StyleSheet.create({
         borderRadius: 15,
         padding: width * 0.04, 
         elevation: 3, 
-        shadowColor: '#000', 
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 6,
+        ...Platform.select({
+ 
+          web: {
+ 
+            boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+ 
+          },
+ 
+          default: {
+ 
+            shadowColor: '#000',
+ 
+            shadowOffset: { width: 0, height: 4 },
+ 
+            shadowOpacity: 0.3,
+ 
+            shadowRadius: 8,
+ 
+          },
+ 
+        }),
     },
     teacherImage: {
         width: width * 0.2,

@@ -96,8 +96,38 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
   });
 
   const { width, height } = Dimensions.get('window');
+  const isSmallMobile = width < 480;
   const isMobile = width < 768;
+  const isTablet = width >= 768 && width < 1024;
+  const isDesktop = width >= 1024;
+  
+  // Dynamic helper functions for enhanced responsiveness
+  const getFontSize = (mobile: number, tablet: number, desktop: number) => {
+    if (isSmallMobile) return mobile * 0.9;
+    if (isMobile) return mobile;
+    if (isTablet) return tablet;
+    return desktop;
+  };
+  
+  const getSpacing = (mobile: number, tablet: number, desktop: number) => {
+    if (isSmallMobile) return mobile * 0.8;
+    if (isMobile) return mobile;
+    if (isTablet) return tablet;
+    return desktop;
+  };
+  
   const [sidebarActiveItem, setSidebarActiveItem] = useState('Connect');
+  
+  // Add dimension listener for responsive updates
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      // Force re-render with new dimensions
+      const newWidth = window.width;
+      const newHeight = window.height;
+      // Component will automatically recalc isMobile, isTablet, etc.
+    });
+    return () => subscription?.remove();
+  }, []);
   
   // Teacher data
   const [teacherName, setTeacherName] = useState('');

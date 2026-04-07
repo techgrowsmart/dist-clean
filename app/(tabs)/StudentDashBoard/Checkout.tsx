@@ -1,5 +1,17 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Dimensions } from "react-native";
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Image, 
+  ScrollView, 
+  TouchableOpacity, 
+  Dimensions,
+  Platform,
+  SafeAreaView,
+  TextInput,
+  ActivityIndicator
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { BASE_URL } from "../../../config";
 import { Ionicons } from "@expo/vector-icons";
@@ -7,9 +19,26 @@ import BackButton from "../../../components/BackButton";
 import { getAuthData } from "../../../utils/authStorage";
 import { safeBack } from "../../../utils/navigation";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
-import { OpenSans_400Regular, useFonts } from '@expo-google-fonts/open-sans'
+import { OpenSans_400Regular, useFonts } from '@expo-google-fonts/open-sans';
+import WebNavbar from "../../../components/ui/WebNavbar";
+import WebSidebar from "../../../components/ui/WebSidebar";
+import ThoughtsCard from "./ThoughtsCard";
 
 const { height } = Dimensions.get("window");
+
+// Colors for web UI
+const COLORS = {
+  primary: '#3B5BFE',
+  darkBlue: '#1E40AF',
+  background: '#F5F7FB',
+  cardBackground: '#FFFFFF',
+  border: '#E5E7EB',
+  blueBorder: '#D4DEFF', 
+  textPrimary: '#1F2937',
+  textSecondary: '#6B7280',
+  white: '#FFFFFF',
+  headerTxt: '#000000',
+};
 
 export default function Checkout() {
   const { teacherEmail, selected, total, profilepic, description } = useLocalSearchParams();
@@ -17,8 +46,65 @@ export default function Checkout() {
   const [teacher, setTeacher] = useState<any>(null);
   const [selectedTuitions, setSelectedTuitions] = useState<any[]>([]);
   const [subtotal, setSubtotal] = useState(Number(total));
+  const [searchQuery, setSearchQuery] = useState("");
+  const [studentName, setStudentName] = useState("");
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   let [fontsLoaded] = useFonts({ OpenSans_400Regular });
+
+  const isTuitions = selectedTuitions.length === 0;
+
+  // Helper functions for web UI
+  const fetchStudentProfile = async () => {
+    try {
+      const auth = await getAuthData();
+      if (!auth || !auth.email) return;
+      
+      const headers = { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" };
+      const res = await fetch(`${BASE_URL}/api/userProfile`, { 
+        method: "POST", 
+        headers, 
+        body: JSON.stringify({ email: auth.email }) 
+      });
+      const data = await res.json();
+      setStudentName(data.name || "");
+      setProfileImage(data.profileimage || null);
+    } catch (error) {
+      console.error('Error fetching student profile:', error);
+    }
+  };
+
+  const fetchUnreadCount = async () => {
+    try {
+      const auth = await getAuthData();
+      if (!auth?.token) return;
+      const res = await fetch(`${BASE_URL}/api/notifications/unread-count`, { 
+        method: "GET",
+        headers: { 'Authorization': `Bearer ${auth.token}`, 'Content-Type': 'application/json' } 
+      });
+      const data = await res.json();
+      if (data && typeof data.count === 'number') setUnreadCount(data.count);
+    } catch {}
+  };
+
+  const getProfileImageSource = (profilePic?: string) => {
+    if (!profilePic || ['', 'null', 'undefined'].includes(profilePic)) return null;
+    if (typeof profilePic === 'string') {
+      if (profilePic.startsWith('http') || profilePic.startsWith('file://')) return { uri: profilePic };
+      const clean = profilePic.startsWith('/') ? profilePic.substring(1) : profilePic;
+      return { uri: `${BASE_URL}/${clean}` };
+    }
+    return null;
+  };
+
+  const initials = (name: string) =>
+    name.split(' ').map(w => w.charAt(0)).join('').toUpperCase().slice(0, 2) || '?';
+
+  useEffect(() => {
+    fetchStudentProfile();
+    fetchUnreadCount();
+  }, []);
 
   useEffect(() => {
     const fetchTeacher = async () => {
@@ -34,8 +120,18 @@ export default function Checkout() {
     };
 
     fetchTeacher();
-    setSelectedTuitions(JSON.parse(selected));
-  }, []);
+    // Handle selected parameter properly
+    if (Array.isArray(selected)) {
+      setSelectedTuitions(selected);
+    } else if (typeof selected === 'string') {
+      try {
+        setSelectedTuitions(JSON.parse(selected));
+      } catch (e) {
+        console.error('Failed to parse selected tuitions:', e);
+        setSelectedTuitions([]);
+      }
+    }
+  }, [selected]);
 
   useEffect(() => {
     const updatedTotal = selectedTuitions.reduce((acc, item) => {
@@ -49,9 +145,8 @@ export default function Checkout() {
     setSelectedTuitions((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const isTuitions = selectedTuitions.length === 0;
-
-  return (
+  // Mobile UI (current implementation)
+  const MobileUI = () => (
     <View style={styles.container}>
       <View style={styles.topContainer}>
         <BackButton size={20} color="#000" onPress={() => safeBack(router)} />
@@ -115,6 +210,160 @@ export default function Checkout() {
       </View>
     </View>
   );
+
+  // Web UI
+  const WebUI = () => (
+    <SafeAreaView style={webStyles.safeArea}>
+      <View style={webStyles.rootLayout}>
+        <WebNavbar 
+          studentName={studentName}
+          profileImage={profileImage}
+        />
+        <View style={webStyles.mainColumnsLayout}>
+          <WebSidebar 
+            activeItem="Home"
+            onItemPress={(item) => {
+              if (item === 'Home') router.push('/(tabs)/StudentDashBoard/Student');
+              else if (item === 'My Tuitions') router.push('/(tabs)/StudentDashBoard/MyTuitions');
+              else if (item === 'Connect') router.push('/(tabs)/StudentDashBoard/ConnectWeb');
+              else if (item === 'Profile') router.push('/(tabs)/StudentDashBoard/Profile');
+              else if (item === 'Billing') router.push({ pathname: '/(tabs)/Billing', params: { userEmail: '', studentName, profileImage } });
+              else if (item === 'Faq') router.push('/(tabs)/StudentDashBoard/Faq');
+              else if (item === 'Share') router.push({ pathname: '/(tabs)/StudentDashBoard/Share', params: { userEmail: '', studentName, profileImage } });
+              else if (item === 'Subscription') router.push({ pathname: '/(tabs)/StudentDashBoard/Subscription', params: { userEmail: '' } });
+              else if (item === 'Contact Us') router.push('/(tabs)/Contact');
+            }}
+            userEmail=""
+            studentName={studentName || 'Student'}
+            profileImage={profileImage}
+          />
+          <View style={webStyles.centerContentContainer}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={webStyles.centerContentScroll}>
+              <View style={webStyles.pageNavHeader}>
+                <TouchableOpacity style={webStyles.backButton} onPress={() => safeBack(router)}>
+                  <Ionicons name="arrow-back" size={20} color={COLORS.textPrimary} />
+                </TouchableOpacity>
+                <Text style={webStyles.pageTitle}>Checkout</Text>
+              </View>
+
+              <View style={webStyles.boxContainer}>
+                <View style={webStyles.checkoutHeader}>
+                  <Text style={webStyles.checkoutTitle}>Confirm Your Booking</Text>
+                  <Text style={webStyles.checkoutSubtitle}>Review your selected classes and proceed to payment</Text>
+                </View>
+
+                {isTuitions && <Text style={webStyles.warningText}>Please select at least one class to proceed.</Text>}
+                
+                {selectedTuitions.map((item, index) => (
+                  <View key={index} style={webStyles.checkoutCard}>
+                    <View style={webStyles.checkoutCardHeader}>
+                      <View style={webStyles.teacherInfo}>
+                        <Image 
+                          source={teacher?.profilepic ? { uri: teacher.profilepic } : require("../../../assets/images/Profile.png")} 
+                          style={webStyles.teacherAvatar} 
+                        />
+                        <View style={webStyles.teacherDetails}>
+                          <Text style={webStyles.teacherName}>{teacher?.name || "Teacher"}</Text>
+                          <Text style={webStyles.teacherRole}>Professional Educator</Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity onPress={() => removeTuition(index)}>
+                        <Ionicons name="trash-outline" size={20} color={COLORS.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={webStyles.checkoutCardBody}>
+                      <View style={webStyles.classInfo}>
+                        <View style={webStyles.subjectContainer}>
+                          {item.subject && <Text style={webStyles.subjectText}>{item.subject}</Text>}
+                          {item.class && <Text style={webStyles.classText}>{item.class}</Text>}
+                          {item.skill && <Text style={webStyles.subjectText}>{item.skill}</Text>}
+                        </View>
+                        <Text style={webStyles.rateText}>₹{item.charge}</Text>
+                      </View>
+                      
+                      <View style={webStyles.scheduleInfo}>
+                        <View style={webStyles.scheduleItem}>
+                          <Ionicons name="calendar-outline" size={16} color={COLORS.textSecondary} />
+                          <Text style={webStyles.scheduleText}>{item.day || 'Flexible'}</Text>
+                        </View>
+                        <View style={webStyles.scheduleItem}>
+                          <Ionicons name="time-outline" size={16} color={COLORS.textSecondary} />
+                          <Text style={webStyles.scheduleText}>{item.timeFrom} - {item.timeTo}</Text>
+                        </View>
+                      </View>
+
+                      <View style={webStyles.ratingContainer}>
+                        <Text style={webStyles.reviewText}>Rating:</Text>
+                        <Text style={webStyles.rating}> ★★★★☆</Text>
+                      </View>
+
+                      <Text style={webStyles.description} numberOfLines={2}>
+                        {teacher?.introduction || "Experienced teacher dedicated to helping students achieve their academic goals."}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+
+                {/* ThoughtsCard Section */}
+                <View style={{ marginTop: 24, marginBottom: 32 }}>
+                  <ThoughtsCard
+                    post={{
+                      id: 'checkout-post',
+                      author: {
+                        email: teacherEmail as string || '',
+                        name: teacher?.name || 'Teacher',
+                        role: 'Teacher',
+                        profile_pic: teacher?.profilepic || profilepic as string || ''
+                      },
+                      content: description as string || 'Thank you for choosing my classes! I look forward to helping you achieve your learning goals.',
+                      likes: 0,
+                      comments: [],
+                      createdAt: 'Just now',
+                      isLiked: false
+                    }}
+                    getProfileImageSource={getProfileImageSource}
+                    initials={initials}
+                  />
+                </View>
+              </View>
+
+              <View style={webStyles.checkoutFooter}>
+                <View style={webStyles.subtotalContainer}>
+                  <Text style={webStyles.subtotalLabel}>Subtotal:</Text>
+                  <Text style={webStyles.subtotalAmount}>₹{subtotal}</Text>
+                </View>
+                <TouchableOpacity 
+                  style={webStyles.payButton} 
+                  onPress={() => {
+                    const numericAmount = subtotal;
+                    if (!numericAmount) { alert("Invalid charge amount"); return; }
+                    router.push({
+                      pathname: "/ProceedToPayment",
+                      params: {
+                        amount: numericAmount * 100,
+                        teacherEmail,
+                        teacherName: teacher?.name || "Teacher",
+                        selectedTuitions: JSON.stringify(selectedTuitions),
+                        teacherProfilePic: teacher?.profilepic || "",
+                        subject: selectedTuitions.map((t) => t.subject).join(", "),
+                        className: selectedTuitions.map((t) => t.class).join(", "),
+                      },
+                    });
+                  }}
+                >
+                  <Text style={webStyles.payButtonText}>Proceed to Payment</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+
+  // Render platform-specific UI
+  return Platform.OS === 'web' ? <WebUI /> : <MobileUI />;
 }
 
 const styles = StyleSheet.create({
@@ -144,4 +393,188 @@ const styles = StyleSheet.create({
   button: { backgroundColor: "#4255ff", padding: wp('3.733%'), borderRadius: wp('2.667%'), alignItems: "center" },
   buttonText: { color: "#fff", fontSize: wp('4.27%'), fontWeight: "600" },
   warningText: { color: "#000", textAlign: "center", marginBottom: hp("1.5%"), fontSize: wp("3.5%"), fontWeight: "600" },
+});
+
+// Web Styles
+const webStyles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: COLORS.cardBackground },
+  rootLayout: { flex: 1, flexDirection: "column", backgroundColor: COLORS.cardBackground },
+  
+  // --- HEADER ---
+  globalHeader: {
+    flexDirection: 'row', alignItems: 'center', height: '8%', minHeight: 70,
+    backgroundColor: COLORS.cardBackground, borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    paddingHorizontal: 24,
+  },
+  logoWrapper: { width: '18%', minWidth: 200 },
+  logoText: { fontFamily: 'Poppins_700Bold', fontSize: 24, color: COLORS.primary },
+  headerSearchWrapper: { flex: 1, alignItems: 'center' },
+  searchContainer: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background,
+    borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8, width: '100%', maxWidth: 400,
+  },
+  searchInput: {
+    flex: 1, fontSize: 14, color: COLORS.textPrimary, fontFamily: 'Poppins_400Regular',
+  },
+  profileHeaderSection: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    width: '18%', minWidth: 200, justifyContent: 'flex-end',
+  },
+  bellIcon: { position: 'relative', padding: 4 },
+  notifBadge: {
+    position: 'absolute', top: 0, right: 0, backgroundColor: '#ef4444',
+    borderRadius: 10, width: 20, height: 20, alignItems: 'center', justifyContent: 'center',
+  },
+  notifBadgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+  headerUserName: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary },
+  headerAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.border },
+
+  // --- SIDEBAR ---
+  mainColumnsLayout: { flex: 1, flexDirection: 'row' },
+  sidebarContainer: {
+    width: '18%', minWidth: 200, backgroundColor: COLORS.cardBackground,
+    borderRightWidth: 1, borderRightColor: COLORS.border,
+  },
+  sidebarScroll: { flexGrow: 1, paddingVertical: 20 },
+  menuList: { gap: 4 },
+  menuItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 12, paddingHorizontal: 20,
+  },
+  menuItemText: {
+    fontSize: 14, fontWeight: '500', color: COLORS.textPrimary,
+    fontFamily: 'Poppins_500Medium',
+  },
+  sidebarBottom: { marginTop: 'auto', paddingTop: 20, gap: 4 },
+
+  // --- CENTER CONTENT ---
+  centerContentContainer: { flex: 1, backgroundColor: COLORS.background },
+  centerContentScroll: { flexGrow: 1, padding: 24 },
+  pageNavHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    marginBottom: 24,
+  },
+  backButton: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  pageTitle: {
+    fontSize: 24, fontWeight: '700', color: COLORS.textPrimary,
+    fontFamily: 'Poppins_700Bold',
+  },
+
+  // --- CHECKOUT CONTENT ---
+  boxContainer: {
+    backgroundColor: COLORS.white, borderRadius: 16,
+    padding: 24, marginBottom: 24,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  checkoutHeader: { marginBottom: 24 },
+  checkoutTitle: {
+    fontSize: 20, fontWeight: '700', color: COLORS.textPrimary,
+    fontFamily: 'Poppins_700Bold', marginBottom: 4,
+  },
+  checkoutSubtitle: {
+    fontSize: 14, color: COLORS.textSecondary,
+    fontFamily: 'Poppins_400Regular',
+  },
+
+  // --- CHECKOUT CARDS ---
+  checkoutCard: {
+    backgroundColor: COLORS.background, borderRadius: 12,
+    padding: 16, marginBottom: 16,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  checkoutCardHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 16,
+  },
+  teacherInfo: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+  },
+  teacherAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.border },
+  teacherDetails: { flex: 1 },
+  teacherName: {
+    fontSize: 16, fontWeight: '600', color: COLORS.textPrimary,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  teacherRole: {
+    fontSize: 12, color: COLORS.textSecondary,
+    fontFamily: 'Poppins_400Regular',
+  },
+  checkoutCardBody: { gap: 12 },
+  classInfo: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  subjectContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  subjectText: {
+    fontSize: 16, fontWeight: '600', color: COLORS.textPrimary,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  classText: {
+    fontSize: 14, color: COLORS.textSecondary,
+    fontFamily: 'Poppins_400Regular',
+  },
+  rateText: {
+    fontSize: 16, fontWeight: '600', color: COLORS.primary,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  scheduleInfo: {
+    flexDirection: 'row', gap: 16,
+  },
+  scheduleItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+  },
+  scheduleText: {
+    fontSize: 14, color: COLORS.textSecondary,
+    fontFamily: 'Poppins_400Regular',
+  },
+  ratingContainer: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  reviewText: {
+    fontSize: 14, color: COLORS.textSecondary,
+    fontFamily: 'Poppins_400Regular',
+  },
+  rating: {
+    fontSize: 14, color: '#f1c40f',
+    fontFamily: 'Poppins_400Regular',
+  },
+  description: {
+    fontSize: 14, color: COLORS.textSecondary, lineHeight: 20,
+    fontFamily: 'Poppins_400Regular',
+  },
+
+  // --- FOOTER ---
+  checkoutFooter: {
+    backgroundColor: COLORS.white, borderRadius: 16,
+    padding: 24, borderWidth: 1, borderColor: COLORS.border,
+  },
+  subtotalContainer: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 16,
+  },
+  subtotalLabel: {
+    fontSize: 16, fontWeight: '600', color: COLORS.textPrimary,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  subtotalAmount: {
+    fontSize: 18, fontWeight: '700', color: COLORS.primary,
+    fontFamily: 'Poppins_700Bold',
+  },
+  payButton: {
+    backgroundColor: COLORS.primary, borderRadius: 12,
+    paddingVertical: 16, alignItems: 'center', justifyContent: 'center',
+  },
+  payButtonText: {
+    fontSize: 16, fontWeight: '600', color: COLORS.white,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  warningText: {
+    textAlign: 'center', fontSize: 14, color: '#ef4444',
+    fontWeight: '500', marginBottom: 16,
+    fontFamily: 'Poppins_500Medium',
+  },
 });

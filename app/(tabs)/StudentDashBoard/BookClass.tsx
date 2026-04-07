@@ -1,11 +1,22 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  ScrollView, 
+  Platform,
+  SafeAreaView,
+  TextInput,
+  Image,
+  Dimensions,
+  ActivityIndicator
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import BottomNavigation from "../../../app/(tabs)/BottomNavigation";
 import axios from "axios";
 import Checkbox from "expo-checkbox";
 import { BASE_URL } from "../../../config";
-import { Dimensions } from "react-native";
 import DangerousIcon from "../../../assets/svgIcons/Dangerous";
 import BulbIcon from "../../../assets/svgIcons/BulbIcon";
 import { getAuthData } from "../../../utils/authStorage";
@@ -14,8 +25,25 @@ import Entypo from "@expo/vector-icons/Entypo";
 import { Ionicons } from "@expo/vector-icons";
 import CustomCheckbox from "../../../components/CustomCheckbox";
 import { safeBack } from "../../../utils/navigation";
+import WebNavbar from "../../../components/ui/WebNavbar";
+import WebSidebar from "../../../components/ui/WebSidebar";
+import ThoughtsCard, { ThoughtsBackground } from './ThoughtsCard';
 
 const { width, height } = Dimensions.get("window");
+
+// Colors for web UI
+const COLORS = {
+  primary: '#3B5BFE',
+  darkBlue: '#1E40AF',
+  background: '#F5F7FB',
+  cardBackground: '#FFFFFF',
+  border: '#E5E7EB',
+  blueBorder: '#D4DEFF', 
+  textPrimary: '#1F2937',
+  textSecondary: '#6B7280',
+  white: '#FFFFFF',
+  headerTxt: '#000000',
+};
 
 export default function BookClass() {
   const router = useRouter();
@@ -24,6 +52,10 @@ export default function BookClass() {
   const [selectedTuitions, setSelectedTuitions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [studentName, setStudentName] = useState("");
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     if (!teacherEmail) return;
@@ -75,9 +107,52 @@ export default function BookClass() {
 
   const isCheckoutEmpty = selectedTuitions.length === 0;
 
+  // Helper functions for web UI
+  const fetchStudentProfile = async () => {
+    try {
+      const auth = await getAuthData();
+      if (!auth || !auth.email) return;
+      
+      const headers = { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" };
+      const res = await axios.post(`${BASE_URL}/api/userProfile`, { email: auth.email }, { headers });
+      setStudentName(res.data.name || "");
+      setProfileImage(res.data.profileimage || null);
+    } catch (error) {
+      console.error('Error fetching student profile:', error);
+    }
+  };
+
+  const fetchUnreadCount = async () => {
+    try {
+      const auth = await getAuthData();
+      if (!auth?.token) return;
+      const res = await axios.get(`${BASE_URL}/api/notifications/unread-count`, { headers: { 'Authorization': `Bearer ${auth.token}`, 'Content-Type': 'application/json' } });
+      if (res.data && typeof res.data.count === 'number') setUnreadCount(res.data.count);
+    } catch {}
+  };
+
+  const getProfileImageSource = (profilePic?: string) => {
+    if (!profilePic || ['', 'null', 'undefined'].includes(profilePic)) return null;
+    if (typeof profilePic === 'string') {
+      if (profilePic.startsWith('http') || profilePic.startsWith('file://')) return { uri: profilePic };
+      const clean = profilePic.startsWith('/') ? profilePic.substring(1) : profilePic;
+      return { uri: `${BASE_URL}/${clean}` };
+    }
+    return null;
+  };
+
+  const initials = (name: string) =>
+    name.split(' ').map(w => w.charAt(0)).join('').toUpperCase().slice(0, 2) || '?';
+
+  useEffect(() => {
+    fetchStudentProfile();
+    fetchUnreadCount();
+  }, []);
+
   if (loading) return <Text style={styles.title}>Loading tuitions...</Text>;
 
-  return (
+  // Mobile UI (current implementation)
+  const MobileUI = () => (
     <View style={styles.container}>
       <View style={styles.topContainer}>
         <View style={styles.titleContent}>
@@ -183,6 +258,153 @@ export default function BookClass() {
       <BottomNavigation userType="student" />
     </View>
   );
+
+  // Web UI
+  const WebUI = () => (
+    <SafeAreaView style={webStyles.safeArea}>
+      <View style={webStyles.rootLayout}>
+        <WebNavbar 
+          studentName={studentName}
+          profileImage={profileImage}
+        />
+        <View style={webStyles.mainColumnsLayout}>
+          <WebSidebar 
+            activeItem="Home"
+            onItemPress={(item) => {
+              if (item === 'Home') router.push('/(tabs)/StudentDashBoard/Student');
+              else if (item === 'My Tuitions') router.push('/(tabs)/StudentDashBoard/MyTuitions');
+              else if (item === 'Connect') router.push('/(tabs)/StudentDashBoard/ConnectWeb');
+              else if (item === 'Profile') router.push('/(tabs)/StudentDashBoard/Profile');
+              else if (item === 'Billing') router.push({ pathname: '/(tabs)/Billing', params: { userEmail: '', studentName, profileImage } });
+              else if (item === 'Faq') router.push('/(tabs)/StudentDashBoard/Faq');
+              else if (item === 'Share') router.push({ pathname: '/(tabs)/StudentDashBoard/Share', params: { userEmail: '', studentName, profileImage } });
+              else if (item === 'Subscription') router.push({ pathname: '/(tabs)/StudentDashBoard/Subscription', params: { userEmail: '' } });
+              else if (item === 'Contact Us') router.push('/(tabs)/Contact');
+            }}
+            userEmail=""
+            studentName={studentName || 'Student'}
+            profileImage={profileImage}
+          />
+          <View style={webStyles.centerContentContainer}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={webStyles.centerContentScroll}>
+              <View style={webStyles.pageNavHeader}>
+                <TouchableOpacity style={webStyles.backButton} onPress={() => safeBack(router)}>
+                  <Ionicons name="arrow-back" size={20} color={COLORS.textPrimary} />
+                </TouchableOpacity>
+                <Text style={webStyles.pageTitle}>Book Class</Text>
+              </View>
+
+              <View style={webStyles.boxContainer}>
+                <View style={webStyles.bookingHeader}>
+                  <Text style={webStyles.bookingTitle}>Confirm Your Class</Text>
+                  <Text style={webStyles.bookingSubtitle}>Select your preferred tuition slots</Text>
+                </View>
+
+                {tuitions.map((t, index) => {
+                  const key = t.skill ? t.skill : `${t.subject}-${t.class}`;
+                  const daysArray = t.day ? t.day.split(",").map((day: string) => day.trim()) : [];
+                  const firstDay = daysArray[0] || "";
+                  const hasMultipleDays = daysArray.length > 1;
+                  const isExpanded = expandedIndex === index;
+                  
+                  return (
+                    <View key={index} style={webStyles.tuitionCard}>
+                      <View style={webStyles.tuitionCardHeader}>
+                        <View style={webStyles.tuitionSubject}>
+                          {t.skill ? (
+                            <Text style={webStyles.tuitionSubjectText}>{t.skill}</Text>
+                          ) : (
+                            <>
+                              <Text style={webStyles.tuitionSubjectText}>{t.subject}</Text>
+                              <Text style={webStyles.tuitionClassText}>{t.class}</Text>
+                            </>
+                          )}
+                        </View>
+                        <CustomCheckbox 
+                          value={selectedTuitions.includes(key)} 
+                          onValueChange={() => toggleSelection(key)} 
+                          size={20}
+                        />
+                      </View>
+                      
+                      <View style={webStyles.tuitionSchedule}>
+                        <View style={webStyles.scheduleItem}>
+                          <Ionicons name="calendar-outline" size={16} color={COLORS.textSecondary} />
+                          <Text style={webStyles.scheduleText}>{firstDay}</Text>
+                          {hasMultipleDays && (
+                            <TouchableOpacity onPress={() => toggleDaysExpansion(index)}>
+                              <Ionicons 
+                                name={isExpanded ? "caret-down" : "caret-forward"} 
+                                size={16} 
+                                color={COLORS.primary} 
+                              />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                        <View style={webStyles.scheduleItem}>
+                          <Ionicons name="time-outline" size={16} color={COLORS.textSecondary} />
+                          <Text style={webStyles.scheduleText}>{t.timeFrom} - {t.timeTo}</Text>
+                        </View>
+                        <View style={webStyles.scheduleItem}>
+                          <Ionicons name="pricetag-outline" size={16} color={COLORS.textSecondary} />
+                          <Text style={webStyles.scheduleText}>₹{t.charge}</Text>
+                        </View>
+                      </View>
+
+                      {isExpanded && hasMultipleDays && (
+                        <View style={webStyles.expandedDays}>
+                          {daysArray.map((day, dayIndex) => (
+                            <View key={dayIndex} style={webStyles.dayChip}>
+                              <Text style={webStyles.dayChipText}>{day}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+
+                {/* ThoughtsCard Section */}
+                <View style={{ marginTop: 24, marginBottom: 32 }}>
+                  <ThoughtsCard
+                    post={{
+                      id: 'booking-post',
+                      author: {
+                        email: teacherEmail as string || '',
+                        name: 'Teacher',
+                        role: 'Teacher',
+                        profile_pic: teacherProfilePic as string || ''
+                      },
+                      content: description as string || 'Ready to start your learning journey! Book your class and take the first step towards academic excellence.',
+                      likes: 0,
+                      comments: [],
+                      createdAt: 'Just now',
+                      isLiked: false
+                    }}
+                    getProfileImageSource={getProfileImageSource}
+                    initials={initials}
+                  />
+                </View>
+              </View>
+
+              {isCheckoutEmpty && <Text style={webStyles.warningText}>Please select at least one class to proceed.</Text>}
+
+              <TouchableOpacity 
+                style={[webStyles.confirmButton, isCheckoutEmpty && { opacity: 0.5 }]} 
+                onPress={handleProceedToPayment} 
+                disabled={isCheckoutEmpty}
+              >
+                <Text style={webStyles.confirmButtonText}>Proceed to Payment</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+
+  // Render platform-specific UI
+  return Platform.OS === 'web' ? <WebUI /> : <MobileUI />;
 }
 
 const styles = StyleSheet.create({
@@ -218,4 +440,148 @@ const styles = StyleSheet.create({
   button: { position: "absolute", bottom: hp("18%"), left: wp("6.933%"), right: wp("6.933%"), height: hp("7.533%"), backgroundColor: "#5f5fff", borderRadius: 22, alignItems: "center", justifyContent: "center", elevation: 5 },
   buttonText: { color: "#fff", fontSize: wp("4.27%"), fontWeight: "600" },
   warningText: { color: "#000", textAlign: "center", marginBottom: hp("1.5%"), fontSize: wp("3.5%"), fontWeight: "600" },
+});
+
+// Web Styles
+const webStyles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: COLORS.cardBackground },
+  rootLayout: { flex: 1, flexDirection: "column", backgroundColor: COLORS.cardBackground },
+  
+  // --- HEADER ---
+  globalHeader: {
+    flexDirection: 'row', alignItems: 'center', height: '8%', minHeight: 70,
+    backgroundColor: COLORS.cardBackground, borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    paddingHorizontal: 24,
+  },
+  logoWrapper: { width: '18%', minWidth: 200 },
+  logoText: { fontFamily: 'Poppins_700Bold', fontSize: 24, color: COLORS.primary },
+  headerSearchWrapper: { flex: 1, alignItems: 'center' },
+  searchContainer: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background,
+    borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8, width: '100%', maxWidth: 400,
+  },
+  searchInput: {
+    flex: 1, fontSize: 14, color: COLORS.textPrimary, fontFamily: 'Poppins_400Regular',
+  },
+  profileHeaderSection: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    width: '18%', minWidth: 200, justifyContent: 'flex-end',
+  },
+  bellIcon: { position: 'relative', padding: 4 },
+  notifBadge: {
+    position: 'absolute', top: 0, right: 0, backgroundColor: '#ef4444',
+    borderRadius: 10, width: 20, height: 20, alignItems: 'center', justifyContent: 'center',
+  },
+  notifBadgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+  headerUserName: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary },
+  headerAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.border },
+
+  // --- SIDEBAR ---
+  mainColumnsLayout: { flex: 1, flexDirection: 'row' },
+  sidebarContainer: {
+    width: '18%', minWidth: 200, backgroundColor: COLORS.cardBackground,
+    borderRightWidth: 1, borderRightColor: COLORS.border,
+  },
+  sidebarScroll: { flexGrow: 1, paddingVertical: 20 },
+  menuList: { gap: 4 },
+  menuItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 12, paddingHorizontal: 20,
+  },
+  menuItemText: {
+    fontSize: 14, fontWeight: '500', color: COLORS.textPrimary,
+    fontFamily: 'Poppins_500Medium',
+  },
+  sidebarBottom: { marginTop: 'auto', paddingTop: 20, gap: 4 },
+
+  // --- CENTER CONTENT ---
+  centerContentContainer: { flex: 1, backgroundColor: COLORS.background },
+  centerContentScroll: { flexGrow: 1, padding: 24 },
+  pageNavHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    marginBottom: 24,
+  },
+  backButton: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  pageTitle: {
+    fontSize: 24, fontWeight: '700', color: COLORS.textPrimary,
+    fontFamily: 'Poppins_700Bold',
+  },
+
+  // --- BOOKING CONTENT ---
+  boxContainer: {
+    backgroundColor: COLORS.white, borderRadius: 16,
+    padding: 24, marginBottom: 24,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  bookingHeader: { marginBottom: 24 },
+  bookingTitle: {
+    fontSize: 20, fontWeight: '700', color: COLORS.textPrimary,
+    fontFamily: 'Poppins_700Bold', marginBottom: 4,
+  },
+  bookingSubtitle: {
+    fontSize: 14, color: COLORS.textSecondary,
+    fontFamily: 'Poppins_400Regular',
+  },
+
+  // --- TUITION CARDS ---
+  tuitionCard: {
+    backgroundColor: COLORS.background, borderRadius: 12,
+    padding: 16, marginBottom: 12,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  tuitionCardHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 12,
+  },
+  tuitionSubject: { flex: 1 },
+  tuitionSubjectText: {
+    fontSize: 16, fontWeight: '600', color: COLORS.textPrimary,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  tuitionClassText: {
+    fontSize: 14, color: COLORS.textSecondary,
+    fontFamily: 'Poppins_400Regular', marginTop: 2,
+  },
+  tuitionSchedule: { gap: 8 },
+  scheduleItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  scheduleText: {
+    fontSize: 14, color: COLORS.textSecondary,
+    fontFamily: 'Poppins_400Regular',
+  },
+  expandedDays: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8,
+    marginTop: 12, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: COLORS.border,
+  },
+  dayChip: {
+    backgroundColor: COLORS.primary, paddingHorizontal: 8, paddingVertical: 4,
+    borderRadius: 8,
+  },
+  dayChipText: {
+    fontSize: 12, color: COLORS.white, fontWeight: '500',
+    fontFamily: 'Poppins_500Medium',
+  },
+
+  // --- BUTTONS ---
+  confirmButton: {
+    backgroundColor: COLORS.primary, borderRadius: 12,
+    paddingVertical: 16, paddingHorizontal: 24,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 32,
+  },
+  confirmButtonText: {
+    fontSize: 16, fontWeight: '600', color: COLORS.white,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  warningText: {
+    textAlign: 'center', fontSize: 14, color: '#ef4444',
+    fontWeight: '500', marginBottom: 16,
+    fontFamily: 'Poppins_500Medium',
+  },
 });

@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -8,7 +9,6 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
-  Platform,
   ImageBackground,
   TextInput,
 } from 'react-native';

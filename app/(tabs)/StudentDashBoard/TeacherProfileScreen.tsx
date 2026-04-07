@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -9,7 +10,6 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
-  Platform,
   SafeAreaView,
   TextInput,
 } from "react-native";

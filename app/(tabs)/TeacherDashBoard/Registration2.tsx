@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -9,7 +10,6 @@ import {
   Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from 'expo-location';
@@ -30,7 +30,7 @@ import {
 } from "react-native-responsive-screen";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Toast from "react-native-toast-message";
-// import { WebView } from 'react-native-webview';
+// import { Platform,  WebView } from 'react-native-webview';
 import * as WebBrowser from 'expo-web-browser';
 
 const Registration2 = () => {

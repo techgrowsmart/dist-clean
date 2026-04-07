@@ -28,7 +28,7 @@ interface ThoughtsCardProps {
 
 export const ThoughtsBackground: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <View style={bg.root}>
-    <View style={bg.patternLayer} pointerEvents="none">
+    <View style={bg.patternLayer} style={{pointerEvents:"none"}}>
       {Array.from({ length: 120 }).map((_, i) => <Text key={i} style={bg.tile}>💭</Text>)}
     </View>
     {children}

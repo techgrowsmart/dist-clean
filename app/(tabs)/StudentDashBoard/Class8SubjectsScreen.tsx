@@ -11,13 +11,13 @@ import axios from 'axios';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
+    Platform,
     ActivityIndicator,
     Alert,
     Dimensions,
     Image,
     ImageBackground,
     Modal,
-    Platform,
     SafeAreaView,
     ScrollView,
     StyleSheet,

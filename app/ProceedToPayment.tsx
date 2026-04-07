@@ -30,6 +30,18 @@ export default function ProceedToPayment() {
         selectedTuitions
     });
 console.log("student",studentProfilePic)
+
+// Parse selectedTuitions if it exists
+let parsedTuitions = [];
+try {
+  if (selectedTuitions) {
+    parsedTuitions = JSON.parse(selectedTuitions as string);
+    console.log("Parsed tuitions:", parsedTuitions);
+  }
+} catch (error) {
+  console.error("Error parsing selectedTuitions:", error);
+}
+
 useEffect(() => {
   const fetchDataAndStartPayment = async () => {
     try {
@@ -154,6 +166,7 @@ useEffect(() => {
                   className,
                   studentName: name,
                   studentProfilePic: profilePic,
+                  selectedTuitions: parsedTuitions, // Use parsed tuition data
                 },
                 { headers }
               );

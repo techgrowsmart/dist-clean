@@ -29,6 +29,22 @@
       "edgeToEdgeEnabled": true,
       "package": "com.gogrowsmart.app.mobile",
       "versionCode": 14,
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "gogrowsmart",
+              "host": "*"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "plugins": [
         "expo-notifications",
         "expo-notifications"

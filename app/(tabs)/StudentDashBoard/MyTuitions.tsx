@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { View, Text, Image, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Platform, Dimensions, ScrollView, SafeAreaView, Alert, Modal } from "react-native";
+import { Platform, View, Text, Image, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Dimensions, ScrollView, SafeAreaView, Alert, Modal } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome } from '@expo/vector-icons';
 import { autoRefreshToken } from '../../../utils/tokenRefresh';
-import ThoughtsCard from './ThoughtsCard';
+import ThoughtsCard from '../StudentDashBoard/ThoughtsCard';
 import { Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, useFonts } from "@expo-google-fonts/poppins";
 import { Roboto_500Medium } from '@expo-google-fonts/roboto';
 import { OpenSans_500Medium, OpenSans_300Light, OpenSans_400Regular } from "@expo-google-fonts/open-sans";
@@ -25,7 +25,7 @@ const MyTuitions = () => {
   const router = useRouter();
   let [fontsLoaded] = useFonts({ Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Roboto_500Medium, OpenSans_500Medium, OpenSans_300Light, OpenSans_400Regular, Montserrat_400Regular });
 
-  const isDesktop = Platform.OS === 'web' && Dimensions.get('window').width >= 1024;
+  const isDesktop = Dimensions.get('window').width >= 1024;
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [filteredContacts, setFilteredContacts] = useState<Contact[]>([]);
@@ -180,7 +180,7 @@ const MyTuitions = () => {
 
   const initials = (name: string) => name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : 'U';
 
-  const resolvePostAuthor = (post: any) => {
+  const resolvePostAuthor = (post: UnifiedPost) => {
     const cached = userProfileCache.get(post.author?.email) || { name: '', profilePic: '' };
     let name = cached.name || post.author?.name || '';
     let pic: string | null = cached.profilePic || post.author?.profile_pic || null;
@@ -193,6 +193,78 @@ const MyTuitions = () => {
   const fetchPosts = async (token: string) => {
     try {
       setPostsLoading(true);
+      
+      // Handle bypass token for student with mock data
+      if (token === "bypass_token_student1") {
+        const mockPosts: any[] = [
+          {
+            id: "mock_post_1",
+            author: {
+              email: "teacher1@example.com",
+              name: "Dr. Sarah Johnson",
+              role: "teacher",
+              profile_pic: ""
+            },
+            content: "Great work on today's mathematics assignment! Remember to practice the quadratic formula problems we discussed.",
+            likes: 12,
+            comments: [
+              {
+                id: "comment_1",
+                author: { email: "student1@example.com", name: "Student", role: "student", profile_pic: "" },
+                content: "Thank you! The examples really helped.",
+                createdAt: "2h ago"
+              }
+            ],
+            createdAt: "3h ago",
+            tags: ["mathematics", "homework"],
+            postImages: [],
+            isLiked: false
+          },
+          {
+            id: "mock_post_2",
+            author: {
+              email: "teacher2@example.com",
+              name: "Prof. Michael Chen",
+              role: "teacher", 
+              profile_pic: ""
+            },
+            content: "Physics lab tomorrow - don't forget to bring your notebooks and review the motion equations. We'll be doing practical experiments!",
+            likes: 8,
+            comments: [],
+            createdAt: "5h ago",
+            tags: ["physics", "lab", "reminder"],
+            postImages: [],
+            isLiked: true
+          },
+          {
+            id: "mock_post_3",
+            author: {
+              email: "teacher3@example.com",
+              name: "Dr. Emily Watson",
+              role: "teacher",
+              profile_pic: ""
+            },
+            content: "Chemistry quiz results are out! Excellent performance from the class. Average score: 85%. Keep up the great work! 🧪",
+            likes: 15,
+            comments: [
+              {
+                id: "comment_2", 
+                author: { email: "student1@example.com", name: "Student", role: "student", profile_pic: "" },
+                content: "So happy with my score!",
+                createdAt: "1h ago"
+              }
+            ],
+            createdAt: "1d ago",
+            tags: ["chemistry", "quiz", "results"],
+            postImages: [],
+            isLiked: false
+          }
+        ];
+        setPosts(mockPosts);
+        setPostsLoading(false);
+        return;
+      }
+      
       const res = await axios.get(`${BASE_URL}/api/posts/all`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.data.success) {
         const postsWithComments = await Promise.all(res.data.data.map(async (post: any) => {
@@ -227,7 +299,7 @@ const MyTuitions = () => {
     } catch { setPostComments([]); }
   };
 
-  const openCommentsModal = async (post: any) => { setSelectedPost(post); setShowCommentsModal(true); setCommentText(''); await fetchPostComments(post.id); };
+  const openCommentsModal = async (post: UnifiedPost) => { setSelectedPost(post); setShowCommentsModal(true); setCommentText(''); await fetchPostComments(post.id); };
 
   const addComment = async () => {
     if (!commentText.trim() || !selectedPost || !authToken) return;
@@ -354,7 +426,7 @@ const MyTuitions = () => {
           </View>
         )}
 
-        {/* ── LEFT SIDEBAR (WebSidebar component — desktop only, no duplicate) ── */}
+        {/* ── LEFT SIDEBAR (WebSidebar component — desktop only) ── */}
         {isDesktop && (
           <WebSidebar
             activeItem={sidebarActiveItem}
@@ -365,15 +437,18 @@ const MyTuitions = () => {
           />
         )}
 
-        {/* ── LEFT SIDEBAR (reused component) ── */}
-        <Sidebar
-          activeMenu={activeMenu}
-          onItemPress={handleSidebarItemPress}
-          studentName={studentName}
-          profileImage={profileImage}
-          userEmail={userEmail}
-          userRole={userRole}
-        />
+        {/* ── LEFT SIDEBAR (mobile only) ── */}
+        {!isDesktop && (
+          <Sidebar
+            visible={false}
+            onClose={() => {}}
+            activeItem={sidebarActiveItem}
+            onItemPress={handleSidebarItemPress}
+            userEmail={userEmail || ""}
+            studentName={studentName || "Student"}
+            profileImage={profileImage}
+          />
+        )}
 
         {/* ── MAIN AREA ── */}
         <View style={styles.mainLayout}>
@@ -415,7 +490,7 @@ const MyTuitions = () => {
               </View>
             </View>
 
-            {/* RIGHT: Thoughts Panel (ThoughtsCard reused from Student.tsx) */}
+            {/* RIGHT: Thoughts Panel (UnifiedThoughtsCard with consistent UI patterns) */}
             <View style={styles.rightPanel}>
               <Text style={styles.rightPanelTitle}>Thoughts</Text>
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.thoughtsList}>
@@ -426,18 +501,49 @@ const MyTuitions = () => {
                     <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No thoughts yet</Text>
                   </View>
                 )}
-                {posts.map((post) => (
-                  <ThoughtsCard
-                    key={post.id}
-                    post={post}
-                    onLike={handleLike}
-                    onComment={openCommentsModal}
-                    onReport={(p) => { setReportType('post'); setReportItemId(p.id); setReportReason(''); setShowReportModal(true); }}
-                    getProfileImageSource={getProfileImageSource}
-                    initials={initials}
-                    resolvePostAuthor={resolvePostAuthor}
-                  />
-                ))}
+                {posts.map((post: any) => {
+                  const resolvePostAuthor = (post: any) => {
+                    const userProfile = userProfileCache.get(post.author.email) || { name: 'Unknown User', profilePic: '' };
+                    let name = userProfile.name || post.author.name;
+                    let pic: string | null = userProfile.profilePic || post.author.profile_pic;
+                    let role = post.author.role;
+                    
+                    if (!name || name === 'null' || name === 'undefined' || name.trim() === '' || name.includes('@')) {
+                      name = post.author.email?.split('@')[0] || 'Unknown User';
+                    }
+                    
+                    if (pic && pic !== '' && pic !== 'null' && pic !== 'undefined') {
+                      if (!pic.startsWith('http') && !pic.startsWith('/')) {
+                        pic = `/${pic}`;
+                      }
+                    } else {
+                      pic = null;
+                    }
+                    
+                    if (!role || role.trim() === '' || role === 'null' || role === 'undefined') {
+                      role = 'User';
+                    }
+                    
+                    return { name, pic, role };
+                  };
+
+                  const initials = (name: string) => {
+                    return name ? name.split(' ').map(w => w.charAt(0)).join('').toUpperCase().slice(0, 2) : 'U';
+                  };
+
+                  return (
+                    <ThoughtsCard
+                      key={post.id}
+                      post={post}
+                      onLike={handleLike}
+                      onComment={openCommentsModal}
+                      onReport={(p) => { setReportType('post'); setReportItemId(p.id); setReportReason(''); setShowReportModal(true); }}
+                      getProfileImageSource={getProfileImageSource}
+                      initials={initials}
+                      resolvePostAuthor={resolvePostAuthor}
+                    />
+                  );
+                })}
               </ScrollView>
             </View>
 
@@ -496,7 +602,7 @@ const styles = StyleSheet.create({
   rootContainer: { flex: 1, flexDirection: 'row', backgroundColor: COLORS.cardBackground },
   mainLayout: { flex: 1, backgroundColor: COLORS.lightBackground },
   topHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 32, paddingVertical: 20, backgroundColor: COLORS.cardBackground, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.lightBackground, borderRadius: 30, paddingHorizontal: 16, height: 44, width: Platform.OS === 'web' ? '40%' : '40%' },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.lightBackground, borderRadius: 30, paddingHorizontal: 16, height: 44, width: '40%' },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, fontFamily: 'Poppins_400Regular', fontSize: 14, color: COLORS.textPrimary },
   profileHeaderSection: { flexDirection: 'row', alignItems: 'center' },
@@ -531,7 +637,7 @@ const styles = StyleSheet.create({
   pageDotActive: { backgroundColor: COLORS.textSecondary },
   pageDotText: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.textPrimary },
   pageDotTextActive: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: '#FFFFFF' },
-  rightPanel: { width: Platform.OS === 'web' ? '25%' : '25%', minWidth: 300, backgroundColor: COLORS.cardBackground, borderLeftWidth: 1, borderLeftColor: COLORS.border, paddingTop: 32, paddingHorizontal: 20 },
+  rightPanel: { width: '25%', minWidth: 300, backgroundColor: COLORS.cardBackground, borderLeftWidth: 1, borderLeftColor: COLORS.border, paddingTop: 32, paddingHorizontal: 20 },
   rightPanelTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 20, color: COLORS.primary, marginBottom: 24, textAlign: 'right' },
   thoughtsList: { paddingBottom: 40 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },

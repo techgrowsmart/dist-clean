@@ -211,10 +211,27 @@ const SidebarMenu = ({
                 backgroundColor: isLoggingOut ? "#9CA3AF" : "#EF4444", 
                 justifyContent: "center", 
                 alignItems: "center", 
-                shadowColor: "#000", 
-                shadowOffset: { width: 0, height: 4 }, 
-                shadowOpacity: 0.1, 
-                shadowRadius: 8, 
+                ...Platform.select({
+ 
+                  web: {
+ 
+                    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+ 
+                  },
+ 
+                  default: {
+ 
+                    shadowColor: '#000',
+ 
+                    shadowOffset: { width: 0, height: 4 },
+ 
+                    shadowOpacity: 0.3,
+ 
+                    shadowRadius: 8,
+ 
+                  },
+ 
+                }), 
                 elevation: 4 
               }} 
               onPress={confirmLogout}

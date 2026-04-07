@@ -17,9 +17,10 @@ type WebHeaderProps = {
   studentName: string;
   profileImage: string | null;
   onNotificationPress?: () => void;
+  unreadCount?: number;
 };
 
-const WebHeader = ({ studentName, profileImage, onNotificationPress }: WebHeaderProps) => {
+const WebHeader = ({ studentName, profileImage, onNotificationPress, unreadCount = 0 }: WebHeaderProps) => {
   return (
     <View style={styles.globalHeader}>
       <View style={styles.logoWrapper}>
@@ -38,6 +39,11 @@ const WebHeader = ({ studentName, profileImage, onNotificationPress }: WebHeader
       <View style={styles.profileHeaderSection}>
         <TouchableOpacity style={styles.bellIcon} onPress={onNotificationPress}>
           <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
+          {unreadCount > 0 && (
+            <View style={styles.notifBadge}>
+              <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+            </View>
+          )}
         </TouchableOpacity>
         <Text style={styles.headerUserName}>{studentName}</Text>
         <Image source={{ uri: profileImage || 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png' }} style={styles.headerAvatar} />
@@ -78,7 +84,9 @@ const styles = StyleSheet.create({
     minWidth: 200,
     justifyContent: 'flex-end',
   },
-  bellIcon: { marginRight: 20, padding: 8, backgroundColor: COLORS.background, borderRadius: 20 },
+  bellIcon: { marginRight: 20, padding: 8, backgroundColor: COLORS.background, borderRadius: 20, position: 'relative' },
+  notifBadge: { position: 'absolute', top: -2, right: -2, backgroundColor: '#ff4444', borderRadius: 10, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
+  notifBadgeText: { color: 'white', fontSize: 10, fontWeight: 'bold' },
   headerUserName: { fontSize: 14, color: COLORS.textPrimary, marginRight: 12 },
   headerAvatar: { width: 40, height: 40, borderRadius: 20 },
 });

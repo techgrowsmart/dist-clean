@@ -9,6 +9,15 @@ import Animated, {
     FadeInLeft,
     FadeInRight
 } from 'react-native-reanimated';
+import {
+  collection,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  where,
+} from "firebase/firestore";
+import { db } from "../../../firebaseConfig";
 import WebNavbar from "../../../components/ui/WebNavbar";
 import WebSidebar from "../../../components/ui/WebSidebar";
 import { BASE_URL } from "../../../config";
@@ -36,13 +45,8 @@ const COLORS = {
   onlineGreen: '#10B981',
 };
 
-// Mock images (reduced to 1-2 as requested)
-const IMAGES = {
-  rajiv: 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=150',
-  ethan: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
-  ava: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-  chatImage: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800',
-};
+// Minimal mock data
+const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150';
 
 interface Contact {
   name: string;
@@ -95,10 +99,22 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
     width: Dimensions.get('window').width,
     height: Dimensions.get('window').height,
   });
-  const [activeTab, setActiveTab] = useState('Teachers');
+  // Chat state
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [messages, setMessages] = useState<{ [key: string]: Message[] }>({});
+  const [connectionRequests, setConnectionRequests] = useState<ConnectionRequest[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [teacherBroadcastData, setTeacherBroadcastData] = useState<any[]>([]);
+  const [teacherBroadcastMessages, setTeacherBroadcastMessages] = useState<any[]>([]);
+  const [showSearchBar, setShowSearchBar] = useState(false);
+  const [messageInput, setMessageInput] = useState<string>("");
+  const [isSending, setIsSending] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'Teachers' | 'Broadcast'>('Teachers');
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userImage, setUserImage] = useState<string | null>(null);
   const [studentName, setStudentName] = useState<string>('');
+  const [userType, setUserType] = useState<string | null>(null);
   const [activeMenu, setActiveMenu] = useState("Connect");
   const [unreadCount, setUnreadCount] = useState(0);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -154,7 +170,10 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
         if (email) setUserEmail(email);
         if (profileImage) setUserImage(profileImage);
         if (name) setStudentName(name);
-        if (role) setUserRole(role);
+        if (role) {
+          setUserRole(role);
+          setUserType(role);
+        }
       } catch (error) {
         console.error("❌ Error loading user info:", error);
       }
@@ -277,6 +296,274 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
     } catch (err: any) { Alert.alert('Error', err.response?.data?.message || 'Failed to submit report'); }
   };
 
+  // ── Chat API Functions ──
+  const fetchContacts = async () => {
+    if (!userEmail) {
+      console.warn("Cannot fetch contacts: userEmail is null");
+      return;
+    }
+  
+    try {
+      const auth = await getAuthData();
+      const token = auth?.token;
+      
+      if (!token) {
+        console.error("No authentication token found");
+        Alert.alert("Authentication Error", "Please log in again");
+        return;
+      }
+ 
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      };
+  
+      const type = userType === "teacher" ? "teacher" : "student";
+  
+      console.log("Fetching contacts for:", userEmail);
+      const res = await axios.post(
+        `${BASE_URL}/api/contacts`,
+        { userEmail, type },
+        { headers, timeout: 10000 }
+      );
+  
+      if (res.data.success) {
+        const data = res.data.contacts.map((contact: any) => ({
+          name: contact.teacherName || contact.studentName || 'Unknown User',
+          profilePic:  contact.teacherProfilePic || contact.studentProfilePic || contact.profilePic || "",
+          email: contact.teacherEmail || contact.studentEmail,
+          lastMessage: contact.lastMessage,
+          lastMessageTime: contact.lastMessageTime,
+        }));
+  
+        console.log("Successfully fetched", data.length, "contacts");
+        setContacts(data);
+      } else {
+        const errorMsg = res.data.message || "Could not fetch contacts";
+        console.error("API Error:", errorMsg);
+        Alert.alert("Failed", errorMsg);
+      }
+    } catch (error: any) {
+      console.error("Error fetching contacts:", error);
+      
+      if (error.code === 'ECONNABORTED') {
+        Alert.alert("Network Error", "Request timed out. Please check your connection.");
+      } else if (error.response?.status === 401) {
+        Alert.alert("Authentication Error", "Your session has expired. Please log in again.");
+      } else if (error.response?.status === 403) {
+        Alert.alert("Permission Error", "You don't have permission to access contacts.");
+      } else if (error.response?.status >= 500) {
+        Alert.alert("Server Error", "Something went wrong on our end. Please try again later.");
+      } else {
+        Alert.alert("Error", "Failed to fetch contacts. Please check your internet connection.");
+      }
+    }
+  };
+
+  const fetchBroadcasts = async () => {
+    if (!userEmail) return;
+
+    try {
+      const auth = await getAuthData();
+      if (!auth?.token) return;
+      
+      const token = auth.token;
+      const headers = {
+        Authorization: `Bearer ${token}`,
+      };
+
+      const requestBody = userType === "teacher" ? { userEmail } : { studentEmail: userEmail };
+
+      const res = await axios.post(
+        `${BASE_URL}/api/broadcasts`,
+        requestBody,
+        { 
+          headers,
+          timeout: 10000
+        }
+      );
+
+      if (res.data && res.data.broadcasts) {
+        const broadcasts = res.data.broadcasts;
+        const contactMap = new Map();
+        
+        broadcasts.forEach((b) => {
+          const email = b.teacherEmail;
+          const name = b.teacherName || "Teacher";
+          const proile = b.teacherProfilePic;
+         
+          if (!contactMap.has(email)) {
+            contactMap.set(email, {
+              email,
+              name,
+              profilePic: proile,
+              lastMessage: b.topic,
+              lastMessageTime: new Date(b.timestamp._seconds * 1000).toLocaleTimeString(),
+            });
+          }
+        });
+
+        const contactList = Array.from(contactMap.values());
+        setContacts((prevContacts) => {
+          const mergedMap = new Map<string, Contact>();
+
+          prevContacts.forEach((contact) => mergedMap.set(contact.email, contact));
+          contactList.forEach((contact) => {
+            if (!mergedMap.has(contact.email)) {
+              mergedMap.set(contact.email, contact);
+            } else {
+              const existing = mergedMap.get(contact.email)!;
+              mergedMap.set(contact.email, {
+                ...existing,
+                lastMessage: contact.lastMessage || existing.lastMessage,
+                lastMessageTime: contact.lastMessageTime || existing.lastMessageTime,
+              });
+            }
+          });
+
+          return Array.from(mergedMap.values());
+        });
+      }
+    } catch (err) {
+      console.log("Broadcast fetch error (silent):", err);
+    }
+  };
+
+  const sendMessage = async (contactName: string, message: { text: string }, broadcastMetadata?: any) => {
+    if (!userEmail || !message.text.trim()) {
+      console.warn("Cannot send message: missing user email or message text");
+      Alert.alert("Error", "Message or user email is missing.");
+      return;
+    }
+
+    try {
+      const auth = await getAuthData();
+      const token = auth?.token;
+      
+      if (!token) {
+        console.error("No authentication token found for sending message");
+        Alert.alert("Authentication Error", "Please log in again");
+        return;
+      }
+
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      };
+
+      // Broadcast Mode for teachers
+      if (activeTab === "Broadcast" && userType === "teacher" && broadcastMetadata) {
+        try {
+          const params = {
+            userType,
+            teacherEmail: broadcastMetadata.teacheremail,
+            className: broadcastMetadata.classname,
+            subject: broadcastMetadata.subject,
+            studentEmails: broadcastMetadata.emails,
+            studentNames: broadcastMetadata.names,
+            isBroadcast: true,
+            sender: broadcastMetadata.teacheremail,
+            teacherName: broadcastMetadata.teachername,
+            text: broadcastMetadata.message
+          };
+
+          await axios.post(`${BASE_URL}/api/broadcast-message-list-add`, params, { headers, timeout: 10000 });
+          console.log("Broadcast message sent successfully");
+        } catch (error) {
+          console.error("❌ Broadcast send error:", error);
+          Alert.alert("Error", "Something went wrong while sending broadcast");
+        }
+      } else {
+        // Direct message mode
+        const recipientEmail = contacts.find((c) => c.name === contactName)?.email;
+        if (!recipientEmail) {
+          console.error("Recipient not found for contact:", contactName);
+          Alert.alert("Error", "Recipient not found.");
+          return;
+        }
+
+        const authData = await getAuthData();
+        const role = authData?.role;
+        let senderName;
+        
+        if (role === "teacher") {
+          senderName = await AsyncStorage.getItem("teacherName");
+        } else {
+          senderName = await AsyncStorage.getItem("studentName");
+        }
+
+        console.log("Sending message from", userEmail, "to", recipientEmail);
+        const res = await axios.post(
+          `${BASE_URL}/api/send`,
+          {
+            sender: userEmail,
+            senderName: senderName || 'User',
+            recipient: recipientEmail,
+            text: message.text.trim(),
+            isBroadcast: false,
+          },
+          { headers, timeout: 10000 }
+        );
+
+        if (res.status >= 200 && res.status < 300) {
+          const newMessage: Message = {
+            id: new Date().toISOString(),
+            text: message.text.trim(),
+            sender: "me",
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            timestamp: new Date(),
+          };
+
+          setMessages((prevMessages) => ({
+            ...prevMessages,
+            [contactName]: [...(prevMessages[contactName] || []), newMessage],
+          }));
+
+          setContacts((prevContacts) =>
+            prevContacts.map((contact) =>
+              contact.name === contactName 
+                ? { ...contact, lastMessage: message.text.trim(), lastMessageTime: newMessage.time }
+                : contact
+            )
+          );
+          
+          console.log("Message sent successfully");
+        } else {
+          console.error("❌ Direct Message Error:", res.data);
+          Alert.alert("Error", res.data.message || "Failed to send message");
+        }
+      }
+    } catch (error: any) {
+      console.error("❌ Message Error:", error);
+      
+      if (error.code === 'ECONNABORTED') {
+        Alert.alert("Network Error", "Request timed out. Please check your connection.");
+      } else if (error.response?.status === 401) {
+        Alert.alert("Authentication Error", "Your session has expired. Please log in again.");
+      } else if (error.response?.status === 403) {
+        Alert.alert("Permission Error", "You don't have permission to send messages.");
+      } else if (error.response?.status >= 500) {
+        Alert.alert("Server Error", "Something went wrong on our end. Please try again later.");
+      } else {
+        Alert.alert("Error", "Failed to send message. Please check your internet connection.");
+      }
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!messageInput.trim() || !selectedContact || isSending) return;
+
+    setIsSending(true);
+    try {
+      await sendMessage(selectedContact.name, { text: messageInput });
+      setMessageInput("");
+    } catch (error) {
+      console.error("Error sending message:", error);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   // Initialize posts data
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -290,6 +577,71 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
     }
   }, []);
 
+  // Fetch contacts when userEmail is loaded
+  useEffect(() => {
+    if (userEmail) {
+      fetchContacts();
+    }
+  }, [userEmail]);
+
+  // Fetch broadcasts when activeTab changes to broadcast
+  useEffect(() => {
+    if (activeTab === 'Broadcast' && userEmail) {
+      fetchBroadcasts();
+    }
+  }, [activeTab, userEmail]);
+
+  // Firebase real-time messaging
+  useEffect(() => {
+    if (!selectedContact || !userEmail) return;
+
+    const recipientEmail = selectedContact.email;
+    if (!recipientEmail) return;
+
+    const chatId = [userEmail, recipientEmail].sort().join("_");
+    const messagesRef = collection(db, "chats", chatId, "messages");
+    const q = query(messagesRef, orderBy("timestamp", "asc"));
+
+    return onSnapshot(q, (querySnapshot) => {
+      const messagesList: Message[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        const isBroadcast = data.isBroadcast || false;
+        const isMe = data.sender === userEmail;
+        const isRecipient = data.recipient === userEmail;
+
+        const shouldInclude = (activeTab === "Broadcast" && isBroadcast) || (activeTab === "Teachers" && !isBroadcast);
+      
+        if ((isMe || isRecipient) && shouldInclude) {
+          messagesList.push({
+            id: doc.id,
+            text: data.text,
+            sender: isMe ? "me" : "other",
+            time: new Date(data.timestamp?.toDate()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            timestamp: data.timestamp?.toDate(),
+            isBroadcast: isBroadcast,
+          });
+        }
+      });
+
+      setMessages((prevMessages) => ({
+        ...prevMessages,
+        [selectedContact.name]: messagesList,
+      }));
+    
+      if (messagesList.length > 0) {
+        const lastMessage = messagesList[messagesList.length - 1];
+        setContacts((prevContacts) =>
+          prevContacts.map((contact) =>
+            contact.name === selectedContact.name 
+              ? { ...contact, lastMessage: lastMessage.text, lastMessageTime: lastMessage.time }
+              : contact
+          )
+        );
+      }
+    });
+  }, [selectedContact, userEmail, activeTab]);
+
   if (!fontsLoaded) {
     return (
       <View style={styles.loaderContainer}>
@@ -297,6 +649,46 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
       </View>
     );
   }
+
+  // MessageInputBar component with access to state
+  const MessageInputBar = () => {
+    const [isFocused, setIsFocused] = useState(false);
+    return (
+       <View style={styles.msgInputWrapper}>
+        <View style={[styles.msgInputInner, isFocused && styles.msgInputFocused]}>
+          <View style={styles.msgIconsL}>
+            <TouchableOpacity style={styles.msgIcon}><Ionicons name="add" size={24} color={COLORS.textMuted} /></TouchableOpacity>
+            <TouchableOpacity style={styles.msgIcon}><Ionicons name="image-outline" size={22} color={COLORS.textMuted} /></TouchableOpacity>
+            <TouchableOpacity style={styles.msgIcon}><Ionicons name="attach-outline" size={22} color={COLORS.textMuted} /></TouchableOpacity>
+          </View>
+          <TextInput 
+            style={styles.msgTextEntry} 
+            placeholder="Aa" 
+            placeholderTextColor={COLORS.textMuted} 
+            value={messageInput}
+            onChangeText={setMessageInput}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            editable={!isSending}
+          />
+          <View style={styles.msgIconsR}>
+            <TouchableOpacity style={styles.msgIcon}><Feather name="smile" size={20} color={COLORS.textMuted} /></TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.msgSendBtn} 
+              onPress={handleSendMessage}
+              disabled={isSending || !messageInput.trim() || !selectedContact}
+            >
+              {isSending ? (
+                <ActivityIndicator size="small" color={COLORS.primaryBlue} />
+              ) : (
+                <Ionicons name="send" size={20} color={COLORS.primaryBlue} />
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+   );
+};
 
   // For desktop/web, return the desktop layout with WebSidebar, WebHeader, and ConnectScreen UI
   if (isDesktop) {
@@ -324,44 +716,62 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false} style={styles.chatListScroll}>
-                <ChatListItem name="Ethan Reynolds" msg="Ethan: R u here?" time="" unread active={false} avatar={IMAGES.ethan} />
-                <ChatListItem name="Ava Thompson" msg="Ava: LOL" time="" unread active={false} avatar={IMAGES.ava} />
+                {contacts
+                  .filter((contact) => contact.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map((contact) => (
+                    <ChatListItem
+                      key={contact.email}
+                      name={contact.name}
+                      msg={contact.lastMessage || 'No chats, start by saying Hello'}
+                      time={contact.lastMessageTime || ''}
+                      unread={false}
+                      avatar={contact.profilePic || DEFAULT_AVATAR}
+                      onPress={() => setSelectedContact(contact)}
+                    />
+                  ))}
               </ScrollView>
             </View>
 
             {/* Chat Window - Middle (from ConnectScreen) */}
             <View style={styles.chatWindow}>
               {/* Subtle Pattern Overlay */}
-              <View style={styles.patternOverlay} pointerEvents="none" />
+              <View style={styles.patternOverlay} style={{pointerEvents:"none"}} />
               
-              <ChatHeader name="Rajiv Sharma" avatar={IMAGES.rajiv} status="Online now" />
+              <ChatHeader 
+                name={selectedContact?.name || ''} 
+                avatar={selectedContact?.profilePic || DEFAULT_AVATAR} 
+                status="Online now" 
+              />
               
               <ScrollView 
                 style={styles.messagesArea} 
                 contentContainerStyle={styles.messagesContent}
                 showsVerticalScrollIndicator={false}
               >
-                <Text style={styles.dateCenter}>Tuesday 9:11 PM</Text>
+                {selectedContact ? (
+                  messages[selectedContact.name]?.map((message) => (
+                    <ChatBubble 
+                      key={message.id} 
+                      text={message.text} 
+                      position={message.sender === 'me' ? 'right' : 'left'} 
+                    />
+                  )) || (
+                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                      <Text style={{ color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
+                        No messages yet. Start the conversation!
+                      </Text>
+                    </View>
+                  )
+                ) : (
+                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                    <Text style={{ color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
+                      Select a contact to start chatting
+                    </Text>
+                  </View>
+                )}
                 
-                <ChatBubble text="Oh boy! You will manage. Just don't be late." position="left" />
-                <ChatBubble text="Oh boy! You will manage. Just don't be late." position="left" />
 
-                <View style={{ height: 35 }} />
-                <Text style={styles.timeCenter}>10:00 PM</Text>
-
-                <ChatBubble text="On my" position="right" />
-                <ChatBubble text="I may be late" position="right" />
-                <ChatBubble text="Ooooopsi" position="right" />
-                <ChatBubble text="JK. I'm here :D" position="right" />
-
-                {/* Image Message Card */}
-                <Animated.View 
-                  entering={FadeInRight.delay(200)}
-                  style={styles.imageCardContainer}
-                >
-                   <Image source={{ uri: IMAGES.chatImage }} style={styles.chatImageCard} />
-                </Animated.View>
-              </ScrollView>
+                              </ScrollView>
 
               <MessageInputBar />
             </View>
@@ -438,44 +848,62 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false} style={styles.chatListScroll}>
-                <ChatListItem name="Ethan Reynolds" msg="Ethan: R u here?" time="" unread active={false} avatar={IMAGES.ethan} />
-                <ChatListItem name="Ava Thompson" msg="Ava: LOL" time="" unread active={false} avatar={IMAGES.ava} />
+                {contacts
+                  .filter((contact) => contact.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map((contact) => (
+                    <ChatListItem
+                      key={contact.email}
+                      name={contact.name}
+                      msg={contact.lastMessage || 'No chats, start by saying Hello'}
+                      time={contact.lastMessageTime || ''}
+                      unread={false}
+                      avatar={contact.profilePic || DEFAULT_AVATAR}
+                      onPress={() => setSelectedContact(contact)}
+                    />
+                  ))}
               </ScrollView>
             </View>
 
             {/* Chat Window - Middle (from ConnectScreen) */}
             <View style={styles.chatWindow}>
               {/* Subtle Pattern Overlay */}
-              <View style={styles.patternOverlay} pointerEvents="none" />
+              <View style={styles.patternOverlay} style={{pointerEvents:"none"}} />
               
-              <ChatHeader name="Rajiv Sharma" avatar={IMAGES.rajiv} status="Online now" />
+              <ChatHeader 
+                name={selectedContact?.name || ''} 
+                avatar={selectedContact?.profilePic || DEFAULT_AVATAR} 
+                status="Online now" 
+              />
               
               <ScrollView 
                 style={styles.messagesArea} 
                 contentContainerStyle={styles.messagesContent}
                 showsVerticalScrollIndicator={false}
               >
-                <Text style={styles.dateCenter}>Tuesday 9:11 PM</Text>
+                {selectedContact ? (
+                  messages[selectedContact.name]?.map((message) => (
+                    <ChatBubble 
+                      key={message.id} 
+                      text={message.text} 
+                      position={message.sender === 'me' ? 'right' : 'left'} 
+                    />
+                  )) || (
+                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                      <Text style={{ color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
+                        No messages yet. Start the conversation!
+                      </Text>
+                    </View>
+                  )
+                ) : (
+                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                    <Text style={{ color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
+                      Select a contact to start chatting
+                    </Text>
+                  </View>
+                )}
                 
-                <ChatBubble text="Oh boy! You will manage. Just don't be late." position="left" />
-                <ChatBubble text="Oh boy! You will manage. Just don't be late." position="left" />
 
-                <View style={{ height: 35 }} />
-                <Text style={styles.timeCenter}>10:00 PM</Text>
-
-                <ChatBubble text="On my" position="right" />
-                <ChatBubble text="I may be late" position="right" />
-                <ChatBubble text="Ooooopsi" position="right" />
-                <ChatBubble text="JK. I'm here :D" position="right" />
-
-                {/* Image Message Card */}
-                <Animated.View 
-                  entering={FadeInRight.delay(200)}
-                  style={styles.imageCardContainer}
-                >
-                   <Image source={{ uri: IMAGES.chatImage }} style={styles.chatImageCard} />
-                </Animated.View>
-              </ScrollView>
+                              </ScrollView>
 
               <MessageInputBar />
             </View>
@@ -534,41 +962,61 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} style={styles.chatListScroll}>
-            <ChatListItem name="Ethan Reynolds" msg="Ethan: R u here?" time="" unread active={false} avatar={IMAGES.ethan} />
-            <ChatListItem name="Ava Thompson" msg="Ava: LOL" time="" unread active={false} avatar={IMAGES.ava} />
+            {contacts
+              .filter((contact) => contact.name.toLowerCase().includes(searchQuery.toLowerCase()))
+              .map((contact) => (
+                <ChatListItem
+                  key={contact.email}
+                  name={contact.name}
+                  msg={contact.lastMessage || 'No chats, start by saying Hello'}
+                  time={contact.lastMessageTime || ''}
+                  unread={false}
+                  avatar={contact.profilePic || DEFAULT_AVATAR}
+                  onPress={() => setSelectedContact(contact)}
+                />
+              ))}
           </ScrollView>
         </View>
 
         {/* Chat Window for mobile */}
         <View style={styles.chatWindow}>
-          <View style={styles.patternOverlay} pointerEvents="none" />
+          <View style={styles.patternOverlay} style={{pointerEvents:"none"}} />
           
-          <ChatHeader name="Rajiv Sharma" avatar={IMAGES.rajiv} status="Online now" />
+          <ChatHeader 
+            name={selectedContact?.name || ''} 
+            avatar={selectedContact?.profilePic || DEFAULT_AVATAR} 
+            status="Online now" 
+          />
           
           <ScrollView 
             style={styles.messagesArea} 
             contentContainerStyle={styles.messagesContent}
             showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.dateCenter}>Tuesday 9:11 PM</Text>
+            {selectedContact ? (
+                  messages[selectedContact.name]?.map((message) => (
+                    <ChatBubble 
+                      key={message.id} 
+                      text={message.text} 
+                      position={message.sender === 'me' ? 'right' : 'left'} 
+                    />
+                  )) || (
+                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                      <Text style={{ color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
+                        No messages yet. Start the conversation!
+                      </Text>
+                    </View>
+                  )
+                ) : (
+                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                    <Text style={{ color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
+                      Select a contact to start chatting
+                    </Text>
+                  </View>
+                )}
             
-            <ChatBubble text="Oh boy! You will manage. Just don't be late." position="left" />
-            <ChatBubble text="Oh boy! You will manage. Just don't be late." position="left" />
-
             <View style={{ height: 35 }} />
-            <Text style={styles.timeCenter}>10:00 PM</Text>
 
-            <ChatBubble text="On my" position="right" />
-            <ChatBubble text="I may be late" position="right" />
-            <ChatBubble text="Ooooopsi" position="right" />
-            <ChatBubble text="JK. I'm here :D" position="right" />
-
-            <Animated.View 
-              entering={FadeInRight.delay(200)}
-              style={styles.imageCardContainer}
-            >
-               <Image source={{ uri: IMAGES.chatImage }} style={styles.chatImageCard} />
-            </Animated.View>
           </ScrollView>
 
           <MessageInputBar />
@@ -620,8 +1068,8 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
 }
 
 // Helper components from ConnectScreen
-const ChatListItem = ({ name, msg, time, unread, avatar, online, active }: any) => (
-  <TouchableOpacity style={[styles.chatItem, active && styles.chatItemActive]}>
+const ChatListItem = ({ name, msg, time, unread, avatar, online, active, onPress }: any) => (
+  <TouchableOpacity style={[styles.chatItem, active && styles.chatItemActive]} onPress={onPress}>
     <View style={styles.chatAvatarWrapper}>
       <Image source={{ uri: avatar }} style={styles.listAvatar} />
       {online && <View style={styles.statusOnline} />}
@@ -666,32 +1114,6 @@ const ChatBubble = ({ text, position }: any) => (
     </View>
   </Animated.View>
 );
-
-const MessageInputBar = () => {
-   const [isFocused, setIsFocused] = useState(false);
-   return (
-      <View style={styles.msgInputWrapper}>
-        <View style={[styles.msgInputInner, isFocused && styles.msgInputFocused]}>
-          <View style={styles.msgIconsL}>
-            <TouchableOpacity style={styles.msgIcon}><Ionicons name="add" size={24} color={COLORS.textMuted} /></TouchableOpacity>
-            <TouchableOpacity style={styles.msgIcon}><Ionicons name="image-outline" size={22} color={COLORS.textMuted} /></TouchableOpacity>
-            <TouchableOpacity style={styles.msgIcon}><Ionicons name="attach-outline" size={22} color={COLORS.textMuted} /></TouchableOpacity>
-          </View>
-          <TextInput 
-            style={styles.msgTextEntry} 
-            placeholder="Aa" 
-            placeholderTextColor={COLORS.textMuted} 
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-          />
-          <View style={styles.msgIconsR}>
-            <TouchableOpacity style={styles.msgIcon}><Feather name="smile" size={20} color={COLORS.textMuted} /></TouchableOpacity>
-            <TouchableOpacity style={styles.msgSendBtn}><Ionicons name="send" size={20} color={COLORS.primaryBlue} /></TouchableOpacity>
-          </View>
-        </View>
-      </View>
-   );
-};
 
 // Web-only styles (same as MyTuitions.tsx)
 const ws = StyleSheet.create({

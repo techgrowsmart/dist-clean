@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { 
+import { Platform } from 'react-native'; import React, { useState, useEffect, useCallback } from 'react';
+import {   
   View, 
   Text, 
   StyleSheet, 
@@ -14,12 +14,12 @@ import {
   SafeAreaView,
   StatusBar
 } from 'react-native';
-import { useFonts } from 'expo-font';
-import { Ionicons } from '@expo/vector-icons';
+import {   useFonts } from 'expo-font';
+import {   Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
-import { BASE_URL } from '../../../config';
-import { getAuthData } from '../../../utils/authStorage';
-import { useNavigation } from '@react-navigation/native';
+import {   BASE_URL } from '../../../config';
+import {   getAuthData } from '../../../utils/authStorage';
+import {  useNavigation } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -623,10 +623,27 @@ const styles = StyleSheet.create({
     marginBottom: 15, 
     borderWidth: 4, 
     borderColor: '#fff', 
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 3 }, 
-    shadowOpacity: 0.2, 
-    shadowRadius: 5, 
+    ...Platform.select({
+ 
+      web: {
+ 
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+ 
+      },
+ 
+      default: {
+ 
+        shadowColor: '#000',
+ 
+        shadowOffset: { width: 0, height: 4 },
+ 
+        shadowOpacity: 0.3,
+ 
+        shadowRadius: 8,
+ 
+      },
+ 
+    }), 
     elevation: 5 
   },
   profileImage: { 
@@ -685,10 +702,27 @@ const styles = StyleSheet.create({
     marginHorizontal: 20, 
     marginBottom: 20, 
     padding: 25, 
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 2 }, 
-    shadowOpacity: 0.08, 
-    shadowRadius: 8, 
+    ...Platform.select({
+ 
+      web: {
+ 
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+ 
+      },
+ 
+      default: {
+ 
+        shadowColor: '#000',
+ 
+        shadowOffset: { width: 0, height: 4 },
+ 
+        shadowOpacity: 0.3,
+ 
+        shadowRadius: 8,
+ 
+      },
+ 
+    }), 
     elevation: 3, 
     borderWidth: 1, 
     borderColor: '#F0F0F0' 
@@ -768,10 +802,27 @@ const styles = StyleSheet.create({
     borderRadius: 20, 
     padding: 20, 
     marginBottom: 15, 
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 2 }, 
-    shadowOpacity: 0.08, 
-    shadowRadius: 8, 
+    ...Platform.select({
+ 
+      web: {
+ 
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+ 
+      },
+ 
+      default: {
+ 
+        shadowColor: '#000',
+ 
+        shadowOffset: { width: 0, height: 4 },
+ 
+        shadowOpacity: 0.3,
+ 
+        shadowRadius: 8,
+ 
+      },
+ 
+    }), 
     elevation: 3, 
     borderWidth: 1, 
     borderColor: '#F0F0F0' 

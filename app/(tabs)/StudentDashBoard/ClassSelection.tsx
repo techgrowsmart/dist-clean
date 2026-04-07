@@ -358,7 +358,7 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
     if (itemName === "Profile") router.push("/(tabs)/StudentDashBoard/Profile");
     if (itemName === "Billing") router.push({ pathname: "/(tabs)/Billing", params: { userEmail, userType: userRole } });
     if (itemName === "Faq") router.push("/(tabs)/StudentDashBoard/Faq");
-    if (itemName === "Share") router.push({ pathname: "/(tabs)/StudentDashBoard/Share", params: { userEmail, studentName, profileImage } });
+    if (itemName === "Share") router.push({ pathname: "/(tabs)/StudentDashBoard/Share", params: { userEmail, studentName: "Student", profileImage: null } });
     if (itemName === "Subscription") router.push({ pathname: "/(tabs)/StudentDashBoard/Subscription", params: { userEmail } });
     if (itemName === "Terms") router.push("/(tabs)/StudentDashBoard/TermsAndConditions");
     if (itemName === "Contact Us") router.push("/(tabs)/Contact");
@@ -404,17 +404,10 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
             activeItem={sidebarActiveItem}
             onItemPress={handleSidebarItemPress}
             userEmail={userEmail || "student@example.com"}
+            studentName="Student"
+            profileImage={null}
           />
         )}
-
-        {/* ── LEFT SIDEBAR (reused component) ── */}
-        <Sidebar
-          visible={!isDesktop}
-          onClose={() => {}}
-          activeItem={activeMenu}
-          onItemPress={handleSidebarItemPress}
-          userEmail={userEmail || "student@example.com"}
-        />
 
         {/* ── MAIN AREA ── */}
         <View style={styles.mainLayout}>

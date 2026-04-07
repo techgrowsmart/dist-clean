@@ -1,17 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Picker } from "@react-native-picker/picker";
-import axios from "axios";
+import {   Picker } from "@react-native-picker/picker";
+import { api } from "../../../services/apiService";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import moment from "moment";
-import React, { useEffect, useState } from "react";
-import {
+ import React, { useEffect, useState } from "react";
+import { Platform, 
   Alert,
   Dimensions,
   Image,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,22 +20,20 @@ import {
   BackHandler,
   ActivityIndicator,
 } from "react-native";
-import { Calendar } from "react-native-calendars";
+
+import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
+import { isTablet } from '../../../utils/devices';
+
+import {   Calendar } from "react-native-calendars";
 import BackButton from "../../../components/BackButton";
 import Building from "../../../assets/svgIcons/Building";
 import Menubook from "../../../assets/svgIcons/MenuBook";
 import Pencil from "../../../assets/svgIcons/Pencil";
-import { BASE_URL } from "../../../config";
-import { getAuthData } from "../../../utils/authStorage";
+import {   BASE_URL } from "../../../config";
+import {   getAuthData } from "../../../utils/authStorage";
 import TeacherWebHeader from '../../../components/ui/TeacherWebHeader';
 import TeacherWebSidebar from '../../../components/ui/TeacherWebSidebar';
-
-import {
-  heightPercentageToDP as hp,
-  widthPercentageToDP as wp,
-} from "react-native-responsive-screen";
-import { isTablet } from "../../../utils/devices";
-import { Feather, MaterialIcons } from "@expo/vector-icons";
+import { MaterialIcons, Feather } from "@expo/vector-icons";
 
 interface FormErrors {
   introduction?: string;
@@ -402,10 +399,9 @@ const fetchUserStatus = async () => {
       "Content-Type": "application/json",
     };
 
-    const response = await axios.post(
-      BASE_URL + "/api/userProfile",
-      { email: auth.email },
-      { headers }
+    const response = await api.post(
+      "/api/userProfile",
+      { email: auth.email }
     );
 
     if (response.data && response.data.status) {
@@ -446,10 +442,9 @@ useEffect(() => {
 
       // Try to fetch from backend first
       try {
-        const response = await axios.post(
-          BASE_URL + "/api/teacherProfile",
-          { email },
-          { headers }
+        const response = await api.post(
+          "/api/teacherProfile",
+          { email }
         );
 
         if (response.status === 200 && response.data) {
@@ -692,11 +687,8 @@ useEffect(() => {
           "Content-Type": "application/json",
         };
 
-        const res = await axios.get(
-          BASE_URL + "/review?email=" + encodedEmail,
-          {
-            headers,
-          }
+        const res = await api.get(
+          "/review?email=" + encodedEmail
         );
 
         console.log("✅ Reviews:", res.data.reviews);
@@ -778,7 +770,7 @@ useEffect(() => {
       formData.append("name", name);
 
       console.log("Uploading image...");
-      const response = await fetch(BASE_URL + "/api/uploadTeacherimg", {
+      const response = await fetch(`${BASE_URL}/api/uploadTeacherimg`, {
         method: "POST",
         body: formData,
         headers: {
@@ -843,7 +835,7 @@ useEffect(() => {
   useEffect(() => {
     const fetchEducationData = async () => {
       try {
-        const res = await axios.get(BASE_URL + "/api/valuesToselect");
+        const res = await api.get("/api/valuesToselect");
 
         const boards =
           res.data.find((item: any) => item.id === "Subject teacher")?.boards ||
@@ -1079,8 +1071,8 @@ const validateTimeRange = () => {
   };
 
   // ✅ FIRST: Update teachers1 table (existing code)
-  await axios.post(
-  BASE_URL + "/api/teacherss",
+  await api.post(
+  "/api/teacherss",
   {
     fullName: teacherName,
     email,
@@ -1092,8 +1084,7 @@ const validateTimeRange = () => {
     teachingMode,
     workExperience,
     university: university, // ✅ Add this line
-  },
-  { headers }
+  }
 );
 
   // try {
@@ -1701,7 +1692,7 @@ const validateTimeRange = () => {
 </View>
 
                 {/* Timing */}
-                <View style={styles.timecontainer} pointerEvents="box-none">
+                <View style={styles.timecontainer} style={{pointerEvents:"box-none"}}>
                   <TouchableOpacity
                     // Replace these three onPress handlers:
                     onPress={() => {
@@ -2292,7 +2283,7 @@ const styles = StyleSheet.create({
   flex: 1,
   minHeight: hp('6%'),
 },
-selectedDaysContent: {
+  selectedDaysContent: {
   flexDirection: 'row',
   alignItems: 'center',
   gap: wp('2%'),

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import {
+import {  
+  Platform,
   StyleSheet,
   View,
   Text,
@@ -11,31 +12,63 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   TouchableWithoutFeedback,
-  Platform,
   Keyboard,
   Alert,
   SafeAreaView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import {
-  widthPercentageToDP as wp,
-  heightPercentageToDP as hp,
-} from 'react-native-responsive-screen';
-import {
-  useFonts,
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-} from '@expo-google-fonts/poppins';
-import { MaterialCommunityIcons, Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
-import { getAuthToken, getAuthData } from '../../../utils/authStorage';
+
+import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
+
+import {   MaterialCommunityIcons, Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
+import {   getAuthToken, getAuthData } from '../../../utils/authStorage';
 import axios from 'axios';
-import { BASE_URL } from '../../../config';
+import {   BASE_URL } from '../../../config';
 import TeacherWebHeader from '../../../components/ui/TeacherWebHeader';
 import TeacherWebSidebar from '../../../components/ui/TeacherWebSidebar';
 import TeacherThoughtsCard, { TeacherThoughtsBackground } from '../../../components/ui/TeacherThoughtsCard';
 import TeacherPostComposer from '../../../components/ui/TeacherPostComposer';
+import { Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
+import { useFonts } from 'expo-font';
+import { useRouter } from 'expo-router';
+
+// Enhanced responsive state and helper functions
+const getResponsiveValues = (width: number) => {
+  const isSmallMobile = width < 480;
+  const isMobile = width < 768;
+  const isTablet = width >= 768 && width < 1024;
+  const isDesktop = width >= 1024;
+
+  const getFontSize = (mobile: number, tablet: number, desktop: number) => {
+    if (isSmallMobile) return mobile * 0.9;
+    if (isMobile) return mobile;
+    if (isTablet) return tablet;
+    return desktop;
+  };
+
+  const getSpacing = (mobile: number, tablet: number, desktop: number) => {
+    if (isSmallMobile) return mobile * 0.8;
+    if (isMobile) return mobile;
+    if (isTablet) return tablet;
+    return desktop;
+  };
+
+  const getDimension = (mobile: number, tablet: number, desktop: number) => {
+    if (isSmallMobile) return mobile * 0.85;
+    if (isMobile) return mobile;
+    if (isTablet) return tablet;
+    return desktop;
+  };
+
+  return {
+    isSmallMobile,
+    isMobile,
+    isTablet,
+    isDesktop,
+    getFontSize,
+    getSpacing,
+    getDimension
+  };
+};
 
 // FormField Component
 const FormField = ({ label, placeholder, isDropdown, half, multiline, value, onChangeText, maxLength, items }: any) => {
@@ -246,6 +279,24 @@ const resolvePostAuthor = (post: any) => {
 
 const CreateSubject = () => {
   const router = useRouter();
+  
+  // Enhanced responsive state management
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+  const [screenHeight, setScreenHeight] = useState(Dimensions.get('window').height);
+  
+  // Get responsive values
+  const responsive = getResponsiveValues(screenWidth);
+  const { isMobile, isTablet, isDesktop, getFontSize, getSpacing, getDimension } = responsive;
+  
+  // Update dimensions on change
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setScreenWidth(window.width);
+      setScreenHeight(window.height);
+    });
+    return () => subscription?.remove();
+  }, []);
+
   let [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -1246,10 +1297,27 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: COLORS.primaryBlue,
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 2,
   },
   loadingContainer: {
@@ -1270,10 +1338,27 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 4,
     marginBottom: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 2,
   },
   tab: {
@@ -1314,10 +1399,27 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: 16,
     padding: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.03,
-    shadowRadius: 20,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 5,
     marginBottom: 30,
     position: 'relative',
@@ -1397,10 +1499,27 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 15 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 10,
   },
   dropdownOption: {
@@ -1462,10 +1581,27 @@ const styles = StyleSheet.create({
     padding: 25,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 15,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 3,
   },
   infoIconBox: {
@@ -1557,10 +1693,27 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 20,
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 3,
   },
   postHeader: {

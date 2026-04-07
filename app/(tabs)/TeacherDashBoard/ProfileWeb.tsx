@@ -1,5 +1,6 @@
+import { Platform } from 'react-native'; 
 import React, { useState, useEffect, useCallback } from 'react';
-import {
+import { 
   StyleSheet,
   View,
   Text,
@@ -9,30 +10,16 @@ import {
   Image,
   Dimensions,
   ActivityIndicator,
-  Platform,
   Alert,
   Modal,
   BackHandler,
+  Animated,
 } from 'react-native';
-import {
-  widthPercentageToDP as wp,
-  heightPercentageToDP as hp,
-} from 'react-native-responsive-screen';
-import {
-  useFonts,
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-} from '@expo-google-fonts/poppins';
-import { MaterialCommunityIcons, Ionicons, FontAwesome5, Octicons, MaterialIcons, Feather } from '@expo/vector-icons';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  withDelay,
-} from 'react-native-reanimated';
+
+import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
+import { useFonts } from 'expo-font';
+import { Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
+import { FontAwesome5, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import moment from 'moment';
@@ -44,6 +31,8 @@ import { useRouter } from 'expo-router';
 import { BASE_URL } from '../../../config';
 import { getAuthData } from '../../../utils/authStorage';
 import { UXButton, UXCard, UXLoading, UXBadge, UX_COLORS, UX_CONSTANTS } from '../../../components/ux/UXComponents';
+import { useSharedValue, withDelay, withTiming, withSpring, useAnimatedStyle } from 'react-native-reanimated';
+import { api } from '../../../services/apiService';
 
 // Data Interfaces
 interface FormErrors {
@@ -117,7 +106,6 @@ export default function ProfileWeb() {
   const router = useRouter();
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
-    Poppins_500Medium,
     Poppins_600SemiBold,
     Poppins_700Bold,
   });
@@ -279,7 +267,10 @@ export default function ProfileWeb() {
   const fetchUserProfile = async (token: string, email: string) => {
     try {
       if (userProfileCache.has(email)) return userProfileCache.get(email)!;
-      const response = await axios.post(`${BASE_URL}/api/userProfile`, { email }, { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` } });
+      const response = await api.post(
+        "/api/userProfile",
+        { email }
+      );
       if (response.data) {
         const profilePic = response.data.profileimage || response.data.profilePic || response.data.profilepic || response.data.profile_image;
         const userName = response.data.name || response.data.userName || response.data.fullname || response.data.displayName;
@@ -287,7 +278,9 @@ export default function ProfileWeb() {
         setUserProfileCache(prev => new Map(prev.set(email, profileData)));
         return profileData;
       }
-    } catch {}
+    } catch {
+      console.error('Error fetching user profile:', error);
+    }
     return { name: 'Unknown User', profilePic: '' };
   };
 
@@ -295,14 +288,14 @@ export default function ProfileWeb() {
   const fetchPosts = async (token: string) => {
     try {
       setPostsLoading(true);
-      const res = await axios.get(`${BASE_URL}/api/posts/all`, { 
-        headers: { 'Authorization': `Bearer ${token}` } 
-      });
-      if (res.data.success) {
+      const res = await api.get(
+        "/api/posts/all"
+      );
+      if (res.success) {
         // Get unique emails from all posts and fetch their profiles
-        const uniqueEmails = [...new Set(res.data.data.map((p: any) => p.author?.email as string).filter((email: string) => Boolean(email)))];
+        const uniqueEmails = [...new Set(res.data.map((p: any) => p.author?.email as string).filter((email: string) => Boolean(email)))];
         await Promise.all(uniqueEmails.map((email: string) => fetchUserProfile(token, email)));
-        setPosts(res.data.data);
+        setPosts(res.data);
       }
     } catch (error) {
       console.error('Error fetching posts:', error);
@@ -334,32 +327,26 @@ export default function ProfileWeb() {
     }
 
     try {
-      const response = await axios.post(
-        `${BASE_URL}/api/posts/create`,
+      const response = await api.post(
+        "/api/posts/create",
         {
           content: content.trim(),
           tags: '' // Backend expects comma-separated string, not array
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          }
         }
       );
 
-      if (response.data.success) {
+      if (response.success) {
         // Refresh posts to include the new one
         if (authToken) {
           await fetchPosts(authToken);
         }
         return response.data;
       } else {
-        throw new Error(response.data.message || 'Failed to create post');
+        throw new Error(response.message || 'Failed to create post');
       }
     } catch (error: any) {
       console.error('Error creating post:', error);
-      throw new Error(error.response?.data?.message || 'Failed to create post. Please try again.');
+      throw new Error(error.message || 'Failed to create post. Please try again.');
     }
   };
 
@@ -393,12 +380,13 @@ export default function ProfileWeb() {
     try {
       const auth = await getAuthData();
       if (!auth?.token) return;
-      const response = await axios.post(`${BASE_URL}/api/userProfile`, { email: auth.email }, {
-        headers: { Authorization: `Bearer ${auth.token}`, 'Content-Type': 'application/json' }
-      });
+      const response = await api.post(
+        "/api/userProfile",
+        { email: auth.email }
+      );
       if (response.data?.status) setUserStatus(response.data.status);
     } catch (error: any) {
-      console.error("Error fetching user status:", error?.response?.status || error?.message);
+      console.error("Error fetching user status:", error?.message || error);
     }
   }, []);
 
@@ -416,7 +404,10 @@ export default function ProfileWeb() {
       const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
       try {
-        const response = await axios.post(`${BASE_URL}/api/teacherProfile`, { email }, { headers });
+        const response = await api.post(
+          "/api/teacherProfile",
+          { email }
+        );
         if (response.status === 200 && response.data) {
           const profileData = response.data;
           setIsExistingProfile(true);
@@ -513,16 +504,16 @@ export default function ProfileWeb() {
       const auth = await getAuthData();
       if (!auth?.token) return;
       const encodedEmail = encodeURIComponent(userEmail);
-      const response = await axios.get(`${BASE_URL}/review?email=${encodedEmail}`, {
-        headers: { Authorization: `Bearer ${auth.token}`, 'Content-Type': 'application/json' }
-      });
+      const response = await api.get(
+        "/review?email=" + encodedEmail
+      );
       setReviews(response.data.reviews || []);
       const ratings = response.data.reviews.map((r: any) => Number(r.rating));
       const countByStars = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
       ratings.forEach(rating => { if (rating >= 1 && rating <= 5) countByStars[rating as keyof typeof countByStars]++; });
       setRatingsCount(countByStars);
     } catch (error: any) {
-      console.error("Failed to fetch reviews:", error?.response?.status || error?.message);
+      console.error("Failed to fetch reviews:", error?.message || error);
     } finally {
       setReviewsLoading(false);
     }
@@ -531,10 +522,10 @@ export default function ProfileWeb() {
   // Fetch Education Data
   const fetchEducationData = useCallback(async () => {
     try {
-      const response = await axios.get(`${BASE_URL}/api/valuesToselect`);
-      const boards = response.data.find((item: any) => item.id === "Subject teacher")?.boards || [];
-      const skills = response.data.find((item: any) => item.id === "Skill teacher")?.skills || [];
-      setEducationData(response.data);
+      const res = await api.get("/api/valuesToselect");
+      const boards = res.data.find((item: any) => item.id === "Subject teacher")?.boards || [];
+      const skills = res.data.find((item: any) => item.id === "Skill teacher")?.skills || [];
+      setEducationData(res.data);
       if (boards.length > 0) {
         const defaultBoard = boards[0];
         const defaultClass = defaultBoard.classes?.[0]?.name;
@@ -655,18 +646,21 @@ export default function ProfileWeb() {
         }
       });
 
-      await axios.post(`${BASE_URL}/api/teacherss`, {
-        fullName: teacherName,
-        email,
-        profilePic: imageUrl,
-        introduction,
-        qualifications: filteredQualifications,
-        category: selectedCategory,
-        tuitions: cleanedTuitions,
-        teachingMode,
-        workExperience,
-        university,
-      }, { headers });
+      const response = await api.post(
+        "/api/teacherss",
+        {
+          fullName: teacherName,
+          email,
+          profilePic: imageUrl,
+          introduction,
+          qualifications: filteredQualifications,
+          category: selectedCategory,
+          tuitions: cleanedTuitions,
+          teachingMode,
+          workExperience,
+          university,
+        }
+      );
 
       await AsyncStorage.multiSet([
         ["teacherName", teacherName],

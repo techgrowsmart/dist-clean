@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
+  Platform,
   View,
   Text,
   FlatList,
@@ -9,7 +10,6 @@ import {
   Dimensions,
   ScrollView,
   ActivityIndicator,
-  Platform,
   SafeAreaView,
   Alert,
   Modal,
@@ -136,8 +136,8 @@ export default function SubjectSelection({
 
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
-  const [activeMenu, setActiveMenu] = useState("Subject Selection");
-  const [sidebarActiveItem, setSidebarActiveItem] = useState("Subject Selection");
+  const [activeMenu, setActiveMenu] = useState("Home");
+  const [sidebarActiveItem, setSidebarActiveItem] = useState("Home");
   const [unreadCount, setUnreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [studentName, setStudentName] = useState("");
@@ -529,16 +529,6 @@ export default function SubjectSelection({
             profileImage={profileImage}
           />
         )}
-
-        {/* ── LEFT SIDEBAR (reused component) ── */}
-        <Sidebar
-          activeMenu={activeMenu}
-          onItemPress={handleSidebarItemPress}
-          studentName={studentName}
-          profileImage={profileImage}
-          userEmail={userEmail}
-          userRole={userRole}
-        />
 
         {/* ── MAIN AREA ── */}
         <View style={styles.mainLayout}>

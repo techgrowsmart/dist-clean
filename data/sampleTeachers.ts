@@ -115,13 +115,13 @@ import { BASE_URL } from "../config";
 
 export async function getTeacherCountByBoardAPI() {
   const res = await fetch(
-    `https://${BASE_URL}/api/teachers/count-by-board`
+    `${BASE_URL}/api/teachers/count-by-board`
   );
   return await res.json(); // { "CBSE": 3, "ICSE": 2, ... }
 }
 export async function getClassesByBoardAPI(board: string | number | boolean) {
   const res = await fetch(
-    `https://${BASE_URL}/api/teachers/classes?board=${encodeURIComponent(
+    `${BASE_URL}/api/teachers/classes?board=${encodeURIComponent(
       board
     )}`
   );
@@ -132,7 +132,7 @@ export async function getTeachersAPI(board: any, className: any, subject: string
   if (subject) query.append("subject", subject);
 
   const res = await fetch(
-    `https://${BASE_URL}/api/teachers?${query.toString()}`
+    `${BASE_URL}/api/teachers?${query.toString()}`
   );
   return await res.json(); // array of teacher objects
 }

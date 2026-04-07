@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
+import { 
   StyleSheet,
   View,
   Text,
@@ -12,11 +12,11 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import {
+import { 
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from 'react-native-responsive-screen';
-import {
+import { 
   useFonts,
   Poppins_400Regular,
   Poppins_500Medium,
@@ -31,14 +31,15 @@ import Animated, {
   withSpring,
   withDelay,
 } from 'react-native-reanimated';
+import axios from 'axios';
 import TeacherWebHeader from '../../../components/ui/TeacherWebHeader';
 import TeacherWebSidebar from '../../../components/ui/TeacherWebSidebar';
-import TeacherThoughtsCard, { TeacherThoughtsBackground } from '../../../components/ui/TeacherThoughtsCard';
+import ThoughtsCard from '../StudentDashBoard/ThoughtsCard';
 import TeacherPostComposer from '../../../components/ui/TeacherPostComposer';
 import { useRouter } from 'expo-router';
 import { BASE_URL } from '../../../config';
-import axios from 'axios';
 import { getAuthData } from '../../../utils/authStorage';
+import { api } from '../../../services/apiService';
 
 // Global Design Tokens
 const COLORS = {
@@ -56,41 +57,6 @@ const COLORS = {
   bannerTint: '#EEF2FF',
 };
 
-const SUBJECT_DATA = [
-  {
-    id: 1,
-    title: 'Mathematics',
-    class: 'Class 8 | CBSE',
-    status: 'ACTIVE',
-    image: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=2070&auto=format&fit=crop',
-    icon: 'calculator',
-  },
-  {
-    id: 2,
-    title: 'Science',
-    class: 'Class 8 | CBSE',
-    status: 'ACTIVE',
-    image: 'https://images.unsplash.com/photo-1576086213369-97a306d36557?q=80&w=2080&auto=format&fit=crop',
-    icon: 'flask',
-  },
-  {
-    id: 3,
-    title: 'Social Studies',
-    class: 'Class 8 | CBSE',
-    status: 'ACTIVE',
-    image: 'https://images.unsplash.com/photo-1548345680-f5475ee511d7?q=80&w=2070&auto=format&fit=crop',
-    icon: 'globe-americas',
-  },
-  {
-    id: 4,
-    title: 'Physics',
-    class: 'Class 9 | IGCSE',
-    status: 'ACTIVE',
-    image: 'https://images.unsplash.com/photo-1632571401005-458b9d244392?q=80&w=2070&auto=format&fit=crop',
-    icon: 'lightbulb',
-  },
-];
-
 export default function MySubjectsWeb() {
   const router = useRouter();
   const [fontsLoaded] = useFonts({
@@ -100,70 +66,123 @@ export default function MySubjectsWeb() {
     Poppins_700Bold,
   });
 
+  // States
   const [sidebarActiveItem, setSidebarActiveItem] = useState('My Subjects');
-  const [teacherName, setTeacherName] = useState('John Doe');
+  const [teacherName, setTeacherName] = useState('');
   const [profileImage, setProfileImage] = useState(null);
-  const [userEmail, setUserEmail] = useState('teacher@example.com');
-  const [isMobile, setIsMobile] = useState(Dimensions.get('window').width < 768);
-  const [isTablet, setIsTablet] = useState(Dimensions.get('window').width >= 768 && Dimensions.get('window').width < 1024);
+  const [userEmail, setUserEmail] = useState('');
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+  const [screenHeight, setScreenHeight] = useState(Dimensions.get('window').height);
+  
+  // Enhanced responsive breakpoints
+  const isSmallMobile = screenWidth < 480;
+  const isMobile = screenWidth < 768;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
+  const isDesktop = screenWidth >= 1024;
+  
+  // Dynamic helper functions
+  const getFontSize = (mobile: number, tablet: number, desktop: number) => {
+    if (isSmallMobile) return mobile * 0.9;
+    if (isMobile) return mobile;
+    if (isTablet) return tablet;
+    return desktop;
+  };
+  
+  const getSpacing = (mobile: number, tablet: number, desktop: number) => {
+    if (isSmallMobile) return mobile * 0.8;
+    if (isMobile) return mobile;
+    if (isTablet) return tablet;
+    return desktop;
+  };
+  
   const [showSidebar, setShowSidebar] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [thoughtsExpanded, setThoughtsExpanded] = useState(false);
 
-  // Teacher Posts Data for Thoughts (same as ConnectWeb)
-  const [posts, setPosts] = useState<any[]>([
-    {
-      id: '1',
-      author: {
-        email: 'teacher@example.com',
-        name: 'John Teacher',
-        profile_pic: null,
-        role: 'teacher'
-      },
-      content: 'Welcome to My Subjects! This is your space to share thoughts and updates with your students.',
-      likes: 12,
-      isLiked: false,
-      comments: [],
-      createdAt: new Date().toISOString(),
-      postImages: []
-    },
-    {
-      id: '2',
-      author: {
-        email: 'teacher@example.com',
-        name: 'John Teacher',
-        profile_pic: null,
-        role: 'teacher'
-      },
-      content: 'Remember to check your subject materials and prepare for upcoming classes.',
-      likes: 8,
-      isLiked: false,
-      comments: [],
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      postImages: []
-    },
-    {
-      id: '3',
-      author: {
-        email: 'teacher@example.com',
-        name: 'John Teacher',
-        profile_pic: null,
-        role: 'teacher'
-      },
-      content: 'Great work on recent assignments! Keep up the excellent progress.',
-      likes: 15,
-      isLiked: false,
-      comments: [],
-      createdAt: new Date(Date.now() - 172800000).toISOString(),
-      postImages: []
-    }
-  ]); // Initialize with mock data immediately
-  const [postsLoading, setPostsLoading] = useState(false); // Start with false since we have initial data
+  // Teacher Posts Data for Thoughts (using Post interface from ThoughtsCard)
+  const [posts, setPosts] = useState<any[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
   const [userProfileCache, setUserProfileCache] = useState<Map<string, { name: string; profilePic: string }>>(new Map());
   const [authToken, setAuthToken] = useState<string | null>(null);
 
+  // Subject data from Profile2.tsx
+  const [teacherSubjects, setTeacherSubjects] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   // Add loading state like TeacherDashboard
   const [isDashboardLoading, setIsDashboardLoading] = useState(true);
+
+  // Update dimensions on change
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setScreenWidth(window.width);
+      setScreenHeight(window.height);
+    });
+    return () => subscription?.remove();
+  }, []);
+
+  // Fetch teacher subjects from Profile2.tsx
+  const fetchTeacherSubjects = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const auth = await getAuthData();
+      if (!auth?.token) {
+        setError('Authentication required');
+        return;
+      }
+      
+      // Fetch teacher profile to get their subjects
+      const response = await api.post(
+        "/api/userProfile",
+        { email: auth.email }
+      );
+      
+      if (response.data && response.data.data && response.data.data.subjects) {
+        const subjects = response.data.data.subjects;
+        setTeacherSubjects(Array.isArray(subjects) ? subjects : []);
+        console.log('Teacher subjects loaded:', subjects.length);
+      } else {
+        // If no subjects in profile, check if they have tuitions
+        const tuitionsResponse = await api.post(
+          "/api/teacherProfile",
+          { email: auth.email }
+        );
+        
+        if (tuitionsResponse.data && tuitionsResponse.data.tuitions) {
+          const tuitions = tuitionsResponse.data.tuitions;
+          const subjectNames = tuitions
+            .filter((t: any) => t.subject && t.subject.trim())
+            .map((t: any) => ({
+              id: Math.random().toString(),
+              title: t.subject,
+              class: t.class || 'Not specified',
+              status: 'ACTIVE',
+              image: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=2070&auto=format&fit=crop',
+              icon: 'calculator'
+            }));
+          setTeacherSubjects(subjectNames);
+          console.log('Subjects extracted from tuitions:', subjectNames.length);
+        } else {
+          setTeacherSubjects([]);
+          console.log('No subjects found in profile or tuitions');
+        }
+      }
+    } catch (err: any) {
+      console.error('Error fetching teacher subjects:', err);
+      setError('Failed to load subjects');
+      setTeacherSubjects([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load teacher subjects on component mount
+  useEffect(() => {
+    fetchTeacherSubjects();
+  }, []);
 
   // Handle sidebar navigation
   const handleSidebarSelect = (item: string) => {
@@ -206,9 +225,6 @@ export default function MySubjectsWeb() {
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       const width = window.width;
-      setIsMobile(width < 768);
-      setIsTablet(width >= 768 && width < 1024);
-      
       // Auto-collapse sidebar on small screens
       if (width < 1024) {
         setSidebarCollapsed(true);
@@ -242,17 +258,17 @@ export default function MySubjectsWeb() {
           setUserEmail(authData.email || '');
           setProfileImage(authData.profileImage || null);
           
-          console.log('Teacher data set, keeping existing mock posts');
-          // Keep the existing mock posts, no need to fetch
+          console.log('Teacher data set, ready for real posts');
+          // Posts will be fetched via fetchPosts function
           setPostsLoading(false);
         } else {
           console.error('No auth data found');
-          // Keep existing mock posts
+          // No auth data, posts will remain empty
           setPostsLoading(false);
         }
       } catch (error) {
         console.error('Error loading teacher data:', error);
-        // Keep existing mock posts
+        // Error loading data, posts will remain empty
         setPostsLoading(false);
       } finally {
         setIsDashboardLoading(false);
@@ -262,7 +278,7 @@ export default function MySubjectsWeb() {
     loadTeacherDataAndPosts();
   }, []);
 
-  // Fetch posts function (same as ConnectWeb)
+  // Fetch posts function (updated for real data only)
   const fetchPosts = async (token: string) => {
     try {
       setPostsLoading(true);
@@ -277,66 +293,62 @@ export default function MySubjectsWeb() {
       
       console.log('Posts API response:', res.data);
       
-      if (res.data.success && res.data.posts) {
-        console.log('Setting posts from API:', res.data.posts.length, 'posts');
-        setPosts(res.data.posts);
+      if (res.data.success && res.data.data) {
+        // Fetch comments for each post and process post data
+        const postsWithComments = await Promise.all(
+          res.data.data.map(async (post: any) => {
+            try {
+              const commentsResponse = await axios.get(`${BASE_URL}/api/posts/${post.id}/comments`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              
+              const comments = commentsResponse.data.success ? commentsResponse.data.data : [];
+              
+              return {
+                ...post,
+                postImage: post.postImage && !post.postImage.startsWith('http')
+                  ? `${BASE_URL}${post.postImage.startsWith('/') ? '' : '/'}${post.postImage}`
+                  : post.postImage,
+                createdAt: post.createdAt,
+                isLiked: post.isLiked || false,
+                comments: comments.map((comment: any) => ({
+                  ...comment,
+                  createdAt: comment.createdAt,
+                  isLiked: false
+                }))
+              };
+            } catch (error) {
+              console.error('Error fetching comments for post:', post.id, error);
+              return {
+                ...post,
+                postImage: post.postImage && !post.postImage.startsWith('http')
+                  ? `${BASE_URL}${post.postImage.startsWith('/') ? '' : '/'}${post.postImage}`
+                  : post.postImage,
+                createdAt: post.createdAt,
+                isLiked: post.isLiked || false,
+                comments: []
+              };
+            }
+          })
+        );
+        
+        // Fetch user profiles for all post authors
+        await fetchUserProfilesForPosts(postsWithComments, token);
+        
+        console.log('Setting posts from API:', postsWithComments.length, 'posts');
+        setPosts(postsWithComments);
       } else {
-        console.log('API response unsuccessful or no posts, using mock data');
+        console.log('API response unsuccessful or no posts, setting empty array');
         setPosts([]);
       }
+      setPostsLoading(false);
     } catch (error) {
       console.error('Error fetching posts:', error);
-      // Always load mock posts as fallback
-      console.log('Loading mock posts as fallback');
-      const mockPosts = [
-        {
-          id: '1',
-          author: {
-            email: 'teacher@example.com',
-            name: 'John Teacher',
-            profile_pic: null,
-            role: 'teacher'
-          },
-          content: 'Welcome to My Subjects! This is your space to share thoughts and updates with your students.',
-          likes: 12,
-          isLiked: false,
-          comments: [],
-          createdAt: new Date().toISOString(),
-          postImages: []
-        },
-        {
-          id: '2',
-          author: {
-            email: 'teacher@example.com',
-            name: 'John Teacher',
-            profile_pic: null,
-            role: 'teacher'
-          },
-          content: 'Remember to check your subject materials and prepare for upcoming classes.',
-          likes: 8,
-          isLiked: false,
-          comments: [],
-          createdAt: new Date(Date.now() - 86400000).toISOString(),
-          postImages: []
-        },
-        {
-          id: '3',
-          author: {
-            email: 'teacher@example.com',
-            name: 'John Teacher',
-            profile_pic: null,
-            role: 'teacher'
-          },
-          content: 'Great work on recent assignments! Keep up the excellent progress.',
-          likes: 15,
-          isLiked: false,
-          comments: [],
-          createdAt: new Date(Date.now() - 172800000).toISOString(),
-          postImages: []
-        }
-      ];
-      console.log('Setting mock posts:', mockPosts.length, 'posts');
-      setPosts(mockPosts);
+      // Don't load mock posts - only show real data
+      console.log('Setting empty posts array - no mock data');
+      setPosts([]);
     } finally {
       setPostsLoading(false);
     }
@@ -380,60 +392,103 @@ export default function MySubjectsWeb() {
   useEffect(() => {
     const loadTeacherDataAndPosts = async () => {
       try {
-        // For now, use mock auth token - in real app, get from storage
-        const token = 'mock-auth-token';
-        setAuthToken(token);
+        // Get auth data
+        const authData = await getAuthData();
+        console.log('Auth data loaded:', authData ? 'Success' : 'Failed');
         
-        // Try to fetch real posts first
-        try {
-          await fetchPosts(token);
-        } catch (fetchError) {
-          // If API fails, load mock posts for demonstration
-          console.log('API failed, loading mock posts');
-          const mockPosts = [
-            {
-              id: '1',
-              content: 'Excited to teach Mathematics today! Students are making great progress with algebra.',
-              authorName: teacherName,
-              authorEmail: userEmail,
-              likes: 12,
-              comments: 3,
-              createdAt: new Date().toISOString(),
-              isLiked: false,
-              postType: 'teacher'
-            },
-            {
-              id: '2',
-              content: 'Science class experiment was a success! Students loved the hands-on learning approach.',
-              authorName: teacherName,
-              authorEmail: userEmail,
-              likes: 8,
-              comments: 1,
-              createdAt: new Date(Date.now() - 3600000).toISOString(),
-              isLiked: false,
-              postType: 'teacher'
-            },
-            {
-              id: '3',
-              content: 'Preparing new materials for Social Studies. Interactive maps really help students engage!',
-              authorName: teacherName,
-              authorEmail: userEmail,
-              likes: 15,
-              comments: 5,
-              createdAt: new Date(Date.now() - 7200000).toISOString(),
-              isLiked: true,
-              postType: 'teacher'
-            }
-          ];
-          setPosts(mockPosts);
+        if (authData?.token) {
+          setAuthToken(authData.token);
+          setTeacherName(authData.name || 'Teacher');
+          setUserEmail(authData.email || '');
+          setProfileImage(authData.profileImage || null);
+          
+          // Fetch posts with the auth token
+          await fetchPosts(authData.token);
+        } else {
+          console.error('No auth data found');
+          // Use bypass token for demo
+          await fetchPosts("bypass_token_teacher1");
         }
       } catch (error) {
         console.error('Error loading teacher data:', error);
+        // Use bypass token for demo
+        await fetchPosts("bypass_token_teacher1");
       }
     };
 
     loadTeacherDataAndPosts();
   }, []);
+
+  // Fetch user profile using the same API as other teacher pages
+  const fetchUserProfile = async (token: string, email: string) => {
+    try {
+      console.log('🔍 Fetching user profile from AstraDB for:', email);
+      
+      // Check cache first
+      if (userProfileCache.has(email)) {
+        console.log('✅ Using cached profile for:', email);
+        return userProfileCache.get(email)!;
+      }
+      
+      // Try AstraDB test table first for real user data
+      const response = await axios.post(`${BASE_URL}/api/userProfile`, { 
+        email: email,
+        source: 'astraDB'
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.data) {
+        // Try different possible field names for profile picture
+        const profilePic = response.data.profileimage || response.data.profilePic || response.data.profilepic || response.data.profile_image;
+        
+        // Try different possible field names for user name
+        const userName = response.data.name || response.data.userName || response.data.fullname || response.data.fullName || response.data.displayName;
+        
+        console.log('✅ User profile from AstraDB:', { name: userName, profilePic: profilePic });
+        
+        if (profilePic || userName) {
+          // Ensure we have a proper URL format for profile image
+          let finalProfilePic = profilePic;
+          if (finalProfilePic && !finalProfilePic.startsWith('http') && !finalProfilePic.startsWith('/')) {
+            finalProfilePic = `/${finalProfilePic}`;
+          }
+          
+          const profileData = { name: userName || 'Unknown User', profilePic: finalProfilePic || '' };
+          
+          // Cache the result
+          setUserProfileCache(prev => new Map(prev.set(email, profileData)));
+          
+          return profileData;
+        } else {
+          console.log('⚠️ No profile image or name found in response');
+        }
+      }
+    } catch (error) {
+      console.log('❌ Profile fetch error:', error);
+      // Don't show alert for profile image fetch error as it's not critical
+    }
+    
+    return { name: 'Unknown User', profilePic: '' };
+  };
+
+  // Enhanced function to fetch and cache multiple user profiles
+  const fetchUserProfilesForPosts = async (posts: any[], token: string) => {
+    const uniqueEmails = [...new Set(posts.map(post => post.author.email))];
+    
+    const profilePromises = uniqueEmails.map(async (email) => {
+      if (!userProfileCache.has(email)) {
+        return await fetchUserProfile(token, email);
+      }
+      return null;
+    });
+    
+    await Promise.all(profilePromises);
+  };
+
   const resolvePostAuthor = (post: any) => {
     if (!post) {
       return {
@@ -538,7 +593,7 @@ export default function MySubjectsWeb() {
                   userEmail={userEmail}
                   teacherName={teacherName}
                   profileImage={profileImage}
-                  subjectCount={SUBJECT_DATA.length}
+                  subjectCount={teacherSubjects.length}
                   studentCount={12}
                   revenue="₹18.7K"
                   isSpotlight={true}
@@ -555,7 +610,7 @@ export default function MySubjectsWeb() {
               userEmail={userEmail}
               teacherName={teacherName}
               profileImage={profileImage}
-              subjectCount={SUBJECT_DATA.length}
+              subjectCount={teacherSubjects.length}
               studentCount={12}
               revenue="₹18.7K"
               isSpotlight={true}
@@ -590,9 +645,40 @@ export default function MySubjectsWeb() {
 
                 {/* Grid of Subject Cards */}
                 <View style={styles.gridContainer}>
-                   {SUBJECT_DATA.map((subject, index) => (
-                      <SubjectCard key={subject.id} subject={subject} index={index} isMobile={isMobile} />
-                   ))}
+                   {isLoading ? (
+                     <View style={styles.loadingContainer}>
+                       <ActivityIndicator size="large" color={COLORS.primaryBlue} />
+                       <Text style={{ marginTop: 10, fontSize: 16, color: COLORS.textBody }}>Loading subjects...</Text>
+                     </View>
+                   ) : error ? (
+                     <View style={styles.errorContainer}>
+                       <MaterialCommunityIcons name="alert-circle" size={48} color="#EF4444" />
+                       <Text style={styles.errorText}>{error}</Text>
+                       <TouchableOpacity 
+                         style={styles.retryButton}
+                         onPress={fetchTeacherSubjects}
+                       >
+                         <Text style={styles.retryButtonText}>Retry</Text>
+                       </TouchableOpacity>
+                     </View>
+                   ) : teacherSubjects.length === 0 ? (
+                     <View style={styles.emptyState}>
+                       <MaterialCommunityIcons name="book-open" size={64} color={COLORS.textMuted} />
+                       <Text style={styles.emptyStateText}>No subjects available</Text>
+                       <Text style={styles.emptyStateSubtext}>
+                         Please add subjects in your profile to manage them here.
+                       </Text>
+                     </View>
+                   ) : (
+                     teacherSubjects.map((subject, index) => (
+                       <SubjectCard 
+                         key={subject.id} 
+                         subject={subject} 
+                         index={index} 
+                         isMobile={isMobile} 
+                       />
+                     ))
+                   )}
                 </View>
               </Animated.View>
             </ScrollView>
@@ -636,11 +722,11 @@ export default function MySubjectsWeb() {
                     </View>
                   )}
                   
-                  {posts.map((post: any, index: number) => (
-                    <View key={post.id} style={styles.postWrapper}>
-                      <TeacherThoughtsCard
+                  {posts.map((post: any) => {
+                    return (
+                      <ThoughtsCard
+                        key={post.id}
                         post={post}
-                        userProfileCache={userProfileCache}
                         onLike={(postId: string) => {
                           setPosts(posts.map(p => 
                             p.id === postId 
@@ -649,7 +735,7 @@ export default function MySubjectsWeb() {
                           ));
                         }}
                         onComment={(post) => {
-                          // Handle comment
+                          // Handle comment logic
                         }}
                         onReport={(post) => {
                           Alert.alert("Report", "Report this post?");
@@ -658,13 +744,8 @@ export default function MySubjectsWeb() {
                         initials={initials}
                         resolvePostAuthor={resolvePostAuthor}
                       />
-                      
-                      {/* Add separator between posts */}
-                      {index < posts.length - 1 && (
-                        <View style={styles.postSeparator} />
-                      )}
-                    </View>
-                  ))}
+                    );
+                  })}
                 </ScrollView>
               </View>
             )}
@@ -717,35 +798,36 @@ export default function MySubjectsWeb() {
                       )}
                       
                       {/* Show only first 3 posts or all if expanded */}
-                      {posts.slice(0, thoughtsExpanded ? posts.length : 3).map((post: any, index: number) => (
-                        <View key={post.id} style={styles.mobilePostWrapper}>
-                          <TeacherThoughtsCard
-                            post={post}
-                            userProfileCache={userProfileCache}
-                            onLike={(postId: string) => {
-                              setPosts(posts.map(p => 
-                                p.id === postId 
-                                  ? { ...p, likes: p.isLiked ? p.likes - 1 : p.likes + 1, isLiked: !p.isLiked }
-                                  : p
-                              ));
-                            }}
-                            onComment={(post) => {
-                              // Handle comment
-                            }}
-                            onReport={(post) => {
-                              Alert.alert("Report", "Report this post?");
-                            }}
-                            getProfileImageSource={getProfileImageSource}
-                            initials={initials}
-                            resolvePostAuthor={resolvePostAuthor}
-                          />
-                          
-                          {/* Add separator between posts */}
-                          {index < Math.min(posts.slice(0, thoughtsExpanded ? posts.length : 3).length - 1, posts.length - 1) && (
-                            <View style={styles.mobilePostSeparator} />
-                          )}
-                        </View>
-                      ))}
+                      {posts.slice(0, thoughtsExpanded ? posts.length : 3).map((post: any, index: number) => {
+                        return (
+                          <View key={post.id} style={styles.mobilePostWrapper}>
+                            <ThoughtsCard
+                              post={post}
+                              onLike={(postId: string) => {
+                                setPosts(posts.map(p => 
+                                  p.id === postId 
+                                    ? { ...p, likes: p.isLiked ? p.likes - 1 : p.likes + 1, isLiked: !p.isLiked }
+                                    : p
+                                ));
+                              }}
+                              onComment={(post) => {
+                                // Handle comment
+                              }}
+                              onReport={(post) => {
+                                Alert.alert("Report", "Report this post?");
+                              }}
+                              getProfileImageSource={getProfileImageSource}
+                              initials={initials}
+                              resolvePostAuthor={resolvePostAuthor}
+                            />
+                            
+                            {/* Add separator between posts */}
+                            {index < Math.min(posts.slice(0, thoughtsExpanded ? posts.length : 3).length - 1, posts.length - 1) && (
+                              <View style={styles.mobilePostSeparator} />
+                            )}
+                          </View>
+                        );
+                      })}
                       
                       {/* Show "See More" indicator if there are more posts */}
                       {!thoughtsExpanded && posts.length > 3 && (
@@ -792,9 +874,40 @@ export default function MySubjectsWeb() {
                   </View>
 
                   <View style={styles.gridContainer}>
-                     {SUBJECT_DATA.map((subject, index) => (
-                        <SubjectCard key={subject.id} subject={subject} index={index} isMobile={true} />
-                     ))}
+                     {isLoading ? (
+                       <View style={styles.loadingContainer}>
+                         <ActivityIndicator size="large" color={COLORS.primaryBlue} />
+                         <Text style={{ marginTop: 10, fontSize: 16, color: COLORS.textBody }}>Loading subjects...</Text>
+                       </View>
+                     ) : error ? (
+                       <View style={styles.errorContainer}>
+                         <MaterialCommunityIcons name="alert-circle" size={48} color="#EF4444" />
+                         <Text style={styles.errorText}>{error}</Text>
+                         <TouchableOpacity 
+                           style={styles.retryButton}
+                           onPress={fetchTeacherSubjects}
+                         >
+                           <Text style={styles.retryButtonText}>Retry</Text>
+                         </TouchableOpacity>
+                       </View>
+                     ) : teacherSubjects.length === 0 ? (
+                       <View style={styles.emptyState}>
+                         <MaterialCommunityIcons name="book-open" size={64} color={COLORS.textMuted} />
+                         <Text style={styles.emptyStateText}>No subjects available</Text>
+                         <Text style={styles.emptyStateSubtext}>
+                           Please add subjects in your profile to manage them here.
+                         </Text>
+                       </View>
+                     ) : (
+                       teacherSubjects.map((subject, index) => (
+                         <SubjectCard 
+                           key={subject.id} 
+                           subject={subject} 
+                           index={index} 
+                           isMobile={true} 
+                         />
+                       ))
+                     )}
                   </View>
                 </View>
               </Animated.View>
@@ -807,52 +920,52 @@ export default function MySubjectsWeb() {
 }
 
 // --- Subject Card Component ---
-const SubjectCard = ({ subject, isMobile }: any) => {
+const SubjectCard = ({ subject, index, isMobile }: { subject: any; index: number; isMobile: boolean }) => {
   const lift = useSharedValue(0);
   const scale = useSharedValue(1);
   const imgScale = useSharedValue(1);
 
   const hoverStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: lift.value }, { scale: scale.value }],
+    transform: [{ translateY: lift.value }, { scale: scale.value }] as any,
     shadowOpacity: lift.value === 0 ? 0.06 : 0.15,
   }));
 
   const imageStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: imgScale.value }],
+    transform: [{ scale: imgScale.value }] as any,
   }));
 
   return (
     <Animated.View 
-      style={[styles.subjectCard, isMobile ? { width: '100%' } : { width: '48%' }, hoverStyle]}
-      // Simulation for hover (Web only)
-      onPointerEnter={() => {
-        lift.value = withTiming(-6);
-        scale.value = withTiming(1.01);
-        imgScale.value = withTiming(1.05);
-      }}
-      onPointerLeave={() => {
-        lift.value = withTiming(0);
-        scale.value = withTiming(1);
-        imgScale.value = withTiming(1);
-      }}
+      style={[
+        styles.subjectCard,
+        {
+          transform: [
+            {
+              translateY: withDelay(100 * index, withSpring(0, { tension: 100, friction: 10 }))
+            },
+            { scale: withDelay(100 * index, withSpring(1, { tension: 100, friction: 10 }))
+            }
+          ]
+        }
+      ]}
     >
-      <View style={styles.cardImageContainer}>
-         <Animated.Image source={{ uri: subject.image }} style={[styles.cardImage, imageStyle]} />
-      </View>
-      
-      <View style={styles.cardInfo}>
-         <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardTitle}>{subject.title}</Text>
-            <View style={styles.activeBadge}>
-               <Text style={styles.activeBadgeText}>{subject.status}</Text>
+      <View style={styles.subjectCardContent}>
+        <View style={styles.subjectHeader}>
+          <View style={styles.subjectIconContainer}>
+            <Image source={{ uri: subject.image }} style={styles.subjectImage} />
+            <MaterialCommunityIcons name={subject.icon} size={isMobile ? 20 : 24} color={COLORS.primaryBlue} />
+          </View>
+          <View style={styles.subjectInfo}>
+            <Text style={styles.subjectTitle}>{subject.title}</Text>
+            <Text style={styles.subjectClass}>{subject.class}</Text>
+            <View style={styles.subjectStatus}>
+              <View style={[styles.statusDot, { backgroundColor: subject.status === 'ACTIVE' ? COLORS.primaryBlue : '#E5E7EB' }]} />
+              <Text style={[styles.statusText, { color: subject.status === 'ACTIVE' ? COLORS.primaryBlue : COLORS.textMuted }]}>
+                {subject.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+              </Text>
             </View>
-         </View>
-         <View style={styles.cardMetaRow}>
-            <View style={styles.metaIconBox}>
-                <FontAwesome5 name={subject.icon} size={14} color={COLORS.textBody} />
-            </View>
-            <Text style={styles.cardMetaText}>{subject.class}</Text>
-         </View>
+          </View>
+        </View>
       </View>
     </Animated.View>
   );
@@ -899,10 +1012,27 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 280,
     backgroundColor: COLORS.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 5,
     zIndex: 1001,
   },
@@ -998,10 +1128,27 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.cardBg,
     borderRadius: 16,
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 5,
     overflow: 'hidden',
   },
@@ -1159,10 +1306,27 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 3,
   },
   mobileThoughtsHeader: {

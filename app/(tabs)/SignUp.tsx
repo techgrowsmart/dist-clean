@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Linking } from "react-native";
 import {
+    Platform,
     ActivityIndicator,
     Alert,
     Dimensions,
@@ -10,7 +11,6 @@ import {
     ImageBackground,
     Keyboard,
     KeyboardAvoidingView,
-    Platform,
     StyleSheet,
     Text,
     TextInput,
@@ -50,7 +50,6 @@ export default function SignUpScreen() {
         setErrorName(""); setErrorPhone(""); setErrorEmail("");
 
         if (!name.trim()) { setErrorName("Full Name is required."); isValid = false; }
-        if (!phone.trim()) { setErrorPhone("Phone Number is required."); isValid = false; }
         if (!email.trim()) { setErrorEmail("Email is required."); isValid = false; }
         if (!isValid) return;
 
@@ -59,7 +58,7 @@ export default function SignUpScreen() {
             const response = await fetch(`${BASE_URL}/api/signup`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ fullName: name, phonenumber: phone, email }), 
+                body: JSON.stringify({ fullName: name, phonenumber: phone || '', email, role: 'student' }), 
             });
     
             const data = await response.json();
@@ -68,8 +67,8 @@ export default function SignUpScreen() {
             if (response.ok) {
                 Alert.alert("Success", "OTP Sent! Check your email.");
                 router.push({
-                    pathname: "/VerifyOTP",
-                    params: { otpId: data.otpId, email, name, phone },
+                    pathname: "/auth/SignupOTPScreen",
+                    params: { otpId: data.otpId, email, name, phone, role: 'student' },
                 });
             } else {
                 if (data.alreadyRegistered) {
@@ -123,7 +122,7 @@ export default function SignUpScreen() {
                         {errorName ? <Text style={styles.errorText}>{errorName}</Text> : null}
 
                         {/* Phone Number Input */}
-                        <Text style={styles.inputLabel}>Phone Number</Text>
+                        <Text style={styles.inputLabel}>Phone Number (Optional)</Text>
                         <TextInput
                             style={[styles.input, errorPhone ? styles.inputError : null]}
                             placeholder="Enter your phone number"
@@ -205,7 +204,7 @@ export default function SignUpScreen() {
                     {errorName ? <Text style={styles.errorText}>{errorName}</Text> : null}
 
                     {/* Phone Number Input */}
-                    <Text style={styles.inputLabel}>Phone Number</Text>
+                    <Text style={styles.inputLabel}>Phone Number (Optional)</Text>
                     <TextInput
                         style={[styles.input, errorPhone ? styles.inputError : null]}
                         placeholder="Enter your phone number"

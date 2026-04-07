@@ -19,7 +19,7 @@ import { BASE_URL } from '../../config';
 import { storeAuthData } from "../../utils/authStorage";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import { Feather } from "@expo/vector-icons";
-import {
+import { 
   WorkSans_400Regular,
   WorkSans_500Medium,
   WorkSans_600SemiBold,

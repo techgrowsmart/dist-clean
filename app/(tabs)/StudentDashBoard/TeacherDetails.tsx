@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -9,7 +10,6 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
-  Platform,
   SafeAreaView,
   TextInput,
 } from "react-native";
@@ -25,7 +25,7 @@ import { favoritesEvents, FAVORITES_CHANGED_EVENT } from "../../../utils/favorit
 import { KronaOne_400Regular, useFonts } from "@expo-google-fonts/krona-one";
 import { RedHatDisplay_300Light } from "@expo-google-fonts/red-hat-display";
 import Menubook from "../../../assets/svgIcons/MenuBook";
-import {
+import{
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from "react-native-responsive-screen";
@@ -35,6 +35,8 @@ import { Inter_400Regular } from "@expo-google-fonts/inter";
 import { RedHatDisplay_400Regular } from "@expo-google-fonts/red-hat-display";
 import { addFavoriteTeacher, removeFavoriteTeacher, checkFavoriteStatus } from '../../../services/favoriteTeachers';
 import ThoughtsCard, { ThoughtsBackground } from './ThoughtsCard';
+import WebNavbar from "../../../components/ui/WebNavbar";
+import WebSidebar from "../../../components/ui/WebSidebar";
 
 const { width, height } = Dimensions.get("window");
 
@@ -63,28 +65,21 @@ const COLORS = {
   ctaTxt: '#1F2937',
 };
 
-// Mock menu items for sidebar
-const MENU_ITEMS: { id: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { id: '1', label: 'Home', icon: 'home-outline' },
-  { id: '2', label: 'Profile', icon: 'person-outline' },
-  { id: '3', label: 'Favorites', icon: 'heart-outline' },
-  { id: '4', label: 'My Tuitions', icon: 'school-outline' },
-  { id: '5', label: 'Connect', icon: 'chatbubbles-outline' },
-  { id: '6', label: 'Share', icon: 'share-social-outline' },
-  { id: '7', label: 'Subscription', icon: 'pricetag-outline' },
-  { id: '8', label: 'Billing', icon: 'document-text-outline' },
-  { id: '9', label: 'Faq', icon: 'help-circle-outline' },
-  { id: '10', label: 'Terms & Conditions', icon: 'document-outline' },
-  { id: '11', label: 'Privacy Policy', icon: 'shield-checkmark-outline' },
-  { id: '12', label: 'Contact Us', icon: 'mail-outline' },
-  { id: '13', label: 'Raise a Complaint', icon: 'alert-circle-outline' },
-];
+  // Remove unused menu items constant and inline components - using shared components instead
 
 const BADGES = [
   "Trusted Teacher",
   "Certified Expert", 
   "100% Satisfaction",
   "20+ Years Experience"
+];
+
+// Additional teacher achievements
+const ACHIEVEMENTS = [
+  { icon: "trophy", title: "Top Rated", description: "4.8+ average rating" },
+  { icon: "people", title: "500+ Students", description: "Successfully taught" },
+  { icon: "clock", title: "5+ Years", description: "Teaching experience" },
+  { icon: "star", title: "Expert Level", description: "Subject mastery" }
 ];
 const similarTutions = [
   {
@@ -150,6 +145,8 @@ export default function TeacherDetails() {
   const [studentName, setStudentName] = useState("");
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [teacherAvailability, setTeacherAvailability] = useState<'available' | 'busy' | 'offline'>('available');
+  const [teacherLanguages, setTeacherLanguages] = useState<string[]>(['English', 'Hindi', 'Bengali']);
 
   const checkSubscription = async () => {
     try {
@@ -450,69 +447,6 @@ useEffect(() => {
   const initials = (name: string) =>
     name.split(' ').map(w => w.charAt(0)).join('').toUpperCase().slice(0, 2) || '?';
 
-  // Web UI Components
-  const WebHeader = () => (
-    <View style={webStyles.globalHeader}>
-      <View style={webStyles.logoWrapper}>
-        <Text style={webStyles.logoText}>Growsmart</Text>
-      </View>
-      <View style={webStyles.headerSearchWrapper}>
-        <View style={webStyles.searchContainer}>
-          <Ionicons name="search" size={20} color={COLORS.textSecondary} style={{ marginRight: 10 }} />
-          <TextInput 
-            placeholder="Type in search" 
-            placeholderTextColor={COLORS.textSecondary}
-            style={webStyles.searchInput as any} 
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-      </View>
-      <View style={webStyles.profileHeaderSection}>
-        <TouchableOpacity style={webStyles.bellIcon}>
-          <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
-          {unreadCount > 0 && <View style={webStyles.notifBadge}><Text style={webStyles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>}
-        </TouchableOpacity>
-        <Text style={webStyles.headerUserName}>{studentName || 'Student'}</Text>
-        <Image source={profileImage ? { uri: profileImage } : require("../../../assets/images/Profile.png")} style={webStyles.headerAvatar} />
-      </View>
-    </View>
-  );
-
-  const WebSidebar = () => (
-    <View style={webStyles.sidebarContainer}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={webStyles.sidebarScroll}>
-        <View style={webStyles.menuList}>
-          {MENU_ITEMS.map((item) => (
-            <TouchableOpacity 
-              key={item.id} 
-              style={webStyles.menuItem}
-            >
-              <Ionicons 
-                name={item.icon} 
-                size={20} 
-                color={COLORS.textPrimary} 
-              />
-              <Text style={webStyles.menuItemText}>
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <View style={webStyles.sidebarBottom}>
-          <TouchableOpacity style={webStyles.menuItem}>
-            <Ionicons name="help-circle-outline" size={20} color={COLORS.textPrimary} />
-            <Text style={webStyles.menuItemText}>Help & Support</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={webStyles.menuItem}>
-            <Ionicons name="log-out-outline" size={20} color={COLORS.textPrimary} />
-            <Text style={webStyles.menuItemText}>Log out</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </View>
-  );
-
   const BadgeMock = ({ text }: { text: string }) => (
     <View style={webStyles.badgeWrapper}>
       <View style={webStyles.badgeCircleOuter}>
@@ -521,6 +455,45 @@ useEffect(() => {
         </View>
       </View>
       <Text style={webStyles.badgeText}>{text}</Text>
+    </View>
+  );
+
+  const AchievementCard = ({ achievement }: { achievement: any }) => (
+    <View style={webStyles.achievementCard}>
+      <View style={webStyles.achievementIconBg}>
+        <Ionicons name={achievement.icon} size={20} color={COLORS.white} />
+      </View>
+      <View style={webStyles.achievementContent}>
+        <Text style={webStyles.achievementTitle}>{achievement.title}</Text>
+        <Text style={webStyles.achievementDesc}>{achievement.description}</Text>
+      </View>
+    </View>
+  );
+
+  const AvailabilityStatus = () => (
+    <View style={webStyles.availabilityContainer}>
+      <View style={[webStyles.availabilityDot, { 
+        backgroundColor: teacherAvailability === 'available' ? COLORS.ratingGreen : 
+                      teacherAvailability === 'busy' ? COLORS.starYellow : '#9CA3AF' 
+      }]} />
+      <Text style={webStyles.availabilityText}>
+        {teacherAvailability === 'available' ? 'Available for classes' : 
+         teacherAvailability === 'busy' ? 'Currently busy' : 'Offline'}
+      </Text>
+    </View>
+  );
+
+  const LanguagesSection = () => (
+    <View style={webStyles.languagesContainer}>
+      <Text style={webStyles.sectionTitle}>Languages Spoken</Text>
+      <View style={webStyles.languageGrid}>
+        {teacherLanguages.map((lang, index) => (
+          <View key={index} style={webStyles.languagePill}>
+            <Ionicons name="language-outline" size={14} color={COLORS.primary} />
+            <Text style={webStyles.languageText}>{lang}</Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 
@@ -596,6 +569,10 @@ useEffect(() => {
             <Ionicons name="location-outline" size={14} color={COLORS.textPrimary} />
             <Text style={webStyles.profDetailText}>West Bengal, India</Text>
           </View>
+          
+          {/* New additions */}
+          <AvailabilityStatus />
+          <LanguagesSection />
         </View>
       </View>
       <View style={webStyles.profileRightCol}>
@@ -762,6 +739,31 @@ useEffect(() => {
             </View>
           </View>
 
+          {/* Availability Status for Mobile */}
+          <View style={styles.availabilityContainer}>
+            <View style={[styles.availabilityDot, { 
+              backgroundColor: teacherAvailability === 'available' ? '#22C55E' : 
+                            teacherAvailability === 'busy' ? '#FBBF24' : '#9CA3AF' 
+            }]} />
+            <Text style={styles.availabilityText}>
+              {teacherAvailability === 'available' ? 'Available for classes' : 
+               teacherAvailability === 'busy' ? 'Currently busy' : 'Offline'}
+            </Text>
+          </View>
+
+          {/* Languages Section for Mobile */}
+          <View style={styles.languagesContainer}>
+            <Text style={styles.languagesTitle}>Languages Spoken</Text>
+            <View style={styles.languageRow}>
+              {teacherLanguages.map((lang, index) => (
+                <View key={index} style={styles.languagePill}>
+                  <Ionicons name="language-outline" size={12} color="#4255ff" />
+                  <Text style={styles.languageText}>{lang}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
           <View style={styles.tuitionsContainer}>
             <Text style={styles.tuitionsTitle}>Subjects for Tuition</Text>
             {teacher.tuitions?.map((t, index) => (
@@ -905,9 +907,28 @@ useEffect(() => {
   const WebUI = () => (
     <SafeAreaView style={webStyles.safeArea}>
       <View style={webStyles.rootLayout}>
-        <WebHeader />
+        <WebNavbar 
+          studentName={studentName}
+          profileImage={profileImage}
+        />
         <View style={webStyles.mainColumnsLayout}>
-          <WebSidebar />
+          <WebSidebar 
+            activeItem="Home"
+            onItemPress={(item) => {
+              if (item === 'Home') router.push('/(tabs)/StudentDashBoard/Student');
+              else if (item === 'My Tuitions') router.push('/(tabs)/StudentDashBoard/MyTuitions');
+              else if (item === 'Connect') router.push('/(tabs)/StudentDashBoard/ConnectWeb');
+              else if (item === 'Profile') router.push('/(tabs)/StudentDashBoard/Profile');
+              else if (item === 'Billing') router.push({ pathname: '/(tabs)/Billing', params: { userEmail: '', studentName, profileImage } });
+              else if (item === 'Faq') router.push('/(tabs)/StudentDashBoard/Faq');
+              else if (item === 'Share') router.push({ pathname: '/(tabs)/StudentDashBoard/Share', params: { userEmail: '', studentName, profileImage } });
+              else if (item === 'Subscription') router.push({ pathname: '/(tabs)/StudentDashBoard/Subscription', params: { userEmail: '' } });
+              else if (item === 'Contact Us') router.push('/(tabs)/Contact');
+            }}
+            userEmail=""
+            studentName={studentName || 'Student'}
+            profileImage={profileImage}
+          />
           <View style={webStyles.centerContentContainer}>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={webStyles.centerContentScroll}>
               <View style={webStyles.pageNavHeader}>
@@ -1016,6 +1037,16 @@ useEffect(() => {
                         <View style={[webStyles.expTimelineCard, { backgroundColor: COLORS.timelineYellow }]}>
                           <Text style={webStyles.expTimelineText}><Text style={webStyles.expTimelineBold}>Present:</Text> {teacher.workexperience || 'Experienced educator with proven track record'}</Text>
                         </View>
+                      </View>
+                    </View>
+
+                    {/* Achievements Section */}
+                    <View style={[webStyles.blueHeaderCard, { marginTop: 24 }]}>
+                      <View style={webStyles.blueHeaderPanel}><Text style={webStyles.blueHeaderText}>Achievements</Text></View>
+                      <View style={[webStyles.blueContentPanel, { padding: 12 }]}>
+                        {ACHIEVEMENTS.map((achievement, index) => (
+                          <AchievementCard key={index} achievement={achievement} />
+                        ))}
                       </View>
                     </View>
                   </View>
@@ -1253,6 +1284,60 @@ nameRatingContainer: {
     paddingVertical: hp('0.3%'), // ✅ Reduced padding
     borderRadius: wp('2%'),
   },
+
+  // Mobile styles for new components
+  availabilityContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: wp('4%'),
+    marginTop: hp('2%'),
+    marginHorizontal: wp('5.33%'),
+  },
+  availabilityDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  availabilityText: {
+    fontSize: wp('4%'),
+    color: '#1f2937',
+    fontWeight: '500',
+  },
+
+  languagesContainer: {
+    marginTop: hp('2%'),
+    paddingHorizontal: wp('5.33%'),
+  },
+  languagesTitle: {
+    fontSize: wp('4.27%'),
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: hp('1%'),
+  },
+  languageRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  languagePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eef2ff',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#3b5bfe',
+  },
+  languageText: {
+    fontSize: wp('3.5%'),
+    color: '#3b5bfe',
+    marginLeft: 6,
+    fontWeight: '500',
+  },
 });
 
 // Web Styles (same as Class8ScienceProfileScreen)
@@ -1418,4 +1503,42 @@ const webStyles = StyleSheet.create({
   expTimelineCard: { padding: 12, borderRadius: 8 },
   expTimelineText: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: COLORS.textPrimary, lineHeight: 18 },
   expTimelineBold: { fontFamily: 'Poppins_600SemiBold', fontSize: 12, color: COLORS.textPrimary },
+
+  // --- NEW COMPONENTS ---
+  achievementCard: { 
+    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background, 
+    borderRadius: 12, padding: 16, marginBottom: 12 
+  },
+  achievementIconBg: { 
+    backgroundColor: COLORS.primary, width: 40, height: 40, borderRadius: 20, 
+    justifyContent: 'center', alignItems: 'center', marginRight: 16 
+  },
+  achievementContent: { flex: 1 },
+  achievementTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.textPrimary, marginBottom: 2 },
+  achievementDesc: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: COLORS.textSecondary },
+
+  availabilityContainer: { 
+    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background, 
+    borderRadius: 12, padding: 16, marginBottom: 16 
+  },
+  availabilityDot: { 
+    width: 12, height: 12, borderRadius: 6, marginRight: 12 
+  },
+  availabilityText: { fontFamily: 'Poppins_500Medium', fontSize: 14, color: COLORS.textPrimary },
+
+  languagesContainer: { 
+    backgroundColor: COLORS.background, borderRadius: 12, padding: 16, marginBottom: 16 
+  },
+  sectionTitle: { 
+    fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.textPrimary, marginBottom: 12 
+  },
+  languageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  languagePill: { 
+    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, 
+    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: COLORS.primary 
+  },
+  languageText: { 
+    fontFamily: 'Poppins_500Medium', fontSize: 12, color: COLORS.primary, marginLeft: 6 
+  },
+  white: { color: COLORS.white },
 });

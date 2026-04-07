@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Image, ImageBackground, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Image, ImageBackground, TextInput, ActivityIndicator, Platform } from 'react-native';
 import { useFonts } from 'expo-font';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -198,10 +198,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     alignItems: 'center', 
     justifyContent: 'center', 
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.2, 
-    shadowRadius: 10, 
+    ...Platform.select({
+ 
+      web: {
+ 
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+ 
+      },
+ 
+      default: {
+ 
+        shadowColor: '#000',
+ 
+        shadowOffset: { width: 0, height: 4 },
+ 
+        shadowOpacity: 0.3,
+ 
+        shadowRadius: 8,
+ 
+      },
+ 
+    }), 
     elevation: 6 
   },
   submitButtonDisabled: {

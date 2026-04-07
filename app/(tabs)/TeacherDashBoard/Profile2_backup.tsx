@@ -1,17 +1,17 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Picker } from "@react-native-picker/picker";
+import {   Picker } from "@react-native-picker/picker";
 import axios from "axios";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import {   useRouter } from "expo-router";
 import moment from "moment";
-import React, { useEffect, useState } from "react";
-import {
+import { Platform } from 'react-native'; import React, { useEffect, useState } from "react";
+import {  
   Alert,
   Dimensions,
   Image,
   Modal,
-  Platform,
+  
   ScrollView,
   StyleSheet,
   Text,
@@ -21,20 +21,20 @@ import {
   BackHandler,
   ActivityIndicator,
 } from "react-native";
-import { Calendar } from "react-native-calendars";
+import {   Calendar } from "react-native-calendars";
 import BackButton from "../../../components/BackButton";
 import Building from "../../../assets/svgIcons/Building";
 import Menubook from "../../../assets/svgIcons/MenuBook";
 import Pencil from "../../../assets/svgIcons/Pencil";
-import { BASE_URL } from "../../../config";
-import { getAuthData } from "../../../utils/authStorage";
+import {  BASE_URL } from "../../../config";
+import {   getAuthData } from "../../../utils/authStorage";
 
-import {
+import {  
   heightPercentageToDP as hp,
   widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
-import { isTablet } from "../../../utils/devices";
-import { Feather, MaterialIcons } from "@expo/vector-icons";
+import {   isTablet } from "../../../utils/devices";
+import {   Feather, MaterialIcons } from "@expo/vector-icons";
 
 interface FormErrors {
   introduction?: string;
@@ -1565,7 +1565,7 @@ const validateTimeRange = () => {
 </View>
 
                 {/* Timing */}
-                <View style={styles.timecontainer} pointerEvents="box-none">
+                <View style={styles.timecontainer} style={{pointerEvents:"box-none"}}>
                   <TouchableOpacity
                     // Replace these three onPress handlers:
                     onPress={() => {

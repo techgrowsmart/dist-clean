@@ -16,14 +16,16 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Alert, Dimensions, Image, ImageBackground, Modal, Platform, ScrollView, StyleSheet, Text,
+import{
+  Platform,
+  Alert, Dimensions, Image, ImageBackground, Modal, ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, View, Animated, PanResponder, StatusBar, ActivityIndicator, Easing,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import RazorpayCheckout from "react-native-razorpay";
 import AllBoardsPage from "./AllBoardsPage";
 import WebSidebar from "../../../components/ui/WebSidebar";
+import ResponsiveSidebar from "../../../components/ui/ResponsiveSidebar";
 import ClassSelection from "./ClassSelection";
 import Sidebar from "./Sidebar";
 import SkillTeachers from "./SkillTeachers";
@@ -153,7 +155,7 @@ export default function Student() {
   const isSwipeLocked = useRef(false);
   const [blinkAnim] = useState(new Animated.Value(1));
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
-  const [activeMenu, setActiveMenu] = useState("Dashboard");
+  const [activeMenu, setActiveMenu] = useState("Home");
   const [currentSection, setCurrentSection] = useState("home");
   const [showConnect, setShowConnect] = useState(false);
   const [student, setStudent] = useState<StudentState>({ name: "", profileImage: null });
@@ -757,11 +759,10 @@ const renderWebMainContent = () => {
       <View style={{ flex: 1, backgroundColor: '#fff' }}>
         {renderWebHeader()}
         <View style={{ flex: 1, flexDirection: 'row', overflow: 'hidden' }}>
-          <View style={{ width: 220, backgroundColor: '#fff', zIndex: 1 }}>
-            <WebSidebar
-              activeItem={activeMenu}
-              onItemPress={(itemName: string) => {
-                setActiveMenu(itemName);
+          <ResponsiveSidebar
+            activeItem={activeMenu}
+            onItemPress={(itemName: string) => {
+              setActiveMenu(itemName);
                 if (itemName === 'My Tuitions') router.push('/(tabs)/StudentDashBoard/MyTuitions' as any);
                 else if (itemName === 'Profile') router.push('/(tabs)/StudentDashBoard/Profile' as any);
                 else if (itemName === 'Subscription') router.push('/(tabs)/StudentDashBoard/Subscription' as any);
@@ -773,21 +774,15 @@ const renderWebMainContent = () => {
               userEmail={userEmail || ""}
               studentName={studentName || ""}
               profileImage={profileImage || null}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            {showConnect ? (
-              <ConnectWeb onBack={() => setShowConnect(false)} isEmbedded={true} />
-            ) : (
-              <HomeScreenMiddleContent
-                allSpotlightSubjectTeachers={allSpotlightSubjectTeachers}
-                allSpotlightSkillTeachers={allSpotlightSkillTeachers}
-                allPopularSubjectTeachers={allPopularSubjectTeachers}
-                allPopularSkillTeachers={allPopularSkillTeachers}
-                loading={false}
-              />
-            )}
-          </View>
+          >
+            <View style={{ flex: 1 }}>
+              {showConnect ? (
+                <ConnectWeb onBack={() => setShowConnect(false)} isEmbedded={true} />
+              ) : (
+                renderWebMainContent()
+              )}
+            </View>
+          </ResponsiveSidebar>
           {!showConnect && <View style={{ width: 300 }}>{renderWebRightSidebar()}</View>}
         </View>
       </View>

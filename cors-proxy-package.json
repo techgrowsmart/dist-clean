@@ -1,0 +1,21 @@
+{
+  "name": "gogrowsmart-cors-proxy",
+  "version": "1.0.0",
+  "description": "CORS proxy server for Gogrowsmart development",
+  "main": "cors-proxy.js",
+  "scripts": {
+    "start": "node cors-proxy.js",
+    "dev": "nodemon cors-proxy.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "http-proxy-middleware": "^2.0.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": ["cors", "proxy", "development", "gogrowsmart"],
+  "author": "Gogrowsmart Team",
+  "license": "MIT"
+}

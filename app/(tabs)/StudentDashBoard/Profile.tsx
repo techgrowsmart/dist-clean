@@ -10,9 +10,10 @@ import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "
 import { doc, setDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
+  Platform,
   ActivityIndicator, Alert, BackHandler, Image, KeyboardAvoidingView,
-  Modal, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput,
-  TouchableOpacity, View,
+  Modal, SafeAreaView, ScrollView, StyleSheet, Text, TextInput,
+  TouchableOpacity, View, Dimensions, Animated,
 } from "react-native";
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from "react-native-responsive-screen";
 import BackButton from "../../../components/BackButton";
@@ -57,6 +58,8 @@ const calculateAge = (dob: string): string => {
 
 export default function Profile() {
   const [errors, setErrors] = useState<FormErrors>({});
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+  const [fadeAnim] = useState(new Animated.Value(0));
   const router = useRouter();
   const { userType } = useLocalSearchParams<{ userType: string; userEmail: string }>();
   const [studentName, setStudentName] = useState("");
@@ -74,6 +77,7 @@ export default function Profile() {
   const [classYear, setClassYear] = useState("");
   const [showPicker, setShowPicker] = useState(false);
   const [boards, setBoards] = useState<Array<{ boardName: string; boardId?: string }>>([]);
+  const [showEditForm, setShowEditForm] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -81,13 +85,14 @@ export default function Profile() {
 
   useFocusEffect(React.useCallback(() => {
     const onBack = () => {
+      if (showEditForm) { setShowEditForm(false); return true; }
       if (previewModalVisible) { setPreviewModalVisible(false); return true; }
       if (modalVisible) { setModalVisible(false); return true; }
       router.back(); return true;
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
     return () => sub.remove();
-  }, [router, previewModalVisible, modalVisible]));
+  }, [router, showEditForm, previewModalVisible, modalVisible]));
 
   const [fontsLoaded] = useFonts({ Poppins_600SemiBold, OpenSans_600SemiBold });
 
@@ -116,26 +121,84 @@ export default function Profile() {
   const fetchProfileAndBoards = async () => {
     try {
       const auth = await getAuthData();
-      if (!auth?.token) { Alert.alert("Error", "Please login again"); return; }
+      if (!auth?.token) { 
+        Alert.alert("Error", "Please login again"); 
+        setIsLoading(false);
+        return; 
+      }
       const headers = { Authorization: `Bearer ${auth.token}` };
-      const { data } = await axios.post(`${BASE_URL}/api/sudentProfile`, { email: auth.email }, { headers });
-      setStudentName(data.name || ""); setEmail(data.email || ""); setPhone(data.phone || "");
-      setProfileImage(data.profileimage || null); setDateofBirth(data.dateOfBirth || "");
-      setEducationBoard(data.educationBoard || ""); setInstituteName(data.instituteName || "");
-      setPreferredMedium(data.preferredMedium || ""); setFullAddress(data.fullAddress || "");
-      setStateName(data.stateName || ""); setPincode(data.pincode || "");
-      setCountry(data.country || ""); setClassYear(data.classYear || "");
-      try {
-        const br = await axios.post(`${BASE_URL}/api/allboards`, { category: "student" }, { headers });
-        const arr = Array.isArray(br.data) ? br.data : [];
+      
+      // Optimized: Parallel API calls instead of sequential
+      const [profileResponse, boardsResponse] = await Promise.allSettled([
+        axios.post(`${BASE_URL}/api/sudentProfile`, { email: auth.email }, { headers }),
+        axios.post(`${BASE_URL}/api/allboards`, { category: "student" }, { headers }).catch(() => ({ data: [] }))
+      ]);
+
+      if (profileResponse.status === 'fulfilled') {
+        const data = profileResponse.value.data;
+        setStudentName(data.name || ""); setEmail(data.email || ""); setPhone(data.phone || "");
+        setProfileImage(data.profileimage || null); setDateofBirth(data.dateOfBirth || "");
+        setEducationBoard(data.educationBoard || ""); setInstituteName(data.instituteName || "");
+        setPreferredMedium(data.preferredMedium || ""); setFullAddress(data.fullAddress || "");
+        setStateName(data.stateName || ""); setPincode(data.pincode || "");
+        setCountry(data.country || ""); setClassYear(data.classYear || "");
+      }
+
+      if (boardsResponse.status === 'fulfilled' && boardsResponse.value) {
+        const arr = Array.isArray(boardsResponse.value.data) ? boardsResponse.value.data : [];
         setBoards(arr.map((b: any) => ({ boardName: b.boardName, boardId: b.boardId })).filter((b: any) => b.boardName));
-      } catch {
+      } else {
         setBoards([{ boardName: 'CBSE' }, { boardName: 'ICSE' }, { boardName: 'State Board' }]);
       }
-    } catch { Alert.alert("Error", "Failed to load profile. Please try again later."); }
+    } catch (error) {
+      console.error('Profile load error:', error);
+      Alert.alert("Error", "Failed to load profile. Please try again later.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  useEffect(() => { const init = async () => { await fetchProfileAndBoards(); setIsLoading(false); }; init(); }, []);
+  const isDesktop = screenWidth >= 1024;
+
+  // Platform switching fixes - Optimized
+  useEffect(() => {
+    let isMounted = true;
+    
+    const init = async () => { 
+      if (isMounted) {
+        await fetchProfileAndBoards(); 
+      }
+    };
+    
+    init();
+    
+    // Optimized animation - reduced duration
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400, // Reduced from 700ms
+      useNativeDriver: true,
+    }).start();
+    
+    const handleDimensionChange = ({ window }) => {
+      setScreenWidth(window.width);
+    };
+    
+    const sub = Dimensions.addEventListener?.('change', handleDimensionChange);
+    
+    return () => {
+      isMounted = false;
+      sub?.remove?.();
+    };
+  }, []);
+
+  // Additional effect to handle platform-specific resets - Simplified
+  useEffect(() => {
+    // Reset critical state when platform changes
+    setErrors({});
+    setShowEditForm(false);
+    setModalVisible(false);
+    setPreviewModalVisible(false);
+  }, [Platform.OS]);
 
   const getCompletionPct = () => {
     const fields = [studentName, email, dateOfBirth, phone, educationBoard, instituteName, preferredMedium, classYear];
@@ -235,8 +298,8 @@ export default function Profile() {
   if (Platform.OS === 'web') {
     const pct = getCompletionPct();
 
-    // ── Web Preview ──────────────────────────────────────────────────────────
-    if (previewModalVisible) {
+    // ── Web Preview (Default View) ─────────────────────────────────────────────
+    if (!showEditForm) {
       return (
         <View style={webPreview.overlay}>
           {/* Bengali character background */}
@@ -254,9 +317,17 @@ export default function Profile() {
 
           {/* Main white card */}
           <View style={webPreview.card}>
-            <TouchableOpacity style={webPreview.closeBtn} onPress={() => setPreviewModalVisible(false)}>
-              <Text style={webPreview.closeBtnTxt}>×</Text>
-            </TouchableOpacity>
+            <View style={webPreview.cardHeader}>
+              <TouchableOpacity style={webPreview.closeBtn} onPress={() => router.back()}>
+                <Text style={webPreview.closeBtnTxt}>×</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={webPreview.editBtn} 
+                onPress={() => setShowEditForm(true)}
+              >
+                <FontAwesome name="pencil" size={16} color="#5f5fff" />
+              </TouchableOpacity>
+            </View>
 
             <View style={webPreview.cardBody}>
               {/* LEFT */}
@@ -335,7 +406,16 @@ export default function Profile() {
               </View>
             </View>
           </View>
-          {ImagePickerModal}
+
+          {/* Edit Profile Button */}
+          <View style={[webPreview.footer, { paddingTop: 20 }]}>
+            <TouchableOpacity 
+              style={webEdit.saveBtn} 
+              onPress={() => setShowEditForm(true)}
+            >
+              <Text style={webEdit.saveBtnTxt}>Edit Profile</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       );
     }
@@ -501,8 +581,8 @@ export default function Profile() {
 
           {/* Action Buttons */}
           <View style={webEdit.actionRow}>
-            <TouchableOpacity style={webEdit.previewBtn} onPress={() => setPreviewModalVisible(true)}>
-              <Text style={webEdit.previewBtnTxt}>Preview Profile</Text>
+            <TouchableOpacity style={webEdit.previewBtn} onPress={() => setShowEditForm(false)}>
+              <Text style={webEdit.previewBtnTxt}>Back to Preview</Text>
             </TouchableOpacity>
             <TouchableOpacity style={webEdit.saveBtn} onPress={handleSave}>
               <Text style={webEdit.saveBtnTxt}>Save Changes</Text>
@@ -763,7 +843,9 @@ const webPreview = StyleSheet.create({
   patternRow: { flexDirection: 'row', flexWrap: 'nowrap' },
   patternChar: { color: '#fff', fontSize: 22, fontWeight: '700', width: 36, textAlign: 'center', lineHeight: 38 },
   card: { backgroundColor: '#fff', borderRadius: 20, width: '88%', maxWidth: 960, shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 28, shadowOffset: { width: 0, height: 10 }, elevation: 20, overflow: 'hidden' },
-  closeBtn: { position: 'absolute', top: 16, right: 20, zIndex: 20, width: 32, height: 32, borderRadius: 16, backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center' },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
+  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center' },
+  editBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f0f4ff', alignItems: 'center', justifyContent: 'center' },
   closeBtnTxt: { fontSize: 22, color: '#555', lineHeight: 28, marginTop: -2 },
   cardBody: { flexDirection: 'row', padding: 32, paddingTop: 40, gap: 32 },
   leftCol: { width: '36%', alignItems: 'center' },
