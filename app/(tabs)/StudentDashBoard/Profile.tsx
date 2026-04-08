@@ -123,7 +123,7 @@ export default function Profile() {
   const [country, setCountry] = useState("");
   const [classYear, setClassYear] = useState("");
   const [showPicker, setShowPicker] = useState(false);
-  const [boards, setBoards] = useState<Array<{ boardName: string; boardId?: string }>>([]);
+  const [boards, setBoards] = useState<Array<{ boardName: string; boardId?: string }>>(ALL_INDIA_BOARDS);
   const [showEditForm, setShowEditForm] = useState(!!(urlName || urlEmail || urlPhone));
   const [modalVisible, setModalVisible] = useState(false);
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
