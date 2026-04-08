@@ -45,6 +45,53 @@ const INDIAN_STATES = [
 const CLASS_OPTIONS = ['Class 6','Class 7','Class 8','Class 9','Class 10','Class 11','Class 12','1st Year','2nd Year','3rd Year','4th Year','5th Year'];
 const DEFAULT_PROFILE_IMAGE = "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png";
 
+const ALL_INDIA_BOARDS = [
+  // National Boards
+  { boardName: 'CBSE' },
+  { boardName: 'ICSE' },
+  { boardName: 'NIOS (National Institute of Open Schooling)' },
+  // International Boards
+  { boardName: 'IB (International Baccalaureate)' },
+  { boardName: 'IGCSE (Cambridge International)' },
+  { boardName: 'CAIE (Cambridge Assessment International Education)' },
+  // State Boards
+  { boardName: 'Andhra Pradesh Board of Secondary Education (BSEAP)' },
+  { boardName: 'Assam Board of Secondary Education (SEBA)' },
+  { boardName: 'Bihar School Examination Board (BSEB)' },
+  { boardName: 'Chhattisgarh Board of Secondary Education (CGBSE)' },
+  { boardName: 'Goa Board of Secondary and Higher Secondary Education (GBSHSE)' },
+  { boardName: 'Gujarat Secondary and Higher Secondary Education Board (GSEB)' },
+  { boardName: 'Haryana Board of School Education (HBSE)' },
+  { boardName: 'Himachal Pradesh Board of School Education (HPBOSE)' },
+  { boardName: 'Jharkhand Academic Council (JAC)' },
+  { boardName: 'Karnataka Secondary Education Examination Board (KSEEB)' },
+  { boardName: 'Kerala Board of Public Examinations (KBPE)' },
+  { boardName: 'Madhya Pradesh Board of Secondary Education (MPBSE)' },
+  { boardName: 'Maharashtra State Board of Secondary and Higher Secondary Education (MSBSHSE)' },
+  { boardName: 'Manipur Board of Secondary Education (BOSEM)' },
+  { boardName: 'Meghalaya Board of School Education (MBOSE)' },
+  { boardName: 'Mizoram Board of School Education (MBSE)' },
+  { boardName: 'Nagaland Board of School Education (NBSE)' },
+  { boardName: 'Odisha Board of Secondary Education (BSE Odisha)' },
+  { boardName: 'Punjab School Education Board (PSEB)' },
+  { boardName: 'Rajasthan Board of Secondary Education (RBSE)' },
+  { boardName: 'Tamil Nadu State Board (TN Board)' },
+  { boardName: 'Telangana State Board of Intermediate Education (TSBIE)' },
+  { boardName: 'Tripura Board of Secondary Education (TBSE)' },
+  { boardName: 'Uttar Pradesh Madhyamik Shiksha Parishad (UPMSP)' },
+  { boardName: 'Uttarakhand Board of School Education (UBSE)' },
+  { boardName: 'West Bengal Board of Secondary Education (WBBSE)' },
+  // Union Territories
+  { boardName: 'Delhi Board of Secondary Education (DBSE)' },
+  { boardName: 'Jammu and Kashmir Board of School Education (JKBOSE)' },
+  { boardName: 'Puducherry Board of Secondary Education' },
+  { boardName: 'Chandigarh Board of Secondary Education' },
+  // Open Schooling
+  { boardName: 'Rajasthan State Open School (RSOS)' },
+  { boardName: 'Madhya Pradesh State Open School (MPSOS)' },
+  { boardName: 'West Bengal Council of Rabindra Open Schooling (WBCROS)' },
+];
+
 const calculateAge = (dob: string): string => {
   try {
     const [day, month, year] = dob.split('/');
@@ -160,7 +207,11 @@ export default function Profile() {
         
         if (allBoards.length > 0) {
           setBoards(allBoards);
+        } else {
+          setBoards(ALL_INDIA_BOARDS);
         }
+      } else {
+        setBoards(ALL_INDIA_BOARDS);
       }
     } catch (error) {
       console.error('Profile load error:', error);
