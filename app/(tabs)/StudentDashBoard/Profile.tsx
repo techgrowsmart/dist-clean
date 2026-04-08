@@ -61,10 +61,10 @@ export default function Profile() {
   const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
   const [fadeAnim] = useState(new Animated.Value(0));
   const router = useRouter();
-  const { userType } = useLocalSearchParams<{ userType: string; userEmail: string }>();
-  const [studentName, setStudentName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const { userType, email: urlEmail, name: urlName, phone: urlPhone } = useLocalSearchParams<{ userType: string; email: string; name: string; phone: string }>();
+  const [studentName, setStudentName] = useState(urlName || "");
+  const [email, setEmail] = useState(urlEmail || "");
+  const [phone, setPhone] = useState(urlPhone || "");
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [dateOfBirth, setDateofBirth] = useState("");
   const [educationBoard, setEducationBoard] = useState("");
@@ -77,10 +77,11 @@ export default function Profile() {
   const [classYear, setClassYear] = useState("");
   const [showPicker, setShowPicker] = useState(false);
   const [boards, setBoards] = useState<Array<{ boardName: string; boardId?: string }>>([]);
-  const [showEditForm, setShowEditForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(!!(urlName || urlEmail || urlPhone));
   const [modalVisible, setModalVisible] = useState(false);
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const navigation = useNavigation();
 
   useFocusEffect(React.useCallback(() => {
@@ -131,12 +132,15 @@ export default function Profile() {
       // Optimized: Parallel API calls instead of sequential
       const [profileResponse, boardsResponse] = await Promise.allSettled([
         axios.post(`${BASE_URL}/api/sudentProfile`, { email: auth.email }, { headers }),
-        axios.post(`${BASE_URL}/api/allboards`, { category: "student" }, { headers }).catch(() => ({ data: [] }))
+        axios.get(`${BASE_URL}/api/valuesToselect`, { headers }).catch(() => ({ data: [] }))
       ]);
 
       if (profileResponse.status === 'fulfilled') {
         const data = profileResponse.value.data;
-        setStudentName(data.name || ""); setEmail(data.email || ""); setPhone(data.phone || "");
+        // Only override URL params if backend has data
+        if (data.name) setStudentName(data.name);
+        if (data.email) setEmail(data.email);
+        if (data.phone) setPhone(data.phone);
         setProfileImage(data.profileimage || null); setDateofBirth(data.dateOfBirth || "");
         setEducationBoard(data.educationBoard || ""); setInstituteName(data.instituteName || "");
         setPreferredMedium(data.preferredMedium || ""); setFullAddress(data.fullAddress || "");
@@ -145,10 +149,74 @@ export default function Profile() {
       }
 
       if (boardsResponse.status === 'fulfilled' && boardsResponse.value) {
-        const arr = Array.isArray(boardsResponse.value.data) ? boardsResponse.value.data : [];
-        setBoards(arr.map((b: any) => ({ boardName: b.boardName, boardId: b.boardId })).filter((b: any) => b.boardName));
+        // Extract boards from the categories array
+        const responseData = boardsResponse.value.data;
+        let allBoards: { boardName: string; boardId?: string }[] = [];
+        
+        if (Array.isArray(responseData)) {
+          // Response is an array of categories (from valuesToselect endpoint)
+          responseData.forEach((category: any) => {
+            if (category.boards && Array.isArray(category.boards)) {
+              category.boards.forEach((board: any) => {
+                if (board.name) {
+                  allBoards.push({ 
+                    boardName: board.name, 
+                    boardId: board.id 
+                  });
+                }
+              });
+            }
+          });
+        } else if (responseData.boards && Array.isArray(responseData.boards)) {
+          // Response is an object with boards array (from allboards endpoint)
+          allBoards = responseData.boards.map((b: any) => ({ 
+            boardName: b.boardName || b.name, 
+            boardId: b.boardId || b.id 
+          })).filter((b: any) => b.boardName);
+        }
+        
+        if (allBoards.length > 0) {
+          setBoards(allBoards);
+        } else {
+          throw new Error('No boards found');
+        }
       } else {
-        setBoards([{ boardName: 'CBSE' }, { boardName: 'ICSE' }, { boardName: 'State Board' }]);
+        // All Indian Education Boards
+        setBoards([
+          { boardName: 'CBSE' },
+          { boardName: 'ICSE' },
+          { boardName: 'State Board' },
+          { boardName: 'IB (International Baccalaureate)' },
+          { boardName: 'IGCSE (Cambridge)' },
+          { boardName: 'NIOS (National Institute of Open Schooling)' },
+          { boardName: 'Andhra Pradesh Board of Intermediate Education' },
+          { boardName: 'Assam Higher Secondary Education Council' },
+          { boardName: 'Bihar School Examination Board' },
+          { boardName: 'Chhattisgarh Board of Secondary Education' },
+          { boardName: 'Goa Board of Secondary and Higher Secondary Education' },
+          { boardName: 'Gujarat Secondary and Higher Secondary Education Board' },
+          { boardName: 'Haryana Board of School Education' },
+          { boardName: 'Himachal Pradesh Board of School Education' },
+          { boardName: 'Jammu and Kashmir Board of School Education' },
+          { boardName: 'Jharkhand Academic Council' },
+          { boardName: 'Karnataka Secondary Education Examination Board' },
+          { boardName: 'Kerala Board of Public Examinations' },
+          { boardName: 'Madhya Pradesh Board of Secondary Education' },
+          { boardName: 'Maharashtra State Board of Secondary and Higher Secondary Education' },
+          { boardName: 'Manipur Board of Secondary Education' },
+          { boardName: 'Meghalaya Board of School Education' },
+          { boardName: 'Mizoram Board of School Education' },
+          { boardName: 'Nagaland Board of School Education' },
+          { boardName: 'Odisha Board of Secondary Education' },
+          { boardName: 'Punjab School Education Board' },
+          { boardName: 'Rajasthan Board of Secondary Education' },
+          { boardName: 'Tamil Nadu State Board of School Examination' },
+          { boardName: 'Telangana State Board of Intermediate Education' },
+          { boardName: 'Tripura Board of Secondary Education' },
+          { boardName: 'Uttar Pradesh Madhyamik Shiksha Parishad' },
+          { boardName: 'Uttarakhand Board of School Education' },
+          { boardName: 'West Bengal Board of Secondary Education' }
+        ]);
       }
     } catch (error) {
       console.error('Profile load error:', error);
@@ -238,22 +306,78 @@ export default function Profile() {
   };
 
   const handleSave = async () => {
-    if (!validateForm()) { Alert.alert("Missing Fields", "Please fill in all required fields."); return; }
+    if (!validateForm()) { 
+      Alert.alert("Missing Fields", "Please fill in all required fields."); 
+      return; 
+    }
+    
+    setIsSaving(true);
+    
     try {
+      // Case 1: New profile image uploaded
       if (profileImage && (profileImage.startsWith("file://") || profileImage.startsWith("blob:"))) {
         const imageUrl = await uploadImageToS3AndUpdateProfile(profileImage);
+        if (!imageUrl) {
+          setIsSaving(false);
+          Alert.alert("Error", "Failed to upload profile image. Please try again.");
+          return;
+        }
         await setDoc(doc(db, "users", email), { name: studentName, email, phone, profileImage: imageUrl });
         await AsyncStorage.multiSet([["studentName", studentName], ["email", email], ["phone", phone]]);
-        router.push({ pathname: "/(tabs)/StudentDashBoard/Student", params: { userType: userType || "student", userEmail: email, studentName, phone } });
+        setIsSaving(false);
+        Alert.alert("Success", "Profile saved successfully!", [
+          { text: "OK", onPress: () => router.push({ pathname: "/(tabs)/StudentDashBoard/Student", params: { userType: userType || "student", userEmail: email, studentName, phone } }) }
+        ]);
         return;
       }
+      
+      // Case 2: No new image - just update profile data
       await setDoc(doc(db, "users", email), { name: studentName, email, phone });
       const auth = await getAuthData();
-      const obj = { email, name: studentName, dateofBirth: dateOfBirth, educationBoard, instituteName, classYear, preferredMedium, phone_number: phone, fullAddress, stateName, pincode, country };
-      await axios.post(`${BASE_URL}/api/updateStudentProfile`, obj, { headers: { Authorization: `Bearer ${(auth as any).token}` } });
-      await AsyncStorage.multiSet([["studentName", studentName], ["email", email], ["phone", phone]]);
-      router.push({ pathname: "/(tabs)/StudentDashBoard/Student", params: { userType: userType || "student", userEmail: email, studentName, phone } });
-    } catch (e) { console.error("Save error:", e); }
+      if (!auth?.token) {
+        setIsSaving(false);
+        Alert.alert("Error", "Authentication required. Please login again.");
+        return;
+      }
+      
+      const obj = { 
+        email, 
+        name: studentName, 
+        dateofBirth: dateOfBirth, 
+        educationBoard, 
+        instituteName, 
+        classYear, 
+        preferredMedium, 
+        phone: phone, 
+        fullAddress, 
+        stateName, 
+        pincode, 
+        country 
+      };
+      
+      console.log("Saving profile data:", obj);
+      
+      const response = await axios.post(`${BASE_URL}/api/updateStudentProfile`, obj, { 
+        headers: { Authorization: `Bearer ${auth.token}` } 
+      });
+      
+      console.log("Save response:", response.data);
+      
+      if (response.status === 200) {
+        await AsyncStorage.multiSet([["studentName", studentName], ["email", email], ["phone", phone]]);
+        setIsSaving(false);
+        Alert.alert("Success", "Profile saved successfully!", [
+          { text: "OK", onPress: () => router.push({ pathname: "/(tabs)/StudentDashBoard/Student", params: { userType: userType || "student", userEmail: email, studentName, phone } }) }
+        ]);
+      } else {
+        setIsSaving(false);
+        Alert.alert("Error", "Failed to save profile. Please try again.");
+      }
+    } catch (e) { 
+      console.error("Save error:", e); 
+      setIsSaving(false);
+      Alert.alert("Error", "An error occurred while saving. Please check your connection and try again.");
+    } 
   };
 
   const handleImagePicker = () => setModalVisible(true);
@@ -477,13 +601,11 @@ export default function Profile() {
               <View style={webEdit.formRow}>
                 <View style={webEdit.formField}>
                   <Text style={webEdit.fieldLabel}>FULL NAME <Text style={webEdit.req}>*</Text></Text>
-                  <TextInput style={[webEdit.input, errors.studentName ? webEdit.inputErr : null]} value={studentName} onChangeText={setStudentName} placeholder="Ayano Nana" placeholderTextColor="#c4c4c4" />
-                  {errors.studentName ? <Text style={webEdit.errTxt}>{errors.studentName}</Text> : null}
+                  <TextInput style={[webEdit.input, webEdit.inputDisabled]} value={studentName} editable={false} placeholder="Ayano Nana" placeholderTextColor="#c4c4c4" />
                 </View>
                 <View style={webEdit.formField}>
                   <Text style={webEdit.fieldLabel}>EMAIL <Text style={webEdit.req}>*</Text></Text>
-                  <TextInput style={[webEdit.input, errors.email ? webEdit.inputErr : null]} value={email} onChangeText={setEmail} placeholder="ayanonana@gmail.com" keyboardType="email-address" placeholderTextColor="#c4c4c4" />
-                  {errors.email ? <Text style={webEdit.errTxt}>{errors.email}</Text> : null}
+                  <TextInput style={[webEdit.input, webEdit.inputDisabled]} value={email} editable={false} placeholder="ayanonana@gmail.com" keyboardType="email-address" placeholderTextColor="#c4c4c4" />
                 </View>
               </View>
 
@@ -507,10 +629,32 @@ export default function Profile() {
                 <View style={webEdit.formField}>
                   <Text style={webEdit.fieldLabel}>EDUCATION BOARD <Text style={webEdit.req}>*</Text></Text>
                   <View style={[webEdit.input, webEdit.pickerWrap, errors.educationBoard ? webEdit.inputErr : null]}>
-                    <Picker selectedValue={educationBoard} onValueChange={setEducationBoard} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
-                      <Picker.Item label="Select Board" value="" />
-                      {boards.map((b, i) => <Picker.Item key={i} label={b.boardName} value={b.boardName} />)}
-                    </Picker>
+                    {Platform.OS === 'web' ? (
+                      <select
+                        value={educationBoard}
+                        onChange={(e) => setEducationBoard(e.target.value)}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          border: 'none',
+                          background: 'transparent',
+                          fontSize: 13.5,
+                          color: educationBoard ? '#111827' : '#9ca3af',
+                          outline: 'none',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="">Select Board</option>
+                        {boards.map((b, i) => (
+                          <option key={i} value={b.boardName}>{b.boardName}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Picker selectedValue={educationBoard} onValueChange={setEducationBoard} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
+                        <Picker.Item label="Select Board" value="" />
+                        {boards.map((b, i) => <Picker.Item key={i} label={b.boardName} value={b.boardName} />)}
+                      </Picker>
+                    )}
                   </View>
                   {errors.educationBoard ? <Text style={webEdit.errTxt}>{errors.educationBoard}</Text> : null}
                 </View>
@@ -525,22 +669,66 @@ export default function Profile() {
                 <View style={webEdit.formField}>
                   <Text style={webEdit.fieldLabel}>CLASS/ YEAR <Text style={webEdit.req}>*</Text></Text>
                   <View style={[webEdit.input, webEdit.pickerWrap, errors.classYear ? webEdit.inputErr : null]}>
-                    <Picker selectedValue={classYear} onValueChange={setClassYear} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
-                      <Picker.Item label="#" value="" />
-                      {CLASS_OPTIONS.map((c, i) => <Picker.Item key={i} label={c} value={c} />)}
-                    </Picker>
+                    {Platform.OS === 'web' ? (
+                      <select
+                        value={classYear}
+                        onChange={(e) => setClassYear(e.target.value)}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          border: 'none',
+                          background: 'transparent',
+                          fontSize: 13.5,
+                          color: classYear ? '#111827' : '#9ca3af',
+                          outline: 'none',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="">Select Class/Year</option>
+                        {CLASS_OPTIONS.map((c, i) => (
+                          <option key={i} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Picker selectedValue={classYear} onValueChange={setClassYear} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
+                        <Picker.Item label="#" value="" />
+                        {CLASS_OPTIONS.map((c, i) => <Picker.Item key={i} label={c} value={c} />)}
+                      </Picker>
+                    )}
                   </View>
                   {errors.classYear ? <Text style={webEdit.errTxt}>{errors.classYear}</Text> : null}
                 </View>
                 <View style={webEdit.formField}>
                   <Text style={webEdit.fieldLabel}>PREFERRED MEDIUM <Text style={webEdit.req}>*</Text></Text>
                   <View style={[webEdit.input, webEdit.pickerWrap, errors.preferredMedium ? webEdit.inputErr : null]}>
-                    <Picker selectedValue={preferredMedium} onValueChange={setPreferredMedium} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
-                      <Picker.Item label="ENGLISH/ BENGALI/ TAMIL" value="" />
-                      <Picker.Item label="English" value="English" />
-                      <Picker.Item label="Bengali" value="Bengali" />
-                      <Picker.Item label="Hindi" value="Hindi" />
-                    </Picker>
+                    {Platform.OS === 'web' ? (
+                      <select
+                        value={preferredMedium}
+                        onChange={(e) => setPreferredMedium(e.target.value)}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          border: 'none',
+                          background: 'transparent',
+                          fontSize: 13.5,
+                          color: preferredMedium ? '#111827' : '#9ca3af',
+                          outline: 'none',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="">Select Medium</option>
+                        <option value="English">English</option>
+                        <option value="Bengali">Bengali</option>
+                        <option value="Hindi">Hindi</option>
+                      </select>
+                    ) : (
+                      <Picker selectedValue={preferredMedium} onValueChange={setPreferredMedium} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
+                        <Picker.Item label="ENGLISH/ BENGALI/ TAMIL" value="" />
+                        <Picker.Item label="English" value="English" />
+                        <Picker.Item label="Bengali" value="Bengali" />
+                        <Picker.Item label="Hindi" value="Hindi" />
+                      </Picker>
+                    )}
                   </View>
                   {errors.preferredMedium ? <Text style={webEdit.errTxt}>{errors.preferredMedium}</Text> : null}
                 </View>
@@ -555,10 +743,32 @@ export default function Profile() {
                 <View style={webEdit.formField}>
                   <Text style={webEdit.fieldLabel}>STATE</Text>
                   <View style={[webEdit.input, webEdit.pickerWrap]}>
-                    <Picker selectedValue={stateName} onValueChange={setStateName} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
-                      <Picker.Item label="Select State/UT" value="" />
-                      {INDIAN_STATES.map((s, i) => <Picker.Item key={i} label={s} value={s} />)}
-                    </Picker>
+                    {Platform.OS === 'web' ? (
+                      <select
+                        value={stateName}
+                        onChange={(e) => setStateName(e.target.value)}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          border: 'none',
+                          background: 'transparent',
+                          fontSize: 13.5,
+                          color: stateName ? '#111827' : '#9ca3af',
+                          outline: 'none',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="">Select State/UT</option>
+                        {INDIAN_STATES.map((s, i) => (
+                          <option key={i} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Picker selectedValue={stateName} onValueChange={setStateName} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
+                        <Picker.Item label="Select State/UT" value="" />
+                        {INDIAN_STATES.map((s, i) => <Picker.Item key={i} label={s} value={s} />)}
+                      </Picker>
+                    )}
                   </View>
                 </View>
                 <View style={webEdit.formField}>
@@ -571,9 +781,28 @@ export default function Profile() {
               <View style={webEdit.formRowFull}>
                 <Text style={webEdit.fieldLabel}>COUNTRY</Text>
                 <View style={[webEdit.input, webEdit.pickerWrap]}>
-                  <Picker selectedValue={country || 'India'} onValueChange={setCountry} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
-                    <Picker.Item label="India" value="India" />
-                  </Picker>
+                  {Platform.OS === 'web' ? (
+                    <select
+                      value={country || 'India'}
+                      onChange={(e) => setCountry(e.target.value)}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        border: 'none',
+                        background: 'transparent',
+                        fontSize: 13.5,
+                        color: '#111827',
+                        outline: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <option value="India">India</option>
+                    </select>
+                  ) : (
+                    <Picker selectedValue={country || 'India'} onValueChange={setCountry} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
+                      <Picker.Item label="India" value="India" />
+                    </Picker>
+                  )}
                 </View>
               </View>
             </View>
@@ -581,11 +810,11 @@ export default function Profile() {
 
           {/* Action Buttons */}
           <View style={webEdit.actionRow}>
-            <TouchableOpacity style={webEdit.previewBtn} onPress={() => setShowEditForm(false)}>
+            <TouchableOpacity style={webEdit.previewBtn} onPress={() => setShowEditForm(false)} disabled={isSaving}>
               <Text style={webEdit.previewBtnTxt}>Back to Preview</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={webEdit.saveBtn} onPress={handleSave}>
-              <Text style={webEdit.saveBtnTxt}>Save Changes</Text>
+            <TouchableOpacity style={[webEdit.saveBtn, isSaving && { opacity: 0.7 }]} onPress={handleSave} disabled={isSaving}>
+              <Text style={webEdit.saveBtnTxt}>{isSaving ? 'Saving...' : 'Save Changes'}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -619,12 +848,10 @@ export default function Profile() {
             </View>
 
             <Text style={styles.label}>Full Name <Text style={styles.asterisk}>*</Text></Text>
-            <TextInput style={styles.input} value={studentName} onChangeText={setStudentName} placeholder="Enter your name" placeholderTextColor="#afb3c1" />
-            {errors.studentName && <Text style={styles.errorText}>{errors.studentName}</Text>}
+            <TextInput style={[styles.input, styles.inputDisabled]} value={studentName} editable={false} placeholder="Enter your name" placeholderTextColor="#afb3c1" />
 
             <Text style={styles.label}>Email <Text style={styles.asterisk}>*</Text></Text>
-            <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Enter your email" keyboardType="email-address" placeholderTextColor="#afb3c1" />
-            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+            <TextInput style={[styles.input, styles.inputDisabled]} value={email} editable={false} placeholder="Enter your email" keyboardType="email-address" placeholderTextColor="#afb3c1" />
 
             <Text style={styles.label}>Date of Birth <Text style={styles.asterisk}>*</Text></Text>
             <TouchableOpacity onPress={() => setShowPicker(true)}>
@@ -693,8 +920,12 @@ export default function Profile() {
             </View>
 
             <View style={styles.buttonRow}>
-              <TouchableOpacity style={styles.button} onPress={handleSave}><Text style={styles.buttonTxt}>Save</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.button} onPress={() => setPreviewModalVisible(true)}><Text style={styles.buttonTxt}>Preview</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.button, isSaving && { opacity: 0.7 }]} onPress={handleSave} disabled={isSaving}>
+                <Text style={styles.buttonTxt}>{isSaving ? 'Saving...' : 'Save'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.button} onPress={() => setPreviewModalVisible(true)} disabled={isSaving}>
+                <Text style={styles.buttonTxt}>Preview</Text>
+              </TouchableOpacity>
             </View>
           </ScrollView>
         ) : (
@@ -748,6 +979,7 @@ export default function Profile() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   inputError: { borderColor: "red", borderWidth: 1 },
+  inputDisabled: { backgroundColor: '#f0f0f0', color: '#888' },
   errorText: { color: "red", fontSize: wp("3%"), marginBottom: 6, marginTop: -6 },
   contentContainer: { paddingVertical: 10, paddingHorizontal: 16, paddingBottom: 20 },
   upload: { flex: 1, alignItems: "center", justifyContent: "center", gap: wp("1.3%"), flexDirection: "row", width: 98, height: 40 },
@@ -824,6 +1056,7 @@ const webEdit = StyleSheet.create({
   req: { color: '#ef4444' },
   input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13.5, backgroundColor: '#fff', color: '#111827', height: 42 },
   inputErr: { borderColor: '#ef4444' },
+  inputDisabled: { backgroundColor: '#f3f4f6', color: '#6b7280', borderColor: '#d1d5db' },
   errTxt: { fontSize: 11, color: '#ef4444', marginTop: 3 },
   pickerWrap: { padding: 0, paddingHorizontal: 0, overflow: 'hidden', justifyContent: 'center' },
   pickerInner: { height: 42, color: '#111827', fontSize: 13.5, borderWidth: 0, backgroundColor: 'transparent' },
