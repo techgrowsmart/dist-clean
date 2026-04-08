@@ -176,43 +176,23 @@ export default function Profile() {
       }
       const headers = { Authorization: `Bearer ${auth.token}` };
       
-      // Fetch profile and boards in parallel
-      const [profileResponse, boardsResponse] = await Promise.allSettled([
-        axios.post(`${BASE_URL}/api/sudentProfile`, { email: auth.email }, { headers }),
-        axios.post(`${BASE_URL}/api/allboards`, { category: "Subject teacher" }, { headers }).catch(() => null)
-      ]);
+      // Fetch profile only - boards are hardcoded in ALL_INDIA_BOARDS
+      const profileResponse = await axios.post(
+        `${BASE_URL}/api/sudentProfile`, 
+        { email: auth.email }, 
+        { headers }
+      );
 
-      if (profileResponse.status === 'fulfilled') {
-        const data = profileResponse.value.data;
-        // Only override URL params if backend has data
-        if (data.name) setStudentName(data.name);
-        if (data.email) setEmail(data.email);
-        if (data.phone) setPhone(data.phone);
-        setProfileImage(data.profileimage || null); setDateofBirth(data.dateOfBirth || "");
-        setEducationBoard(data.educationBoard || ""); setInstituteName(data.instituteName || "");
-        setPreferredMedium(data.preferredMedium || ""); setFullAddress(data.fullAddress || "");
-        setStateName(data.stateName || ""); setPincode(data.pincode || "");
-        setCountry(data.country || ""); setClassYear(data.classYear || "");
-      }
-
-      // Extract boards from allboards API response
-      if (boardsResponse.status === 'fulfilled' && boardsResponse.value?.data?.boards) {
-        const boardsData = boardsResponse.value.data.boards;
-        const allBoards = boardsData
-          .map((b: any) => ({ 
-            boardName: b.boardName || b.name, 
-            boardId: b.boardId || b.id 
-          }))
-          .filter((b: any) => b.boardName);
-        
-        if (allBoards.length > 0) {
-          setBoards(allBoards);
-        } else {
-          setBoards(ALL_INDIA_BOARDS);
-        }
-      } else {
-        setBoards(ALL_INDIA_BOARDS);
-      }
+      const data = profileResponse.data;
+      // Only override URL params if backend has data
+      if (data.name) setStudentName(data.name);
+      if (data.email) setEmail(data.email);
+      if (data.phone) setPhone(data.phone);
+      setProfileImage(data.profileimage || null); setDateofBirth(data.dateOfBirth || "");
+      setEducationBoard(data.educationBoard || ""); setInstituteName(data.instituteName || "");
+      setPreferredMedium(data.preferredMedium || ""); setFullAddress(data.fullAddress || "");
+      setStateName(data.stateName || ""); setPincode(data.pincode || "");
+      setCountry(data.country || ""); setClassYear(data.classYear || "");
     } catch (error) {
       console.error('Profile load error:', error);
       Alert.alert("Error", "Failed to load profile. Please try again later.");
