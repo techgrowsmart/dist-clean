@@ -129,10 +129,10 @@ export default function Profile() {
       }
       const headers = { Authorization: `Bearer ${auth.token}` };
       
-      // Optimized: Parallel API calls instead of sequential
+      // Fetch profile and boards in parallel
       const [profileResponse, boardsResponse] = await Promise.allSettled([
         axios.post(`${BASE_URL}/api/sudentProfile`, { email: auth.email }, { headers }),
-        axios.get(`${BASE_URL}/api/valuesToselect`, { headers }).catch(() => ({ data: [] }))
+        axios.post(`${BASE_URL}/api/allboards`, { category: "Subject teacher" }, { headers }).catch(() => null)
       ]);
 
       if (profileResponse.status === 'fulfilled') {
@@ -148,75 +148,19 @@ export default function Profile() {
         setCountry(data.country || ""); setClassYear(data.classYear || "");
       }
 
-      if (boardsResponse.status === 'fulfilled' && boardsResponse.value) {
-        // Extract boards from the categories array
-        const responseData = boardsResponse.value.data;
-        let allBoards: { boardName: string; boardId?: string }[] = [];
-        
-        if (Array.isArray(responseData)) {
-          // Response is an array of categories (from valuesToselect endpoint)
-          responseData.forEach((category: any) => {
-            if (category.boards && Array.isArray(category.boards)) {
-              category.boards.forEach((board: any) => {
-                if (board.name) {
-                  allBoards.push({ 
-                    boardName: board.name, 
-                    boardId: board.id 
-                  });
-                }
-              });
-            }
-          });
-        } else if (responseData.boards && Array.isArray(responseData.boards)) {
-          // Response is an object with boards array (from allboards endpoint)
-          allBoards = responseData.boards.map((b: any) => ({ 
+      // Extract boards from allboards API response
+      if (boardsResponse.status === 'fulfilled' && boardsResponse.value?.data?.boards) {
+        const boardsData = boardsResponse.value.data.boards;
+        const allBoards = boardsData
+          .map((b: any) => ({ 
             boardName: b.boardName || b.name, 
             boardId: b.boardId || b.id 
-          })).filter((b: any) => b.boardName);
-        }
+          }))
+          .filter((b: any) => b.boardName);
         
         if (allBoards.length > 0) {
           setBoards(allBoards);
-        } else {
-          throw new Error('No boards found');
         }
-      } else {
-        // All Indian Education Boards
-        setBoards([
-          { boardName: 'CBSE' },
-          { boardName: 'ICSE' },
-          { boardName: 'State Board' },
-          { boardName: 'IB (International Baccalaureate)' },
-          { boardName: 'IGCSE (Cambridge)' },
-          { boardName: 'NIOS (National Institute of Open Schooling)' },
-          { boardName: 'Andhra Pradesh Board of Intermediate Education' },
-          { boardName: 'Assam Higher Secondary Education Council' },
-          { boardName: 'Bihar School Examination Board' },
-          { boardName: 'Chhattisgarh Board of Secondary Education' },
-          { boardName: 'Goa Board of Secondary and Higher Secondary Education' },
-          { boardName: 'Gujarat Secondary and Higher Secondary Education Board' },
-          { boardName: 'Haryana Board of School Education' },
-          { boardName: 'Himachal Pradesh Board of School Education' },
-          { boardName: 'Jammu and Kashmir Board of School Education' },
-          { boardName: 'Jharkhand Academic Council' },
-          { boardName: 'Karnataka Secondary Education Examination Board' },
-          { boardName: 'Kerala Board of Public Examinations' },
-          { boardName: 'Madhya Pradesh Board of Secondary Education' },
-          { boardName: 'Maharashtra State Board of Secondary and Higher Secondary Education' },
-          { boardName: 'Manipur Board of Secondary Education' },
-          { boardName: 'Meghalaya Board of School Education' },
-          { boardName: 'Mizoram Board of School Education' },
-          { boardName: 'Nagaland Board of School Education' },
-          { boardName: 'Odisha Board of Secondary Education' },
-          { boardName: 'Punjab School Education Board' },
-          { boardName: 'Rajasthan Board of Secondary Education' },
-          { boardName: 'Tamil Nadu State Board of School Examination' },
-          { boardName: 'Telangana State Board of Intermediate Education' },
-          { boardName: 'Tripura Board of Secondary Education' },
-          { boardName: 'Uttar Pradesh Madhyamik Shiksha Parishad' },
-          { boardName: 'Uttarakhand Board of School Education' },
-          { boardName: 'West Bengal Board of Secondary Education' }
-        ]);
       }
     } catch (error) {
       console.error('Profile load error:', error);
