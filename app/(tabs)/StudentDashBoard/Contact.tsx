@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -12,7 +12,7 @@ import {
   Platform,
   TextInput,
   KeyboardAvoidingView,
-  TouchableWithoutFeedback,
+  Pressable,
   Keyboard,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
@@ -24,14 +24,12 @@ import {
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
-import Svg, { Rect, Line, G, Text as SvgText, Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
-import WebHeader from '../../../components/ui/WebHeader';
-import WebSidebar from '../../../components/ui/WebSidebar';
-import TeacherThoughtsCard, { TeacherThoughtsBackground } from '../../../components/ui/TeacherThoughtsCard';
-import TeacherPostComposer from '../../../components/ui/TeacherPostComposer';
+import ResponsiveSidebar from '../../../components/ui/ResponsiveSidebar';
+import StudentThoughtsCard from '../../../components/ui/StudentThoughtsCard';
 import { getAuthData } from '../../../utils/authStorage';
 import { BASE_URL } from '../../../config';
 import { Linking } from 'react-native';
+import BackButton from '../../../components/BackButton';
 
 // Global Design Tokens
 const COLORS = {
@@ -63,32 +61,13 @@ export default function Contact() {
   // State management
   const [activeItem, setActiveItem] = useState('Contact Us');
   const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
-  const [screenHeight, setScreenHeight] = useState(Dimensions.get('window').height);
+  const [isMobile, setIsMobile] = useState(Dimensions.get('window').width < 768);
   
-  // Responsive breakpoints
-  const isMobile = screenWidth < 768;
-  const isTablet = screenWidth >= 768 && screenWidth < 1024;
-  const isDesktop = screenWidth >= 1024;
-  
-  // Dynamic font sizes
-  const getFontSize = (mobile: number, tablet: number, desktop: number) => {
-    if (isMobile) return mobile;
-    if (isTablet) return tablet;
-    return desktop;
-  };
-  
-  // Dynamic spacing
-  const getSpacing = (mobile: number, tablet: number, desktop: number) => {
-    if (isMobile) return mobile;
-    if (isTablet) return tablet;
-    return desktop;
-  };
-
   // Update dimensions on change
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       setScreenWidth(window.width);
-      setScreenHeight(window.height);
+      setIsMobile(window.width < 768);
     });
     return () => subscription?.remove();
   }, []);
@@ -111,6 +90,16 @@ export default function Contact() {
   const [posts, setPosts] = useState<any[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
   const [userProfileCache, setUserProfileCache] = useState<Map<string, { name: string; profilePic: string }>>(new Map());
+
+  const handleBackPress = useCallback(() => { router.push('/(tabs)/StudentDashBoard/Student'); }, [router]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') handleBackPress(); };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [handleBackPress]);
 
   // Fetch student data
   useEffect(() => {
@@ -234,24 +223,194 @@ export default function Contact() {
       action: 'mailto:support@gogrowsmart.com'
     },
     {
-      icon: 'call-outline',
-      title: 'Phone Support',
-      description: '+91 98765 43210',
-      action: 'tel:+919876543210'
-    },
-    {
       icon: 'time-outline',
       title: 'Working Hours',
       description: 'Mon - Fri: 9:00 AM - 6:00 PM',
       action: null
     },
-    {
-      icon: 'location-outline',
-      title: 'Office Location',
-      description: 'Bangalore, India',
-      action: null
-    }
   ];
+
+  // Helper functions for Thoughts
+  const getProfileImageSource = (profilePic?: string) => {
+    if (!profilePic || ['', 'null', 'undefined'].includes(profilePic)) return null;
+    if (typeof profilePic === 'string') {
+      if (profilePic.startsWith('http') || profilePic.startsWith('file://')) return { uri: profilePic };
+      const clean = profilePic.startsWith('/') ? profilePic.substring(1) : profilePic;
+      return { uri: `${BASE_URL}/${clean}` };
+    }
+    return null;
+  };
+
+  const initials = (name: string) =>
+    name.split(' ').map(w => w.charAt(0)).join('').toUpperCase().slice(0, 2) || '?';
+
+  const resolvePostAuthor = (post: any) => {
+    const cached = userProfileCache.get(post.author?.email) || { name: '', profilePic: '' };
+    let name = post.author?.name || cached.name || '';
+    let pic: string | null = post.author?.profile_pic || cached.profilePic || null;
+    if (!name || name === 'null' || name.includes('@')) name = post.author?.email?.split('@')[0] || 'User';
+    if (pic && !pic.startsWith('http') && !pic.startsWith('/')) pic = `/${pic}`;
+    if (pic === '' || pic === 'null') pic = null;
+    return { name, pic, role: post.author?.role || 'User' };
+  };
+
+  const formatTimeAgo = (dateString?: string): string => {
+    if (!dateString) return 'Just now';
+    if (typeof dateString === 'string' && dateString.includes('ago')) return dateString;
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Just now';
+    const diff = Date.now() - date.getTime();
+    if (diff < 0) return 'Just now';
+    const mins = Math.floor(diff / 60000);
+    const hrs = Math.floor(mins / 60);
+    const days = Math.floor(hrs / 24);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins} min. ago`;
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${days}d ago`;
+  };
+
+  const handleLike = async (postId: string) => {
+    if (!authToken) return;
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+    const newLiked = !post.isLiked;
+    setPosts(ps => ps.map(p => p.id === postId ? { ...p, likes: newLiked ? p.likes + 1 : Math.max(0, p.likes - 1), isLiked: newLiked } : p));
+  };
+
+  const renderWebRightSidebar = () => (
+    <StudentThoughtsCard
+      posts={posts}
+      postsLoading={postsLoading}
+      userProfileCache={userProfileCache}
+      currentUserEmail={userEmail || undefined}
+      getProfileImageSource={getProfileImageSource}
+      initials={initials}
+      resolvePostAuthor={resolvePostAuthor}
+      handleLike={handleLike}
+      setPosts={setPosts}
+      onComment={(post: any) => {
+        console.log('Open comments for post:', post.id);
+      }}
+      isMobile={isMobile}
+      showThoughtsPanel={true}
+      authToken={authToken}
+      BASE_URL={BASE_URL}
+      formatTimeAgo={formatTimeAgo}
+      router={router}
+    />
+  );
+
+  const renderWebMainContent = () => (
+    <View style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
+          <ScrollView 
+            style={{ flex: 1 }} 
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Welcome banner */}
+            <View style={styles.welcomeBannerScreen}>
+              <View style={styles.bannerHeader}>
+                <BackButton onPress={handleBackPress} color="white" />
+                <Text style={styles.welcomeTextScreen}>
+                  CONTACT US
+                </Text>
+              </View>
+              <Text style={styles.welcomeSubtextScreen}>
+                We're here to help! Reach out with any questions or feedback.
+              </Text>
+            </View>
+
+            {/* Contact Information */}
+            <View style={styles.contactInfoCard}>
+              <Text style={styles.contactInfoTitle}>Get in Touch</Text>
+              <View style={styles.contactInfoGrid}>
+                {contactInfo.map((info, index) => (
+                  <TouchableOpacity 
+                    key={index}
+                    style={styles.contactInfoItem}
+                    onPress={() => info.action && Linking.openURL(info.action)}
+                    disabled={!info.action}
+                  >
+                    <View style={[styles.contactIcon, { backgroundColor: info.action ? COLORS.primaryBlue + '20' : COLORS.border }]}>
+                      <Ionicons 
+                        name={info.icon as any} 
+                        size={24} 
+                        color={info.action ? COLORS.primaryBlue : COLORS.textMuted} 
+                      />
+                    </View>
+                    <Text style={styles.contactInfoItemTitle}>{info.title}</Text>
+                    <Text style={styles.contactInfoItemDesc}>{info.description}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Contact Form */}
+            <View style={styles.contactFormCard}>
+              <Text style={styles.contactFormTitle}>Send us a Message</Text>
+              
+              {/* Category Selection */}
+              <Text style={styles.formLabel}>Category</Text>
+              <View style={styles.categoryGrid}>
+                {categories.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.categoryItem,
+                      selectedCategory === category.id && styles.categoryItemSelected
+                    ]}
+                    onPress={() => setSelectedCategory(category.id)}
+                  >
+                    <Ionicons 
+                      name={category.icon} 
+                      size={20} 
+                      color={selectedCategory === category.id ? COLORS.white : category.color} 
+                    />
+                    <Text style={[
+                      styles.categoryText,
+                      selectedCategory === category.id && styles.categoryTextSelected
+                    ]}>
+                      {category.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Message */}
+              <Text style={styles.formLabel}>Message</Text>
+              <TextInput
+                style={styles.messageInput}
+                multiline
+                numberOfLines={6}
+                placeholder="Tell us more about your question or feedback..."
+                placeholderTextColor={COLORS.textMuted}
+                value={message}
+                onChangeText={setMessage}
+                textAlignVertical="top"
+                editable={true}
+              />
+
+              {/* Submit Button */}
+              <TouchableOpacity
+                style={styles.submitButton}
+                onPress={handleSubmit}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator color={COLORS.white} size="small" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Send Message</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
+          </ScrollView>
+        </Pressable>
+      </KeyboardAvoidingView>
+    </View>
+  );
 
   // ── Render ────────────────────────────────────────────────────────────────
   if (!fontsLoaded) {
@@ -263,135 +422,140 @@ export default function Contact() {
     );
   }
 
+  // Web return with responsive sidebar and Thoughts
+  if (Platform.OS === 'web') {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#fff' }}>
+        <ResponsiveSidebar
+          activeItem={activeItem}
+          onItemPress={(itemName: string) => {
+            setActiveItem(itemName);
+            if (itemName === 'My Tuitions') router.push('/(tabs)/StudentDashBoard/MyTuitions' as any);
+            else if (itemName === 'Profile') router.push('/(tabs)/StudentDashBoard/Profile' as any);
+            else if (itemName === 'Subscription') router.push('/(tabs)/StudentDashBoard/Subscription' as any);
+            else if (itemName === 'Faq') router.push('/(tabs)/StudentDashBoard/Faq' as any);
+            else if (itemName === 'Contact Us' || itemName === 'Contact') router.push('/(tabs)/Contact' as any);
+            else console.log('Sidebar item pressed:', itemName);
+          }}
+          userEmail={userEmail || ""}
+          studentName={studentName || ""}
+          profileImage={profileImage || null}
+        >
+          <View style={{ flex: 1 }}>
+            {renderWebMainContent()}
+          </View>
+        </ResponsiveSidebar>
+        {/* Thoughts panel - conditionally rendered based on screen size */}
+        <>
+          {isMobile ? (
+            renderWebRightSidebar()
+          ) : (
+            <View style={{ width: '28%', minWidth: 280, maxWidth: 380 }}>{renderWebRightSidebar()}</View>
+          )}
+        </>
+      </View>
+    );
+  }
+
+  // Mobile return
   return (
     <View style={styles.container}>
-      {/* ── Top header ── */}
-      <WebHeader studentName={studentName} profileImage={profileImage} />
+      {/* Welcome banner */}
+      <View style={styles.welcomeBannerScreen}>
+        <View style={styles.bannerHeader}>
+          <BackButton onPress={handleBackPress} color="white" />
+          <Text style={styles.welcomeTextScreen}>
+            CONTACT US
+          </Text>
+        </View>
+        <Text style={styles.welcomeSubtextScreen}>
+          We're here to help! Reach out with any questions or feedback.
+        </Text>
+      </View>
 
-      {/* ── Body: sidebar + content area ── */}
-      <View style={styles.contentLayout}>
-        <WebSidebar
-          studentName={studentName}
-          profileImage={profileImage}
-          activeItem={activeItem}
-          onItemPress={handleSelect}
-          userEmail={userEmail}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={handleSidebarToggle}
+      {/* Contact Information */}
+      <View style={styles.contactInfoCard}>
+        <Text style={styles.contactInfoTitle}>Get in Touch</Text>
+        <View style={styles.contactInfoGrid}>
+          {contactInfo.map((info, index) => (
+            <TouchableOpacity 
+              key={index}
+              style={styles.contactInfoItem}
+              onPress={() => info.action && Linking.openURL(info.action)}
+              disabled={!info.action}
+            >
+              <View style={[styles.contactIcon, { backgroundColor: info.action ? COLORS.primaryBlue + '20' : COLORS.border }]}>
+                <Ionicons 
+                  name={info.icon as any} 
+                  size={24} 
+                  color={info.action ? COLORS.primaryBlue : COLORS.textMuted} 
+                />
+              </View>
+              <Text style={styles.contactInfoItemTitle}>{info.title}</Text>
+              <Text style={styles.contactInfoItemDesc}>{info.description}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Contact Form */}
+      <View style={styles.contactFormCard}>
+        <Text style={styles.contactFormTitle}>Send us a Message</Text>
+        
+        {/* Category Selection */}
+        <Text style={styles.formLabel}>Category</Text>
+        <View style={styles.categoryGrid}>
+          {categories.map((category) => (
+            <TouchableOpacity
+              key={category.id}
+              style={[
+                styles.categoryItem,
+                selectedCategory === category.id && styles.categoryItemSelected
+              ]}
+              onPress={() => setSelectedCategory(category.id)}
+            >
+              <Ionicons 
+                name={category.icon} 
+                size={20} 
+                color={selectedCategory === category.id ? COLORS.white : category.color} 
+              />
+              <Text style={[
+                styles.categoryText,
+                selectedCategory === category.id && styles.categoryTextSelected
+              ]}>
+                {category.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Message */}
+        <Text style={styles.formLabel}>Message</Text>
+        <TextInput
+          style={styles.messageInput}
+          multiline
+          numberOfLines={6}
+          placeholder="Tell us more about your question or feedback..."
+          placeholderTextColor={COLORS.textMuted}
+          value={message}
+          onChangeText={setMessage}
+          textAlignVertical="top"
+          editable={true}
         />
 
-        {/* ── Main wrapper: center + right panel in a ROW ── */}
-        <View style={styles.mainWrapper}>
-          <View style={styles.contentColumns}>
-
-            {/* ── CENTER: scrollable contact content ── */}
-            <View style={styles.centerContent}>
-              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                  <ScrollView 
-                    style={styles.mainScroll} 
-                    showsVerticalScrollIndicator={false}
-                  >
-                    {/* Welcome banner */}
-                    <View style={styles.welcomeBannerScreen}>
-                      <Text style={styles.welcomeTextScreen}>
-                        CONTACT US
-                      </Text>
-                      <Text style={styles.welcomeSubtextScreen}>
-                        We're here to help! Reach out with any questions or feedback.
-                      </Text>
-                    </View>
-
-                    {/* Contact Information */}
-                    <View style={styles.contactInfoCard}>
-                      <Text style={styles.contactInfoTitle}>Get in Touch</Text>
-                      <View style={styles.contactInfoGrid}>
-                        {contactInfo.map((info, index) => (
-                          <TouchableOpacity 
-                            key={index}
-                            style={styles.contactInfoItem}
-                            onPress={() => info.action && Linking.openURL(info.action)}
-                            disabled={!info.action}
-                          >
-                            <View style={[styles.contactIcon, { backgroundColor: info.action ? COLORS.primaryBlue + '20' : COLORS.border }]}>
-                              <Ionicons 
-                                name={info.icon as any} 
-                                size={24} 
-                                color={info.action ? COLORS.primaryBlue : COLORS.textMuted} 
-                              />
-                            </View>
-                            <Text style={styles.contactInfoItemTitle}>{info.title}</Text>
-                            <Text style={styles.contactInfoItemDesc}>{info.description}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </View>
-
-                    {/* Contact Form */}
-                    <View style={styles.contactFormCard}>
-                      <Text style={styles.contactFormTitle}>Send us a Message</Text>
-                      
-                      {/* Category Selection */}
-                      <Text style={styles.formLabel}>Category</Text>
-                      <View style={styles.categoryGrid}>
-                        {categories.map((category) => (
-                          <TouchableOpacity
-                            key={category.id}
-                            style={[
-                              styles.categoryItem,
-                              selectedCategory === category.id && styles.categoryItemSelected
-                            ]}
-                            onPress={() => setSelectedCategory(category.id)}
-                          >
-                            <Ionicons 
-                              name={category.icon} 
-                              size={20} 
-                              color={selectedCategory === category.id ? COLORS.white : category.color} 
-                            />
-                            <Text style={[
-                              styles.categoryText,
-                              selectedCategory === category.id && styles.categoryTextSelected
-                            ]}>
-                              {category.label}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-
-                      {/* Message */}
-                      <Text style={styles.formLabel}>Message</Text>
-                      <TextInput
-                        style={styles.messageInput}
-                        multiline
-                        numberOfLines={6}
-                        placeholder="Tell us more about your question or feedback..."
-                        value={message}
-                        onChangeText={setMessage}
-                        textAlignVertical="top"
-                      />
-
-                      {/* Submit Button */}
-                      <TouchableOpacity
-                        style={styles.submitButton}
-                        onPress={handleSubmit}
-                        disabled={isSubmitting}
-                      >
-                        {isSubmitting ? (
-                          <ActivityIndicator color={COLORS.white} size="small" />
-                        ) : (
-                          <Text style={styles.submitButtonText}>Send Message</Text>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-
-                  </ScrollView>
-                </TouchableWithoutFeedback>
-              </KeyboardAvoidingView>
-            </View>
-
-          </View>{/* end contentColumns */}
-        </View>{/* end mainWrapper */}
-      </View>{/* end contentLayout */}
+        {/* Submit Button */}
+        <TouchableOpacity
+          style={styles.submitButton}
+          onPress={handleSubmit}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color={COLORS.white} size="small" />
+          ) : (
+            <Text style={styles.submitButtonText}>Send Message</Text>
+          )}
+        </TouchableOpacity>
+      </View>
 
       {/* Success Modal */}
       {showSuccessModal && (
@@ -413,7 +577,7 @@ export default function Contact() {
           </View>
         </View>
       )}
-    </View>  /* end container */
+    </View>
   );
 }
 
@@ -501,11 +665,16 @@ const styles = StyleSheet.create({
     padding: 24,
     borderRadius: 12,
   },
+  bannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
   welcomeTextScreen: {
     fontSize: 24,
     fontWeight: '700',
     color: COLORS.white,
-    marginBottom: 8,
     fontFamily: 'Poppins_700Bold',
   },
   welcomeSubtextScreen: {
@@ -622,8 +791,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textHeader,
     fontFamily: 'Poppins_400Regular',
-    minHeight: 120,
+    height: 120,
     marginBottom: 20,
+    backgroundColor: COLORS.white,
   },
   submitButton: {
     backgroundColor: COLORS.primaryBlue,

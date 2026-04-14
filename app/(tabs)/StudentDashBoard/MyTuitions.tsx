@@ -7,6 +7,8 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome } from '@expo/vector-icons';
 import { autoRefreshToken } from '../../../utils/tokenRefresh';
 import ThoughtsCard, { ThoughtsFeed } from '../StudentDashBoard/ThoughtsCard';
+import ResponsiveSidebar from '../../../components/ui/ResponsiveSidebar';
+import StudentThoughtsCard from '../../../components/ui/StudentThoughtsCard';
 import { Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, useFonts } from "@expo-google-fonts/poppins";
 import { Roboto_500Medium } from '@expo-google-fonts/roboto';
 import { OpenSans_500Medium, OpenSans_300Light, OpenSans_400Regular } from "@expo-google-fonts/open-sans";
@@ -27,9 +29,17 @@ const MyTuitions = () => {
   let [fontsLoaded] = useFonts({ Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Roboto_500Medium, OpenSans_500Medium, OpenSans_300Light, OpenSans_400Regular, Montserrat_400Regular });
 
   const { width: screenWidth } = Dimensions.get('window');
+  const [isMobile, setIsMobile] = useState(Dimensions.get('window').width < 768);
   const isDesktop = screenWidth >= 1024;
   const isTablet = screenWidth >= 768 && screenWidth < 1024;
-  const isMobile = screenWidth < 768;
+
+  // Update isMobile on resize
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setIsMobile(window.width < 768);
+    });
+    return () => subscription?.remove();
+  }, []);
 
   // Generate responsive styles based on screen width
   const styles = getResponsiveStyles(screenWidth);
@@ -297,6 +307,27 @@ const MyTuitions = () => {
     router.push({ pathname: "/(tabs)/StudentDashBoard/TeacherDetails", params: { name: contact.name, email: contact.email, profilePic: contact.profilePic, showReview: "true" } });
   };
 
+  const renderWebRightSidebar = () => (
+    <StudentThoughtsCard
+      posts={posts}
+      postsLoading={postsLoading}
+      userProfileCache={userProfileCache}
+      currentUserEmail={userEmail || undefined}
+      getProfileImageSource={getProfileImageSource}
+      initials={initials}
+      resolvePostAuthor={resolvePostAuthor}
+      handleLike={handleLike}
+      setPosts={setPosts}
+      onComment={openCommentsModal}
+      isMobile={isMobile}
+      showThoughtsPanel={true}
+      authToken={authToken}
+      BASE_URL={BASE_URL}
+      formatTimeAgo={formatTimeAgo}
+      router={router}
+    />
+  );
+
   const handleSidebarItemPress = (itemName: string) => {
     setActiveMenu(itemName);
     setSidebarActiveItem(itemName);
@@ -339,63 +370,96 @@ const MyTuitions = () => {
     </TouchableOpacity>
   );
 
+  // Web return with responsive sidebar and Thoughts
+  if (Platform.OS === 'web') {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#fff' }}>
+        <ResponsiveSidebar
+          activeItem={sidebarActiveItem}
+          onItemPress={handleSidebarItemPress}
+          userEmail={userEmail || ""}
+          studentName={studentName || ""}
+          profileImage={profileImage || null}
+        >
+          <View style={{ flex: 1 }}>
+            <View style={styles.pageTitleContainer}>
+              <BackButton onPress={handleBackPress} color="white" />
+              <Ionicons name="school" size={28} color={COLORS.textPrimary} />
+              <Text style={styles.pageTitle}>My Tuitions</Text>
+            </View>
+
+            <View style={styles.gridContainerBox}>
+              <ScrollView contentContainerStyle={styles.tuitionGrid} showsVerticalScrollIndicator={false}>
+                {loading ? (
+                  <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /><Text style={styles.loadingText}>Loading your tuitions...</Text></View>
+                ) : filteredContacts.length > 0 ? (
+                  <>
+                    <View style={styles.cardsWrapper}>
+                      {filteredContacts.map((contact, index) => renderTuitionCard(contact, index))}
+                    </View>
+                    <View style={styles.paginationContainer}>
+                      <TouchableOpacity><Ionicons name="chevron-back" size={20} color={COLORS.textSecondary} /></TouchableOpacity>
+                      <TouchableOpacity style={[styles.pageDot, styles.pageDotActive]}><Text style={styles.pageDotTextActive}>1</Text></TouchableOpacity>
+                      <TouchableOpacity style={styles.pageDot}><Text style={styles.pageDotText}>2</Text></TouchableOpacity>
+                      <TouchableOpacity style={styles.pageDot}><Text style={styles.pageDotText}>3</Text></TouchableOpacity>
+                      <TouchableOpacity><Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} /></TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyTitle}>No Tuitions Yet</Text>
+                    <Text style={styles.emptyText}>You haven't enrolled in any tuitions yet. Start by connecting with teachers!</Text>
+                  </View>
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </ResponsiveSidebar>
+        {/* Thoughts panel - conditionally rendered based on screen size */}
+        <>
+          {isMobile ? (
+            renderWebRightSidebar()
+          ) : (
+            <View style={{ width: '28%', minWidth: 280, maxWidth: 380 }}>{renderWebRightSidebar()}</View>
+          )}
+        </>
+      </View>
+    );
+  }
+
+  // Mobile return
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* ── WEB HEADER - Full Width ── */}
-      {isDesktop && (
-        <WebNavbar
-          studentName={studentName}
-          profileImage={profileImage}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-        />
-      )}
+      {/* ── MOBILE TOP NAVBAR ── */}
+      <View style={styles.topHeader}>
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={COLORS.textSecondary} style={styles.searchIcon} />
+          <TextInput placeholder="Type in search" placeholderTextColor={COLORS.textSecondary} style={styles.searchInput as any} value={searchQuery} onChangeText={setSearchQuery} />
+        </View>
+        <View style={styles.profileHeaderSection}>
+          <TouchableOpacity style={styles.bellIcon} onPress={() => router.push("/(tabs)/StudentDashBoard/StudentNotification")}>
+            <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
+            {unreadCount > 0 && (
+              <View style={styles.notificationBadge}><Text style={styles.notificationText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>
+            )}
+          </TouchableOpacity>
+          <Text style={styles.headerUserName}>{studentName || 'Student'}</Text>
+          <Image source={profileImage ? { uri: profileImage } : require("../../../assets/images/Profile.png")} style={styles.headerAvatar} />
+        </View>
+      </View>
 
       <View style={styles.rootContainer}>
 
-        {/* ── MOBILE TOP NAVBAR ── */}
-        {!isDesktop && (
-          <View style={styles.topHeader}>
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color={COLORS.textSecondary} style={styles.searchIcon} />
-              <TextInput placeholder="Type in search" placeholderTextColor={COLORS.textSecondary} style={styles.searchInput as any} value={searchQuery} onChangeText={setSearchQuery} />
-            </View>
-            <View style={styles.profileHeaderSection}>
-              <TouchableOpacity style={styles.bellIcon} onPress={() => router.push("/(tabs)/StudentDashBoard/StudentNotification")}>
-                <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
-                {unreadCount > 0 && (
-                  <View style={styles.notificationBadge}><Text style={styles.notificationText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>
-                )}
-              </TouchableOpacity>
-              <Text style={styles.headerUserName}>{studentName || 'Student'}</Text>
-              <Image source={profileImage ? { uri: profileImage } : require("../../../assets/images/Profile.png")} style={styles.headerAvatar} />
-            </View>
-          </View>
-        )}
-
-        {/* ── LEFT SIDEBAR (WebSidebar component — desktop only) ── */}
-        {isDesktop && (
-          <WebSidebar
-            activeItem={sidebarActiveItem}
-            onItemPress={handleSidebarItemPress}
-            userEmail={userEmail || "student@example.com"}
-            studentName={studentName || "Student"}
-            profileImage={profileImage}
-          />
-        )}
-
         {/* ── LEFT SIDEBAR (mobile only) ── */}
-        {!isDesktop && (
-          <Sidebar
-            visible={false}
-            onClose={() => {}}
-            activeItem={sidebarActiveItem}
-            onItemPress={handleSidebarItemPress}
-            userEmail={userEmail || ""}
-            studentName={studentName || "Student"}
-            profileImage={profileImage}
-          />
-        )}
+        <Sidebar
+          visible={false}
+          onClose={() => {}}
+          activeItem={sidebarActiveItem}
+          onItemPress={handleSidebarItemPress}
+          userEmail={userEmail || ""}
+          studentName={studentName || "Student"}
+          profileImage={profileImage}
+        />
 
         {/* ── MAIN AREA ── */}
         <View style={styles.mainLayout}>
@@ -436,21 +500,6 @@ const MyTuitions = () => {
                   )}
                 </ScrollView>
               </View>
-            </View>
-
-            {/* RIGHT: Thoughts Panel */}
-            <View style={styles.rightPanel}>
-              <ThoughtsFeed
-                posts={posts}
-                postsLoading={postsLoading}
-                authToken={authToken}
-                BASE_URL={BASE_URL}
-                getProfileImageSource={getProfileImageSource}
-                initials={initials}
-                resolvePostAuthor={resolvePostAuthor}
-                formatTimeAgo={formatTimeAgo}
-                router={router}
-              />
             </View>
 
           </View>

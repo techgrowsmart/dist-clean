@@ -38,6 +38,7 @@ import LeftScreen from './LeftScreen';
 import RightScreen from './RightScreen';
 import SkillSpotlights from './SkillSpotlights';
 import ThoughtsCard, { ThoughtsBackground, ThoughtsFeed } from './ThoughtsCard';
+import StudentThoughtsCard from '../../../components/ui/StudentThoughtsCard';
 import AllBoards from './AllBoardsPage';
 import AllSkills from './AllSkills';
 import AllSubjects from './SubjectSelection';
@@ -103,6 +104,7 @@ export default function Student() {
   const router = useRouter();
   const { email, userType, userEmail } = useLocalSearchParams<{ email?: string; userType?: string; userEmail?: string }>();
   const { width } = Dimensions.get('window');
+  const [isMobile, setIsMobile] = useState(width < 768);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold,
@@ -401,6 +403,16 @@ export default function Student() {
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
+    const handleResize = () => {
+      const newWidth = Dimensions.get('window').width;
+      setIsMobile(newWidth < 768);
+    };
+    const subscription = Dimensions.addEventListener('change', handleResize);
+    return () => subscription?.remove();
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
     const init = async () => {
       try {
         await autoRefreshToken();
@@ -684,19 +696,27 @@ const renderWebMainContent = () => {
   };
 
   const renderWebRightSidebar = () => (
-    <View style={ws.rightSidebar}>
-      <ThoughtsFeed
-        posts={posts}
-        postsLoading={postsLoading}
-        authToken={authToken}
-        BASE_URL={BASE_URL}
-        getProfileImageSource={getProfileImageSource}
-        initials={initials}
-        resolvePostAuthor={resolvePostAuthor}
-        formatTimeAgo={formatTimeAgo}
-        router={router}
-      />
-    </View>
+    <StudentThoughtsCard
+      posts={posts}
+      postsLoading={postsLoading}
+      userProfileCache={userProfileCache}
+      currentUserEmail={storedUserEmail || undefined}
+      getProfileImageSource={getProfileImageSource}
+      initials={initials}
+      resolvePostAuthor={resolvePostAuthor}
+      handleLike={handleLike}
+      setPosts={setPosts}
+      onComment={(post: Post) => {
+        // Handle comment opening if needed
+        console.log('Open comments for post:', post.id);
+      }}
+      isMobile={isMobile}
+      showThoughtsPanel={true}
+      authToken={authToken}
+      BASE_URL={BASE_URL}
+      formatTimeAgo={formatTimeAgo}
+      router={router}
+    />
   );
 
   // ─── WEB RETURN ───────────────────────────────────────────────────────────────
@@ -729,7 +749,16 @@ const renderWebMainContent = () => {
               )}
             </View>
           </ResponsiveSidebar>
-          {!showConnect && <View style={{ width: '28%', minWidth: 280, maxWidth: 380 }}>{renderWebRightSidebar()}</View>}
+          {/* Thoughts panel - conditionally rendered based on screen size */}
+          {!showConnect && (
+            <>
+              {isMobile ? (
+                renderWebRightSidebar()
+              ) : (
+                <View style={{ width: '28%', minWidth: 280, maxWidth: 380 }}>{renderWebRightSidebar()}</View>
+              )}
+            </>
+          )}
         </View>
       </View>
     );

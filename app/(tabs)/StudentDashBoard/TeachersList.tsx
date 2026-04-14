@@ -27,6 +27,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import WebSidebar from "../../../components/ui/WebSidebar";
 import WebNavbar from "../../../components/ui/WebNavbar";
 import ResponsiveSidebar from "../../../components/ui/ResponsiveSidebar";
+import StudentThoughtsCard from "../../../components/ui/StudentThoughtsCard";
 import ThoughtsCard from "./ThoughtsCard";
 import axios from "axios";
 import { addFavoriteTeacher, removeFavoriteTeacher, checkFavoriteStatus } from '../../../services/favoriteTeachers';
@@ -127,6 +128,15 @@ export default function TeachersList({
   const [sidebarActiveItem, setSidebarActiveItem] = useState("Home");
 
   const isDesktop = Platform.OS === 'web' && Dimensions.get('window').width >= 1024;
+  const [isMobile, setIsMobile] = useState(Dimensions.get('window').width < 768);
+
+  // Update isMobile on resize
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setIsMobile(window.width < 768);
+    });
+    return () => subscription?.remove();
+  }, []);
 
   // Posts-related state for ThoughtsCard
   const [posts, setPosts] = useState<any[]>([]);
@@ -504,6 +514,27 @@ export default function TeachersList({
         break;
     }
   };
+
+  const renderWebRightSidebar = () => (
+    <StudentThoughtsCard
+      posts={posts}
+      postsLoading={postsLoading}
+      userProfileCache={userProfileCache}
+      currentUserEmail={userEmail || undefined}
+      getProfileImageSource={getProfileImageSource}
+      initials={initials}
+      resolvePostAuthor={resolvePostAuthor}
+      handleLike={handleLike}
+      setPosts={setPosts}
+      onComment={openCommentsModal}
+      isMobile={isMobile}
+      showThoughtsPanel={true}
+      authToken={authToken}
+      BASE_URL={BASE_URL}
+      formatTimeAgo={formatTimeAgo}
+      router={router}
+    />
+  );
 
   // Posts-related functions for ThoughtsCard
   const formatTimeAgo = (createdAt: string) => {
@@ -933,30 +964,13 @@ export default function TeachersList({
               </View>
 
               {/* RIGHT: Thoughts Panel (ThoughtsCard reused from Student.tsx) */}
-              <View style={styles.rightPanel}>
-                <Text style={styles.rightPanelTitle}>Thoughts</Text>
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.thoughtsList}>
-                  {postsLoading && posts.length === 0 && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 30 }} />}
-                  {!postsLoading && posts.length === 0 && (
-                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                      <MaterialIcons name="post-add" size={40} color="#ccc" />
-                      <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No thoughts yet</Text>
-                    </View>
-                  )}
-                  {posts.map((post) => (
-                    <ThoughtsCard
-                      key={post.id}
-                      post={post}
-                      onLike={handleLike}
-                      onComment={openCommentsModal}
-                      onReport={(p, reasons, comment) => { console.log('Report submitted for post:', p.id, 'Reasons:', reasons, 'Comment:', comment); }}
-                      getProfileImageSource={getProfileImageSource}
-                      initials={initials}
-                      resolvePostAuthor={resolvePostAuthor}
-                    />
-                  ))}
-                </ScrollView>
-              </View>
+              <>
+                {isMobile ? (
+                  renderWebRightSidebar()
+                ) : (
+                  <View style={styles.rightPanel}>{renderWebRightSidebar()}</View>
+                )}
+              </>
 
             </View>
           </View>
