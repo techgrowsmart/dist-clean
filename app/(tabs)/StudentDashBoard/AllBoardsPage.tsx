@@ -86,6 +86,7 @@ interface BoardData {
   description?: string;
   headquarters?: string;
   established?: string;
+  isUniversities?: boolean; // Flag for All Universities special handling
 }
 
 export default function AllBoardsPage({ onBack, onBoardSelect, category = "Subject teacher" }: {
@@ -178,8 +179,9 @@ export default function AllBoardsPage({ onBack, onBoardSelect, category = "Subje
 
   const resolvePostAuthor = (post: Post) => {
     const cached = userProfileCache.get(post.author.email) || { name: '', profilePic: '' };
-    let name = cached.name || post.author.name || '';
-    let pic: string | null = cached.profilePic || post.author.profile_pic || null;
+    // Prioritize post.author.name first, then cache, then fallback
+    let name = post.author.name || cached.name || '';
+    let pic: string | null = post.author.profile_pic || cached.profilePic || null;
     if (!name || name === 'null' || name.includes('@')) name = post.author.email?.split('@')[0] || 'User';
     if (pic && !pic.startsWith('http') && !pic.startsWith('/')) pic = `/${pic}`;
     if (pic === '' || pic === 'null') pic = null;
@@ -192,83 +194,10 @@ export default function AllBoardsPage({ onBack, onBoardSelect, category = "Subje
       setBoardsLoading(true);
       const auth = await getAuthData();
       
-      // Always use comprehensive boards data with All Universities and all major Indian boards
-      console.log("📚 Using comprehensive boards data for all users");
-      const mockBoards: BoardData[] = [
-          // All Universities - First
-          { board: "All Universities", boardname: "All Universities", name: "All Universities", fullName: "All Universities", id: '0', teacherCount: 3500, description: "All universities and higher education institutions", headquarters: "Pan India", established: "Various", color: '#6C5CE7', logo: 'https://ui-avatars.com/api/?name=All+Universities&background=F5F7FB&color=3B5BFE&rounded=true&size=150' },
-          
-          // National Boards
-          { board: "CBSE", boardname: "Central Board of Secondary Education", name: "CBSE", fullName: "Central Board of Secondary Education", id: '1', teacherCount: 1250, description: "India's largest education board", headquarters: "New Delhi", established: "1962", color: '#FF6B6B', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/CBSE_logo.svg/2560px-CBSE_logo.svg.png' },
-          { board: "ICSE", boardname: "Indian Certificate of Secondary Education", name: "ICSE", fullName: "Indian Certificate of Secondary Education", id: '2', teacherCount: 890, description: "Comprehensive education system", headquarters: "New Delhi", established: "1958", color: '#4ECDC4', logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/4/4e/CISCE_logo.png/2560px-CISCE_logo.png' },
-          { board: "NIOS", boardname: "National Institute of Open Schooling", name: "NIOS", fullName: "National Institute of Open Schooling", id: '3', teacherCount: 450, description: "Open schooling system", headquarters: "Noida", established: "1989", color: '#9B59B6', logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/4/44/Nios_logo.svg/2560px-Nios_logo.svg.png' },
-          { board: "IB", boardname: "International Baccalaureate", name: "IB", fullName: "International Baccalaureate", id: '4', teacherCount: 320, description: "International education foundation", headquarters: "Geneva", established: "1968", color: '#3498DB', logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/5/55/IB_logo.svg/2560px-IB_logo.svg.png' },
-          { board: "CAIE", boardname: "Cambridge Assessment International Education", name: "Cambridge", fullName: "Cambridge Assessment International Education", id: '5', teacherCount: 280, description: "International examination board", headquarters: "Cambridge", established: "1858", color: '#E74C3C', logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/0/04/Cambridge_Assessment_Logo.svg/2560px-Cambridge_Assessment_Logo.svg.png' },
-          
-          // State Boards - North India
-          { board: "UP Board", boardname: "Uttar Pradesh Board of Secondary Education", name: "UP Board", fullName: "Uttar Pradesh Board of Secondary Education", id: '6', teacherCount: 980, description: "Uttar Pradesh state education board", headquarters: "Prayagraj", established: "1921", color: '#FF9F43', logo: 'https://ui-avatars.com/api/?name=UP+Board&background=FFF3E0&color=FF9F43&rounded=true&size=150' },
-          { board: "BSEB", boardname: "Bihar School Examination Board", name: "BSEB", fullName: "Bihar School Examination Board", id: '7', teacherCount: 750, description: "Bihar state education board", headquarters: "Patna", established: "1952", color: '#6C5CE7', logo: 'https://ui-avatars.com/api/?name=BSEB&background=F3E5F5&color=6C5CE7&rounded=true&size=150' },
-          { board: "HPBOSE", boardname: "Himachal Pradesh Board of School Education", name: "HPBOSE", fullName: "Himachal Pradesh Board of School Education", id: '8', teacherCount: 420, description: "Himachal Pradesh state education board", headquarters: "Dharamshala", established: "1969", color: '#00B894', logo: 'https://ui-avatars.com/api/?name=HPBOSE&background=E8F8F5&color=00B894&rounded=true&size=150' },
-          { board: "JKBOSE", boardname: "Jammu and Kashmir Board of School Education", name: "JKBOSE", fullName: "Jammu and Kashmir Board of School Education", id: '9', teacherCount: 380, description: "Jammu & Kashmir education board", headquarters: "Srinagar/Jammu", established: "1975", color: '#0984E3', logo: 'https://ui-avatars.com/api/?name=JKBOSE&background=EBF5FB&color=0984E3&rounded=true&size=150' },
-          { board: "PSEB", boardname: "Punjab School Education Board", name: "PSEB", fullName: "Punjab School Education Board", id: '10', teacherCount: 520, description: "Punjab state education board", headquarters: "Mohali", established: "1969", color: '#F39C12', logo: 'https://ui-avatars.com/api/?name=PSEB&background=FEF5E7&color=F39C12&rounded=true&size=150' },
-          { board: "RBSE", boardname: "Rajasthan Board of Secondary Education", name: "RBSE", fullName: "Rajasthan Board of Secondary Education", id: '11', teacherCount: 680, description: "Rajasthan state education board", headquarters: "Ajmer", established: "1957", color: '#E67E22', logo: 'https://ui-avatars.com/api/?name=RBSE&background=FAF2E6&color=E67E22&rounded=true&size=150' },
-          { board: "UK Board", boardname: "Uttarakhand Board of School Education", name: "UK Board", fullName: "Uttarakhand Board of School Education", id: '12', teacherCount: 340, description: "Uttarakhand state education board", headquarters: "Ramnagar", established: "2001", color: '#16A085', logo: 'https://ui-avatars.com/api/?name=UK+Board&background=E8F6F3&color=16A085&rounded=true&size=150' },
-          { board: "Haryana Board", boardname: "Board of School Education Haryana", name: "Haryana Board", fullName: "Board of School Education Haryana", id: '13', teacherCount: 460, description: "Haryana state education board", headquarters: "Bhiwani", established: "1969", color: '#8E44AD', logo: 'https://ui-avatars.com/api/?name=HBSE&background=F4ECF7&color=8E44AD&rounded=true&size=150' },
-          { board: "Delhi Board", boardname: "Delhi Board of Secondary and Senior Secondary Education", name: "Delhi Board", fullName: "Delhi Board of Secondary and Senior Secondary Education", id: '14', teacherCount: 290, description: "Delhi state education board", headquarters: "Delhi", established: "2021", color: '#2ECC71', logo: 'https://ui-avatars.com/api/?name=DBSE&background=EAF2F8&color=2ECC71&rounded=true&size=150' },
-          { board: "Chandigarh Board", boardname: "Chandigarh Education Board", name: "Chandigarh Board", fullName: "Chandigarh Education Board", id: '15', teacherCount: 180, description: "Chandigarh education board", headquarters: "Chandigarh", established: "2021", color: '#34495E', logo: 'https://ui-avatars.com/api/?name=CEB&background=EAEDF2&color=34495E&rounded=true&size=150' },
-          
-          // State Boards - East India
-          { board: "WBBSE", boardname: "West Bengal Board of Secondary Education", name: "WBBSE", fullName: "West Bengal Board of Secondary Education", id: '16', teacherCount: 720, description: "West Bengal secondary education board", headquarters: "Kolkata", established: "1951", color: '#E74C3C', logo: 'https://ui-avatars.com/api/?name=WBBSE&background=FDEDDD&color=E74C3C&rounded=true&size=150' },
-          { board: "WBCHSE", boardname: "West Bengal Council of Higher Secondary Education", name: "WBCHSE", fullName: "West Bengal Council of Higher Secondary Education", id: '17', teacherCount: 580, description: "West Bengal higher secondary board", headquarters: "Kolkata", established: "1975", color: '#C0392B', logo: 'https://ui-avatars.com/api/?name=WBCHSE&background=FADBD8&color=C0392B&rounded=true&size=150' },
-          { board: "BSE Odisha", boardname: "Board of Secondary Education Odisha", name: "BSE Odisha", fullName: "Board of Secondary Education Odisha", id: '18', teacherCount: 540, description: "Odisha state education board", headquarters: "Cuttack", established: "1955", color: '#D35400', logo: 'https://ui-avatars.com/api/?name=BSE+Odisha&background=FAE5DD&color=D35400&rounded=true&size=150' },
-          { board: "CHSE Odisha", boardname: "Council of Higher Secondary Education Odisha", name: "CHSE Odisha", fullName: "Council of Higher Secondary Education Odisha", id: '19', teacherCount: 420, description: "Odisha higher secondary board", headquarters: "Bhubaneswar", established: "1982", color: '#E67E22', logo: 'https://ui-avatars.com/api/?name=CHSE+Odisha&background=FAF2E6&color=E67E22&rounded=true&size=150' },
-          { board: "JAC", boardname: "Jharkhand Academic Council", name: "JAC", fullName: "Jharkhand Academic Council", id: '20', teacherCount: 380, description: "Jharkhand state education board", headquarters: "Ranchi", established: "2000", color: '#27AE60', logo: 'https://ui-avatars.com/api/?name=JAC&background=E8F8F5&color=27AE60&rounded=true&size=150' },
-          { board: "TBSE", boardname: "Tripura Board of Secondary Education", name: "TBSE", fullName: "Tripura Board of Secondary Education", id: '21', teacherCount: 260, description: "Tripura state education board", headquarters: "Agartala", established: "1973", color: '#2980B9', logo: 'https://ui-avatars.com/api/?name=TBSE&background=EBF5FB&color=2980B9&rounded=true&size=150' },
-          { board: "MBOSE", boardname: "Meghalaya Board of School Education", name: "MBOSE", fullName: "Meghalaya Board of School Education", id: '22', teacherCount: 220, description: "Meghalaya state education board", headquarters: "Tura", established: "1974", color: '#8E44AD', logo: 'https://ui-avatars.com/api/?name=MBOSE&background=F4ECF7&color=8E44AD&rounded=true&size=150' },
-          { board: "NBSE", boardname: "Nagaland Board of School Education", name: "NBSE", fullName: "Nagaland Board of School Education", id: '23', teacherCount: 180, description: "Nagaland state education board", headquarters: "Kohima", established: "1974", color: '#16A085', logo: 'https://ui-avatars.com/api/?name=NBSE&background=E8F6F3&color=16A085&rounded=true&size=150' },
-          { board: "COHSEM", boardname: "Council of Higher Secondary Education Manipur", name: "COHSEM", fullName: "Council of Higher Secondary Education Manipur", id: '24', teacherCount: 200, description: "Manipur higher secondary board", headquarters: "Imphal", established: "1992", color: '#C0392B', logo: 'https://ui-avatars.com/api/?name=COHSEM&background=FADBD8&color=C0392B&rounded=true&size=150' },
-          { board: "BSEM", boardname: "Board of Secondary Education Manipur", name: "BSEM", fullName: "Board of Secondary Education Manipur", id: '25', teacherCount: 190, description: "Manipur secondary education board", headquarters: "Imphal", established: "1972", color: '#E74C3C', logo: 'https://ui-avatars.com/api/?name=BSEM&background=FDEDDD&color=E74C3C&rounded=true&size=150' },
-          
-          // State Boards - West India
-          { board: "GSEB", boardname: "Gujarat Secondary and Higher Secondary Education Board", name: "GSEB", fullName: "Gujarat Secondary and Higher Secondary Education Board", id: '26', teacherCount: 820, description: "Gujarat state education board", headquarters: "Gandhinagar", established: "1960", color: '#F39C12', logo: 'https://ui-avatars.com/api/?name=GSEB&background=FEF5E7&color=F39C12&rounded=true&size=150' },
-          { board: "MSBSHSE", boardname: "Maharashtra State Board of Secondary and Higher Secondary Education", name: "MSBSHSE", fullName: "Maharashtra State Board of Secondary and Higher Secondary Education", id: '27', teacherCount: 1150, description: "Maharashtra state education board", headquarters: "Pune", established: "1965", color: '#2ECC71', logo: 'https://ui-avatars.com/api/?name=MSBSHSE&background=EAF2F8&color=2ECC71&rounded=true&size=150' },
-          { board: "Goa Board", boardname: "Goa Board of Secondary and Higher Secondary Education", name: "Goa Board", fullName: "Goa Board of Secondary and Higher Secondary Education", id: '28', teacherCount: 240, description: "Goa state education board", headquarters: "Panaji", established: "1975", color: '#3498DB', logo: 'https://ui-avatars.com/api/?name=Goa+Board&background=EBF5FB&color=3498DB&rounded=true&size=150' },
-          { board: "DDTE", boardname: "Directorate of Technical Education", name: "DDTE", fullName: "Directorate of Technical Education", id: '29', teacherCount: 180, description: "Daman and Diu technical education", headquarters: "Daman", established: "1988", color: '#9B59B6', logo: 'https://ui-avatars.com/api/?name=DDTE&background=F4ECF7&color=9B59B6&rounded=true&size=150' },
-          
-          // State Boards - South India
-          { board: "KSEEB", boardname: "Karnataka Secondary Education Examination Board", name: "KSEEB", fullName: "Karnataka Secondary Education Examination Board", id: '30', teacherCount: 980, description: "Karnataka state education board", headquarters: "Bengaluru", established: "1966", color: '#E74C3C', logo: 'https://ui-avatars.com/api/?name=KSEEB&background=FDEDDD&color=E74C3C&rounded=true&size=150' },
-          { board: "PUEB", boardname: "Department of Pre-University Education", name: "PUEB", fullName: "Department of Pre-University Education", id: '31', teacherCount: 620, description: "Karnataka pre-university board", headquarters: "Bengaluru", established: "1994", color: '#C0392B', logo: 'https://ui-avatars.com/api/?name=PUEB&background=FADBD8&color=C0392B&rounded=true&size=150' },
-          { board: "TNDGE", boardname: "Tamil Nadu Directorate of Government Examinations", name: "TNDGE", fullName: "Tamil Nadu Directorate of Government Examinations", id: '32', teacherCount: 1080, description: "Tamil Nadu state education board", headquarters: "Chennai", established: "1975", color: '#2980B9', logo: 'https://ui-avatars.com/api/?name=TNDGE&background=EBF5FB&color=2980B9&rounded=true&size=150' },
-          { board: "DGE Telangana", boardname: "Directorate of Government Examinations Telangana", name: "DGE Telangana", fullName: "Directorate of Government Examinations Telangana", id: '33', teacherCount: 680, description: "Telangana state education board", headquarters: "Hyderabad", established: "2014", color: '#8E44AD', logo: 'https://ui-avatars.com/api/?name=DGE+Telangana&background=F4ECF7&color=8E44AD&rounded=true&size=150' },
-          { board: "BSEAP", boardname: "Board of Secondary Education Andhra Pradesh", name: "BSEAP", fullName: "Board of Secondary Education Andhra Pradesh", id: '34', teacherCount: 720, description: "Andhra Pradesh state education board", headquarters: "Vijayawada", established: "1953", color: '#27AE60', logo: 'https://ui-avatars.com/api/?name=BSEAP&background=E8F8F5&color=27AE60&rounded=true&size=150' },
-          { board: "BIEAP", boardname: "Board of Intermediate Education Andhra Pradesh", name: "BIEAP", fullName: "Board of Intermediate Education Andhra Pradesh", id: '35', teacherCount: 540, description: "Andhra Pradesh intermediate board", headquarters: "Vijayawada", established: "1971", color: '#229954', logo: 'https://ui-avatars.com/api/?name=BIEAP&background=E8F6F3&color=229954&rounded=true&size=150' },
-          { board: "DHSE Kerala", boardname: "Directorate of Higher Secondary Education Kerala", name: "DHSE Kerala", fullName: "Directorate of Higher Secondary Education Kerala", id: '36', teacherCount: 620, description: "Kerala higher secondary board", headquarters: "Thiruvananthapuram", established: "1990", color: '#E67E22', logo: 'https://ui-avatars.com/api/?name=DHSE+Kerala&background=FAF2E6&color=E67E22&rounded=true&size=150' },
-          { board: "SSLC Kerala", boardname: "Kerala SSLC Examination Board", name: "SSLC Kerala", fullName: "Kerala SSLC Examination Board", id: '37', teacherCount: 480, description: "Kerala SSLC examination board", headquarters: "Thiruvananthapuram", established: "1960", color: '#D35400', logo: 'https://ui-avatars.com/api/?name=SSLC+Kerala&background=FAE5DD&color=D35400&rounded=true&size=150' },
-          
-          // Autonomous Boards
-          { board: "CISCE", boardname: "Council for the Indian School Certificate Examinations", name: "CISCE", fullName: "Council for the Indian School Certificate Examinations", id: '38', teacherCount: 890, description: "National examination board", headquarters: "New Delhi", established: "1958", color: '#4ECDC4', logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/4/4e/CISCE_logo.png/2560px-CISCE_logo.png' },
-          { board: "NABET", boardname: "National Board of Accreditation", name: "NABET", fullName: "National Board of Accreditation", id: '39', teacherCount: 150, description: "Technical education accreditation", headquarters: "New Delhi", established: "1994", color: '#34495E', logo: 'https://ui-avatars.com/api/?name=NABET&background=EAEDF2&color=34495E&rounded=true&size=150' },
-          { board: "AICTE", boardname: "All India Council for Technical Education", name: "AICTE", fullName: "All India Council for Technical Education", id: '40', teacherCount: 280, description: "Technical education regulator", headquarters: "New Delhi", established: "1945", color: '#2C3E50', logo: 'https://ui-avatars.com/api/?name=AICTE&background=E8E9EA&color=2C3E50&rounded=true&size=150' },
-          { board: "UGC", boardname: "University Grants Commission", name: "UGC", fullName: "University Grants Commission", id: '41', teacherCount: 320, description: "Higher education regulator", headquarters: "New Delhi", established: "1956", color: '#7F8C8D', logo: 'https://ui-avatars.com/api/?name=UGC&background=F0F3F4&color=7F8C8D&rounded=true&size=150' },
-          { board: "NCERT", boardname: "National Council of Educational Research and Training", name: "NCERT", fullName: "National Council of Educational Research and Training", id: '42', teacherCount: 180, description: "Educational research and training", headquarters: "New Delhi", established: "1961", color: '#E74C3C', logo: 'https://ui-avatars.com/api/?name=NCERT&background=FDEDDD&color=E74C3C&rounded=true&size=150' },
-          
-          // Religious Boards
-          { board: "Madrasa Board", boardname: "Central Madrasa Board", name: "Madrasa Board", fullName: "Central Madrasa Board", id: '43', teacherCount: 220, description: "Islamic education board", headquarters: "New Delhi", established: "2022", color: '#27AE60', logo: 'https://ui-avatars.com/api/?name=Madrasa+Board&background=E8F8F5&color=27AE60&rounded=true&size=150' },
-          { board: "Sanskrit Board", boardname: "Maharshi Sandipani Rashtriya Sanskrit Sansthan", name: "Sanskrit Board", fullName: "Maharshi Sandipani Rashtriya Sanskrit Sansthan", id: '44', teacherCount: 120, description: "Sanskrit education board", headquarters: "Ujjain", established: "2002", color: '#F39C12', logo: 'https://ui-avatars.com/api/?name=Sanskrit+Board&background=FEF5E7&color=F39C12&rounded=true&size=150' },
-          
-          // Special Boards
-          { board: "NDA", boardname: "National Defence Academy", name: "NDA", fullName: "National Defence Academy", id: '45', teacherCount: 280, description: "Defence education board", headquarters: "Pune", established: "1954", color: '#2C3E50', logo: 'https://ui-avatars.com/api/?name=NDA&background=E8E9EA&color=2C3E50&rounded=true&size=150' },
-          { board: "Sainik School", boardname: "Sainik Schools Society", name: "Sainik School", fullName: "Sainik Schools Society", id: '46', teacherCount: 340, description: "Military school board", headquarters: "New Delhi", established: "1961", color: '#34495E', logo: 'https://ui-avatars.com/api/?name=Sainik+School&background=EAEDF2&color=34495E&rounded=true&size=150' },
-          { board: "KV", boardname: "Kendriya Vidyalaya Sangathan", name: "KV", fullName: "Kendriya Vidyalaya Sangathan", id: '47', teacherCount: 520, description: "Central school system", headquarters: "New Delhi", established: "1963", color: '#0056B3', logo: 'https://ui-avatars.com/api/?name=KV&background=E7F3FF&color=0056B3&rounded=true&size=150' },
-          { board: "JNV", boardname: "Jawahar Navodaya Vidyalaya", name: "JNV", fullName: "Jawahar Navodaya Vidyalaya", id: '48', teacherCount: 480, description: "Navodaya school system", headquarters: "New Delhi", established: "1986", color: '#FF6B35', logo: 'https://ui-avatars.com/api/?name=JNV&background=FFF5F0&color=FF6B35&rounded=true&size=150' },
-        ];
-        setBoards(mockBoards);
-        setFilteredBoards(mockBoards);
-        return;
-      
-      // Try API fallback if needed (optional)
       if (!auth?.token) {
-        console.log("No auth token found, using mock data");
+        console.log("No auth token found");
+        setBoards([]);
+        setFilteredBoards([]);
         return;
       }
       
@@ -280,20 +209,35 @@ export default function AllBoardsPage({ onBack, onBoardSelect, category = "Subje
       const response = await axios.post(`${BASE_URL}/api/allboards`, { category }, { headers });
       console.log("Boards Response:", response.data);
       
-      if (response.data && Array.isArray(response.data)) {
-        const boardsWithDetails = response.data.map((board: any, index: number) => ({
-          ...board,
-          id: board.boardId || board.id || (index + 1).toString(),
-          name: board.boardName || board.name || board.board,
-          fullName: board.boardName || board.name || board.board,
-          board: board.boardName || board.name || board.board,
-          boardname: board.boardName || board.name || board.board,
-          teacherCount: board.teacherCount || Math.floor(Math.random() * 2000) + 500,
+      // Handle API response format - can be { boards: [...], universities: [...] } or [...]
+      let boardsData = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          // Skill teacher returns array directly
+          boardsData = response.data;
+        } else if (response.data.boards && Array.isArray(response.data.boards)) {
+          // Subject teacher returns { boards: [...], universities: [...] }
+          boardsData = response.data.boards;
+        }
+      }
+      
+      if (boardsData.length > 0) {
+        // Use exact structure from allBoards.json - only add minimal necessary fields
+        const boardsWithDetails = boardsData.map((board: any, index: number) => ({
+          id: board.boardId || board.id,
+          name: board.boardName || board.name,
+          board: board.boardName || board.name,
+          boardname: board.boardName || board.name,
+          boardId: board.boardId || board.id,
+          boardName: board.boardName || board.name,
+          fullName: board.boardName || board.name,
+          teacherCount: board.teacherCount || 0,
           description: board.description || `${board.boardName || 'Educational Board'} - Learn and grow`,
           headquarters: board.headquarters || 'India',
           established: board.established || 'Various',
           color: ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF9FF3'][index % 6],
-          logo: board.logo || `https://ui-avatars.com/api/?name=${board.boardName || board.board || 'Board'}&background=F5F7FB&color=3B5BFE&rounded=true&size=150`
+          logo: board.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(board.boardName || board.name || 'Board')}&background=F5F7FB&color=3B5BFE&rounded=true&size=150`,
+          classes: board.classes || []
         }));
         
         setBoards(boardsWithDetails);
@@ -301,77 +245,9 @@ export default function AllBoardsPage({ onBack, onBoardSelect, category = "Subje
       }
     } catch (error) {
       console.error("Error fetching boards:", error);
-      // Fallback to mock data with All Universities and all major Indian boards
-      const fallbackBoards: BoardData[] = [
-        // All Universities - First
-        { board: "All Universities", boardname: "All Universities", name: "All Universities", fullName: "All Universities", id: '0', teacherCount: 3500, description: "All universities and higher education institutions", headquarters: "Pan India", established: "Various", color: '#6C5CE7', logo: 'https://ui-avatars.com/api/?name=All+Universities&background=F5F7FB&color=3B5BFE&rounded=true&size=150' },
-        
-        // National Boards
-        { board: "CBSE", boardname: "Central Board of Secondary Education", name: "CBSE", fullName: "Central Board of Secondary Education", id: '1', teacherCount: 1250, description: "India's largest education board", headquarters: "New Delhi", established: "1962", color: '#FF6B6B', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/CBSE_logo.svg/2560px-CBSE_logo.svg.png' },
-        { board: "ICSE", boardname: "Indian Certificate of Secondary Education", name: "ICSE", fullName: "Indian Certificate of Secondary Education", id: '2', teacherCount: 890, description: "Comprehensive education system", headquarters: "New Delhi", established: "1958", color: '#4ECDC4', logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/4/4e/CISCE_logo.png/2560px-CISCE_logo.png' },
-        { board: "NIOS", boardname: "National Institute of Open Schooling", name: "NIOS", fullName: "National Institute of Open Schooling", id: '3', teacherCount: 450, description: "Open schooling system", headquarters: "Noida", established: "1989", color: '#9B59B6', logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/4/44/Nios_logo.svg/2560px-Nios_logo.svg.png' },
-        { board: "IB", boardname: "International Baccalaureate", name: "IB", fullName: "International Baccalaureate", id: '4', teacherCount: 320, description: "International education foundation", headquarters: "Geneva", established: "1968", color: '#3498DB', logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/5/55/IB_logo.svg/2560px-IB_logo.svg.png' },
-        { board: "CAIE", boardname: "Cambridge Assessment International Education", name: "Cambridge", fullName: "Cambridge Assessment International Education", id: '5', teacherCount: 280, description: "International examination board", headquarters: "Cambridge", established: "1858", color: '#E74C3C', logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/0/04/Cambridge_Assessment_Logo.svg/2560px-Cambridge_Assessment_Logo.svg.png' },
-        
-        // State Boards - North India
-        { board: "UP Board", boardname: "Uttar Pradesh Board of Secondary Education", name: "UP Board", fullName: "Uttar Pradesh Board of Secondary Education", id: '6', teacherCount: 980, description: "Uttar Pradesh state education board", headquarters: "Prayagraj", established: "1921", color: '#FF9F43', logo: 'https://upmsp.edu.in/assets/images/upmsp-logo.png' },
-        { board: "BSEB", boardname: "Bihar School Examination Board", name: "BSEB", fullName: "Bihar School Examination Board", id: '7', teacherCount: 750, description: "Bihar state education board", headquarters: "Patna", established: "1952", color: '#6C5CE7', logo: 'https://bsebpatna.com/images/logo.png' },
-        { board: "HPBOSE", boardname: "Himachal Pradesh Board of School Education", name: "HPBOSE", fullName: "Himachal Pradesh Board of School Education", id: '8', teacherCount: 420, description: "Himachal Pradesh state education board", headquarters: "Dharamshala", established: "1969", color: '#00B894', logo: 'https://hpbose.org/images/hpbose-logo.png' },
-        { board: "JKBOSE", boardname: "Jammu and Kashmir Board of School Education", name: "JKBOSE", fullName: "Jammu and Kashmir Board of School Education", id: '9', teacherCount: 380, description: "Jammu & Kashmir education board", headquarters: "Srinagar/Jammu", established: "1975", color: '#0984E3', logo: 'https://jkbose.nic.in/images/jkbose-logo.png' },
-        { board: "PSEB", boardname: "Punjab School Education Board", name: "PSEB", fullName: "Punjab School Education Board", id: '10', teacherCount: 520, description: "Punjab state education board", headquarters: "Mohali", established: "1969", color: '#F39C12', logo: 'https://www.pseb.ac.in/images/pseb-logo.png' },
-        { board: "RBSE", boardname: "Rajasthan Board of Secondary Education", name: "RBSE", fullName: "Rajasthan Board of Secondary Education", id: '11', teacherCount: 680, description: "Rajasthan state education board", headquarters: "Ajmer", established: "1957", color: '#E67E22', logo: 'https://rajeduboard.rajasthan.gov.in/images/rajasthan-board-logo.png' },
-        { board: "UK Board", boardname: "Uttarakhand Board of School Education", name: "UK Board", fullName: "Uttarakhand Board of School Education", id: '12', teacherCount: 340, description: "Uttarakhand state education board", headquarters: "Ramnagar", established: "2001", color: '#16A085', logo: 'https://ubse.uk.gov.in/images/ubse-logo.png' },
-        { board: "Haryana Board", boardname: "Board of School Education Haryana", name: "Haryana Board", fullName: "Board of School Education Haryana", id: '13', teacherCount: 460, description: "Haryana state education board", headquarters: "Bhiwani", established: "1969", color: '#8E44AD', logo: 'https://www.bseh.org.in/images/bseh-logo.png' },
-        { board: "Delhi Board", boardname: "Delhi Board of Secondary and Senior Secondary Education", name: "Delhi Board", fullName: "Delhi Board of Secondary and Senior Secondary Education", id: '14', teacherCount: 290, description: "Delhi state education board", headquarters: "Delhi", established: "2021", color: '#2ECC71', logo: 'https://delhiboard.delhi.gov.in/images/delhi-board-logo.png' },
-        { board: "Chandigarh Board", boardname: "Chandigarh Education Board", name: "Chandigarh Board", fullName: "Chandigarh Education Board", id: '15', teacherCount: 180, description: "Chandigarh education board", headquarters: "Chandigarh", established: "2021", color: '#34495E', logo: 'https://cebchd.org/images/ceb-logo.png' },
-        
-        // State Boards - East India
-        { board: "WBBSE", boardname: "West Bengal Board of Secondary Education", name: "WBBSE", fullName: "West Bengal Board of Secondary Education", id: '16', teacherCount: 720, description: "West Bengal secondary education board", headquarters: "Kolkata", established: "1951", color: '#E74C3C', logo: 'https://wbbse.org/images/wbbse-logo.png' },
-        { board: "WBCHSE", boardname: "West Bengal Council of Higher Secondary Education", name: "WBCHSE", fullName: "West Bengal Council of Higher Secondary Education", id: '17', teacherCount: 580, description: "West Bengal higher secondary board", headquarters: "Kolkata", established: "1975", color: '#C0392B', logo: 'https://wbchse.wb.gov.in/images/wbchse-logo.png' },
-        { board: "BSE Odisha", boardname: "Board of Secondary Education Odisha", name: "BSE Odisha", fullName: "Board of Secondary Education Odisha", id: '18', teacherCount: 540, description: "Odisha state education board", headquarters: "Cuttack", established: "1955", color: '#D35400', logo: 'https://bseodisha.nic.in/images/bse-odisha-logo.png' },
-        { board: "CHSE Odisha", boardname: "Council of Higher Secondary Education Odisha", name: "CHSE Odisha", fullName: "Council of Higher Secondary Education Odisha", id: '19', teacherCount: 420, description: "Odisha higher secondary board", headquarters: "Bhubaneswar", established: "1982", color: '#E67E22', logo: 'https://chseodisha.nic.in/images/chse-odisha-logo.png' },
-        { board: "JAC", boardname: "Jharkhand Academic Council", name: "JAC", fullName: "Jharkhand Academic Council", id: '20', teacherCount: 380, description: "Jharkhand state education board", headquarters: "Ranchi", established: "2000", color: '#27AE60', logo: 'https://jac.jharkhand.gov.in/images/jac-logo.png' },
-        { board: "TBSE", boardname: "Tripura Board of Secondary Education", name: "TBSE", fullName: "Tripura Board of Secondary Education", id: '21', teacherCount: 260, description: "Tripura state education board", headquarters: "Agartala", established: "1973", color: '#2980B9', logo: 'https://tbse.tripura.gov.in/images/tbse-logo.png' },
-        { board: "MBOSE", boardname: "Meghalaya Board of School Education", name: "MBOSE", fullName: "Meghalaya Board of School Education", id: '22', teacherCount: 220, description: "Meghalaya state education board", headquarters: "Tura", established: "1974", color: '#8E44AD', logo: 'https://www.mbose.in/images/mbose-logo.png' },
-        { board: "NBSE", boardname: "Nagaland Board of School Education", name: "NBSE", fullName: "Nagaland Board of School Education", id: '23', teacherCount: 180, description: "Nagaland state education board", headquarters: "Kohima", established: "1974", color: '#16A085', logo: 'https://www.nbsenagaland.com/images/nbse-logo.png' },
-        { board: "COHSEM", boardname: "Council of Higher Secondary Education Manipur", name: "COHSEM", fullName: "Council of Higher Secondary Education Manipur", id: '24', teacherCount: 200, description: "Manipur higher secondary board", headquarters: "Imphal", established: "1992", color: '#C0392B', logo: 'https://ui-avatars.com/api/?name=COHSEM&background=FADBD8&color=C0392B&rounded=true&size=150' },
-        { board: "BSEM", boardname: "Board of Secondary Education Manipur", name: "BSEM", fullName: "Board of Secondary Education Manipur", id: '25', teacherCount: 190, description: "Manipur secondary education board", headquarters: "Imphal", established: "1972", color: '#E74C3C', logo: 'https://ui-avatars.com/api/?name=BSEM&background=FDEDDD&color=E74C3C&rounded=true&size=150' },
-        
-        // State Boards - West India
-        { board: "GSEB", boardname: "Gujarat Secondary and Higher Secondary Education Board", name: "GSEB", fullName: "Gujarat Secondary and Higher Secondary Education Board", id: '26', teacherCount: 820, description: "Gujarat state education board", headquarters: "Gandhinagar", established: "1960", color: '#F39C12', logo: 'https://ui-avatars.com/api/?name=GSEB&background=FEF5E7&color=F39C12&rounded=true&size=150' },
-        { board: "MSBSHSE", boardname: "Maharashtra State Board of Secondary and Higher Secondary Education", name: "MSBSHSE", fullName: "Maharashtra State Board of Secondary and Higher Secondary Education", id: '27', teacherCount: 1150, description: "Maharashtra state education board", headquarters: "Pune", established: "1965", color: '#2ECC71', logo: 'https://ui-avatars.com/api/?name=MSBSHSE&background=EAF2F8&color=2ECC71&rounded=true&size=150' },
-        { board: "Goa Board", boardname: "Goa Board of Secondary and Higher Secondary Education", name: "Goa Board", fullName: "Goa Board of Secondary and Higher Secondary Education", id: '28', teacherCount: 240, description: "Goa state education board", headquarters: "Panaji", established: "1975", color: '#3498DB', logo: 'https://ui-avatars.com/api/?name=Goa+Board&background=EBF5FB&color=3498DB&rounded=true&size=150' },
-        { board: "DDTE", boardname: "Directorate of Technical Education", name: "DDTE", fullName: "Directorate of Technical Education", id: '29', teacherCount: 180, description: "Daman and Diu technical education", headquarters: "Daman", established: "1988", color: '#9B59B6', logo: 'https://ui-avatars.com/api/?name=DDTE&background=F4ECF7&color=9B59B6&rounded=true&size=150' },
-        
-        // State Boards - South India
-        { board: "KSEEB", boardname: "Karnataka Secondary Education Examination Board", name: "KSEEB", fullName: "Karnataka Secondary Education Examination Board", id: '30', teacherCount: 980, description: "Karnataka state education board", headquarters: "Bengaluru", established: "1966", color: '#E74C3C', logo: 'https://ui-avatars.com/api/?name=KSEEB&background=FDEDDD&color=E74C3C&rounded=true&size=150' },
-        { board: "PUEB", boardname: "Department of Pre-University Education", name: "PUEB", fullName: "Department of Pre-University Education", id: '31', teacherCount: 620, description: "Karnataka pre-university board", headquarters: "Bengaluru", established: "1994", color: '#C0392B', logo: 'https://ui-avatars.com/api/?name=PUEB&background=FADBD8&color=C0392B&rounded=true&size=150' },
-        { board: "TNDGE", boardname: "Tamil Nadu Directorate of Government Examinations", name: "TNDGE", fullName: "Tamil Nadu Directorate of Government Examinations", id: '32', teacherCount: 1080, description: "Tamil Nadu state education board", headquarters: "Chennai", established: "1975", color: '#2980B9', logo: 'https://ui-avatars.com/api/?name=TNDGE&background=EBF5FB&color=2980B9&rounded=true&size=150' },
-        { board: "DGE Telangana", boardname: "Directorate of Government Examinations Telangana", name: "DGE Telangana", fullName: "Directorate of Government Examinations Telangana", id: '33', teacherCount: 680, description: "Telangana state education board", headquarters: "Hyderabad", established: "2014", color: '#8E44AD', logo: 'https://ui-avatars.com/api/?name=DGE+Telangana&background=F4ECF7&color=8E44AD&rounded=true&size=150' },
-        { board: "BSEAP", boardname: "Board of Secondary Education Andhra Pradesh", name: "BSEAP", fullName: "Board of Secondary Education Andhra Pradesh", id: '34', teacherCount: 720, description: "Andhra Pradesh state education board", headquarters: "Vijayawada", established: "1953", color: '#27AE60', logo: 'https://ui-avatars.com/api/?name=BSEAP&background=E8F8F5&color=27AE60&rounded=true&size=150' },
-        { board: "BIEAP", boardname: "Board of Intermediate Education Andhra Pradesh", name: "BIEAP", fullName: "Board of Intermediate Education Andhra Pradesh", id: '35', teacherCount: 540, description: "Andhra Pradesh intermediate board", headquarters: "Vijayawada", established: "1971", color: '#229954', logo: 'https://ui-avatars.com/api/?name=BIEAP&background=E8F6F3&color=229954&rounded=true&size=150' },
-        { board: "DHSE Kerala", boardname: "Directorate of Higher Secondary Education Kerala", name: "DHSE Kerala", fullName: "Directorate of Higher Secondary Education Kerala", id: '36', teacherCount: 620, description: "Kerala higher secondary board", headquarters: "Thiruvananthapuram", established: "1990", color: '#E67E22', logo: 'https://ui-avatars.com/api/?name=DHSE+Kerala&background=FAF2E6&color=E67E22&rounded=true&size=150' },
-        { board: "SSLC Kerala", boardname: "Kerala SSLC Examination Board", name: "SSLC Kerala", fullName: "Kerala SSLC Examination Board", id: '37', teacherCount: 480, description: "Kerala SSLC examination board", headquarters: "Thiruvananthapuram", established: "1960", color: '#D35400', logo: 'https://ui-avatars.com/api/?name=SSLC+Kerala&background=FAE5DD&color=D35400&rounded=true&size=150' },
-        
-        // Autonomous Boards
-        { board: "CISCE", boardname: "Council for the Indian School Certificate Examinations", name: "CISCE", fullName: "Council for the Indian School Certificate Examinations", id: '38', teacherCount: 890, description: "National examination board", headquarters: "New Delhi", established: "1958", color: '#4ECDC4', logo: 'https://upload.wikimedia.org/wikipedia/en/thumb/4/4e/CISCE_logo.png/2560px-CISCE_logo.png' },
-        { board: "NABET", boardname: "National Board of Accreditation", name: "NABET", fullName: "National Board of Accreditation", id: '39', teacherCount: 150, description: "Technical education accreditation", headquarters: "New Delhi", established: "1994", color: '#34495E', logo: 'https://ui-avatars.com/api/?name=NABET&background=EAEDF2&color=34495E&rounded=true&size=150' },
-        { board: "AICTE", boardname: "All India Council for Technical Education", name: "AICTE", fullName: "All India Council for Technical Education", id: '40', teacherCount: 280, description: "Technical education regulator", headquarters: "New Delhi", established: "1945", color: '#2C3E50', logo: 'https://ui-avatars.com/api/?name=AICTE&background=E8E9EA&color=2C3E50&rounded=true&size=150' },
-        { board: "UGC", boardname: "University Grants Commission", name: "UGC", fullName: "University Grants Commission", id: '41', teacherCount: 320, description: "Higher education regulator", headquarters: "New Delhi", established: "1956", color: '#7F8C8D', logo: 'https://ui-avatars.com/api/?name=UGC&background=F0F3F4&color=7F8C8D&rounded=true&size=150' },
-        { board: "NCERT", boardname: "National Council of Educational Research and Training", name: "NCERT", fullName: "National Council of Educational Research and Training", id: '42', teacherCount: 180, description: "Educational research and training", headquarters: "New Delhi", established: "1961", color: '#E74C3C', logo: 'https://ui-avatars.com/api/?name=NCERT&background=FDEDDD&color=E74C3C&rounded=true&size=150' },
-        
-        // Religious Boards
-        { board: "Madrasa Board", boardname: "Central Madrasa Board", name: "Madrasa Board", fullName: "Central Madrasa Board", id: '43', teacherCount: 220, description: "Islamic education board", headquarters: "New Delhi", established: "2022", color: '#27AE60', logo: 'https://ui-avatars.com/api/?name=Madrasa+Board&background=E8F8F5&color=27AE60&rounded=true&size=150' },
-        { board: "Sanskrit Board", boardname: "Maharshi Sandipani Rashtriya Sanskrit Sansthan", name: "Sanskrit Board", fullName: "Maharshi Sandipani Rashtriya Sanskrit Sansthan", id: '44', teacherCount: 120, description: "Sanskrit education board", headquarters: "Ujjain", established: "2002", color: '#F39C12', logo: 'https://ui-avatars.com/api/?name=Sanskrit+Board&background=FEF5E7&color=F39C12&rounded=true&size=150' },
-        
-        // Special Boards
-        { board: "NDA", boardname: "National Defence Academy", name: "NDA", fullName: "National Defence Academy", id: '45', teacherCount: 280, description: "Defence education board", headquarters: "Pune", established: "1954", color: '#2C3E50', logo: 'https://ui-avatars.com/api/?name=NDA&background=E8E9EA&color=2C3E50&rounded=true&size=150' },
-        { board: "Sainik School", boardname: "Sainik Schools Society", name: "Sainik School", fullName: "Sainik Schools Society", id: '46', teacherCount: 340, description: "Military school board", headquarters: "New Delhi", established: "1961", color: '#34495E', logo: 'https://ui-avatars.com/api/?name=Sainik+School&background=EAEDF2&color=34495E&rounded=true&size=150' },
-        { board: "KV", boardname: "Kendriya Vidyalaya Sangathan", name: "KV", fullName: "Kendriya Vidyalaya Sangathan", id: '47', teacherCount: 520, description: "Central school system", headquarters: "New Delhi", established: "1963", color: '#0056B3', logo: 'https://ui-avatars.com/api/?name=KV&background=E7F3FF&color=0056B3&rounded=true&size=150' },
-        { board: "JNV", boardname: "Jawahar Navodaya Vidyalaya", name: "JNV", fullName: "Jawahar Navodaya Vidyalaya", id: '48', teacherCount: 480, description: "Navodaya school system", headquarters: "New Delhi", established: "1986", color: '#FF6B35', logo: 'https://ui-avatars.com/api/?name=JNV&background=FFF5F0&color=FF6B35&rounded=true&size=150' },
-      ];
-      setBoards(fallbackBoards);
-      setFilteredBoards(fallbackBoards);
+      setBoards([]);
+      setFilteredBoards([]);
+      Alert.alert("Error", "Failed to load boards. Please try again later.");
     } finally {
       setBoardsLoading(false);
     }
@@ -496,7 +372,22 @@ export default function AllBoardsPage({ onBack, onBoardSelect, category = "Subje
     };
 
     loadUserData();
-  }, []);
+
+    // Add ESC key handler for web
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          if (onBack) {
+            onBack();
+          } else {
+            router.back();
+          }
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [onBack, router]);
 
   useEffect(() => {
     const filtered = boards.filter(board => {
@@ -511,6 +402,20 @@ export default function AllBoardsPage({ onBack, onBoardSelect, category = "Subje
   const handleBoardPress = (board: BoardData) => {
     const boardName = board.name || board.board || '';
     const boardId = board.id || '';
+    
+    // Handle All Universities specially - navigate to UniversitiesList page
+    if (board.isUniversities || boardName === 'All Universities') {
+      console.log('All Universities selected - navigating to universities list');
+      if (onBoardSelect) {
+        onBoardSelect('All Universities', 'universities');
+      } else {
+        router.push({
+          pathname: '/(tabs)/StudentDashBoard/UniversitiesList',
+          params: { category: 'universities' }
+        } as any);
+      }
+      return;
+    }
     
     if (onBoardSelect) {
       onBoardSelect(boardName, boardId);
@@ -544,19 +449,29 @@ export default function AllBoardsPage({ onBack, onBoardSelect, category = "Subje
       </View>
     );
 
-    const BoardCard = ({ item }: { item: BoardData }) => (
-      <TouchableOpacity 
-        style={styles.boardCardWrapper}
-        onPress={() => handleBoardPress(item)}
-      >
-        <View style={styles.boardCardContainer}>
-          <Image source={{ uri: item.logo }} style={styles.boardLogo} resizeMode="contain" />
-        </View>
-        <View style={styles.boardLabelPill}>
-          <Text style={styles.boardLabelText}>{item.name || item.board}</Text>
-        </View>
-      </TouchableOpacity>
-    );
+    const BoardCard = ({ item }: { item: BoardData }) => {
+      const [imageError, setImageError] = useState(false);
+      const placeholderImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || item.board || 'Board')}&background=${(item.color || '#3B5BFE').replace('#', '')}&color=fff&size=150`;
+      
+      return (
+        <TouchableOpacity
+          style={styles.boardCardWrapper}
+          onPress={() => handleBoardPress(item)}
+        >
+          <View style={[styles.boardCardContainer, { backgroundColor: item.color ? item.color + '15' : '#F5F7FB' }]}>
+            <Image
+              source={{ uri: imageError ? placeholderImage : (item.logo || placeholderImage) }}
+              style={styles.boardLogo}
+              resizeMode="contain"
+              onError={() => setImageError(true)}
+            />
+          </View>
+          <View style={styles.boardLabelPill}>
+            <Text style={styles.boardLabelText}>{item.name || item.board}</Text>
+          </View>
+        </TouchableOpacity>
+      );
+    };
 
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -643,89 +558,6 @@ export default function AllBoardsPage({ onBack, onBoardSelect, category = "Subje
                 </ScrollView>
               </ImageBackground>
             </View>
-
-            {/* Right Panel with ThoughtsCard */}
-            <View style={styles.rightPanel}>
-              <Text style={styles.rightPanelTitle}>Thoughts</Text>
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.thoughtsList}>
-                {postsLoading && posts.length === 0 && <ActivityIndicator color="#4A7BF7" style={{ marginTop: 30 }} />}
-                {!postsLoading && posts.length === 0 && (
-                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                    <MaterialCommunityIcons name="post-outline" size={40} color="#ccc" />
-                    <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No thoughts yet</Text>
-                  </View>
-                )}
-                {posts.map((post) => (
-                  <ThoughtsCard 
-                    key={post.id} 
-                    post={post} 
-                    onLike={handleLike} 
-                    onComment={openCommentsModal}
-                    onReport={(post) => { setReportType('post'); setReportItemId(post.id); setReportReason(''); setShowReportModal(true); }}
-                    getProfileImageSource={getProfileImageSource} 
-                    initials={initials} 
-                    resolvePostAuthor={resolvePostAuthor} 
-                  />
-                ))}
-              </ScrollView>
-
-              {/* Comments Modal */}
-              <Modal visible={showCommentsModal} animationType="slide" transparent onRequestClose={() => setShowCommentsModal(false)}>
-                <View style={styles.modalOverlay}>
-                  <View style={styles.modalBox}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                      <Text style={styles.modalTitle}>Comments</Text>
-                      <TouchableOpacity onPress={() => setShowCommentsModal(false)}><Ionicons name="close" size={24} color="#666" /></TouchableOpacity>
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#f0f0f0' }}>
-                      <TextInput style={styles.commentInput} placeholder="Add a comment..." placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} multiline maxLength={200} />
-                      <TouchableOpacity style={[styles.postBtn, !commentText.trim() && { backgroundColor: '#ccc' }]} onPress={addComment} disabled={!commentText.trim()}>
-                        <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Poppins_400Regular' }}>Post</Text>
-                      </TouchableOpacity>
-                    </View>
-                    <ScrollView style={{ maxHeight: 300 }}>
-                      {postComments.length === 0
-                        ? <Text style={{ textAlign: 'center', color: '#aaa', paddingVertical: 30, fontFamily: 'Poppins_400Regular' }}>No comments yet</Text>
-                        : postComments.map((c) => {
-                            const ca = resolvePostAuthor({ author: c.author } as Post);
-                            const cSrc = getProfileImageSource(ca.pic || undefined);
-                            return (
-                              <View key={c.id} style={{ flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' }}>
-                                {cSrc ? <Image source={cSrc} style={styles.commentAvatar} /> : <View style={[styles.commentAvatar, styles.avatarPlaceholder]}><Text style={styles.avatarTxt}>{initials(ca.name)}</Text></View>}
-                                <View style={{ flex: 1, marginLeft: 10 }}>
-                                  <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#222', fontFamily: 'Poppins_600SemiBold' }}>{ca.name}</Text>
-                                  <Text style={{ fontSize: 13, color: '#374151', marginTop: 2, fontFamily: 'Poppins_400Regular' }}>{c.content}</Text>
-                                  <Text style={{ fontSize: 11, color: '#aaa', marginTop: 3, fontFamily: 'Poppins_400Regular' }}>{c.createdAt}</Text>
-                                </View>
-                              </View>
-                            );
-                          })}
-                    </ScrollView>
-                  </View>
-                </View>
-              </Modal>
-
-              {/* Report Modal */}
-              <Modal visible={showReportModal} animationType="fade" transparent onRequestClose={() => setShowReportModal(false)}>
-                <View style={styles.modalOverlay}>
-                  <View style={[styles.modalBox, { maxHeight: undefined }]}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                      <Text style={styles.modalTitle}>Report {reportType === 'post' ? 'Post' : 'Comment'}</Text>
-                      <TouchableOpacity onPress={() => setShowReportModal(false)}><Ionicons name="close" size={24} color="#666" /></TouchableOpacity>
-                    </View>
-                    <Text style={{ fontSize: 13, color: '#555', marginBottom: 12, fontFamily: 'Poppins_400Regular' }}>Please provide a reason for reporting:</Text>
-                    <TextInput style={styles.reportInput} placeholder="Enter reason..." placeholderTextColor="#999" value={reportReason} onChangeText={setReportReason} multiline maxLength={200} />
-                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 16, gap: 10 }}>
-                      <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowReportModal(false)}><Text style={{ color: '#666', fontFamily: 'Poppins_400Regular' }}>Cancel</Text></TouchableOpacity>
-                      <TouchableOpacity style={[styles.reportBtn, !reportReason.trim() && { backgroundColor: '#ccc' }]} onPress={submitReport} disabled={!reportReason.trim()}>
-                        <Text style={{ color: '#fff', fontFamily: 'Poppins_400Regular' }}>Submit</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              </Modal>
-            </View>
-
           </View>
         </View>
       </SafeAreaView>
@@ -777,13 +609,21 @@ export default function AllBoardsPage({ onBack, onBoardSelect, category = "Subje
           keyExtractor={(item) => item.id?.toString() || item.board || ''}
           contentContainerStyle={styles.mobileBoardsList}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <TouchableOpacity 
+          renderItem={({ item }) => {
+            const [mobileImageError, setMobileImageError] = useState(false);
+            const mobilePlaceholder = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || item.board || 'Board')}&background=${(item.color || '#3B5BFE').replace('#', '')}&color=fff&size=150`;
+            
+            return (
+            <TouchableOpacity
               style={styles.mobileBoardCard}
               onPress={() => handleBoardPress(item)}
             >
               <View style={[styles.mobileBoardHeader, { backgroundColor: (item.color || '#4A7BF7') + '20' }]}>
-                <Image source={item.logo ? { uri: item.logo } : require('../../../assets/images/Profile.png')} style={styles.mobileBoardLogo} />
+                <Image
+                  source={{ uri: mobileImageError ? mobilePlaceholder : (item.logo || mobilePlaceholder) }}
+                  style={styles.mobileBoardLogo}
+                  onError={() => setMobileImageError(true)}
+                />
                 <View style={styles.mobileBoardBadge}>
                   <Text style={styles.mobileBoardBadgeText}>{item.teacherCount || 0}</Text>
                 </View>
@@ -808,7 +648,8 @@ export default function AllBoardsPage({ onBack, onBoardSelect, category = "Subje
                 </View>
               </View>
             </TouchableOpacity>
-          )}
+            );
+          }}
         />
       )}
 

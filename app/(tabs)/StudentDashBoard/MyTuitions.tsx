@@ -6,7 +6,7 @@ import axios from "axios";
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome } from '@expo/vector-icons';
 import { autoRefreshToken } from '../../../utils/tokenRefresh';
-import ThoughtsCard from '../StudentDashBoard/ThoughtsCard';
+import ThoughtsCard, { ThoughtsFeed } from '../StudentDashBoard/ThoughtsCard';
 import { Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, useFonts } from "@expo-google-fonts/poppins";
 import { Roboto_500Medium } from '@expo-google-fonts/roboto';
 import { OpenSans_500Medium, OpenSans_300Light, OpenSans_400Regular } from "@expo-google-fonts/open-sans";
@@ -16,6 +16,7 @@ import WebSidebar from "../../../components/ui/WebSidebar";
 import WebNavbar from "../../../components/ui/WebNavbar";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
+import BackButton from "../../../components/BackButton";
 
 const COLORS = { primary: '#3B5BFE', lightBackground: '#F5F7FB', cardBackground: '#FFFFFF', border: '#E5E7EB', textPrimary: '#1F2937', textSecondary: '#6B7280', ratingGreen: '#22C55E', ratingLight: '#DCFCE7' };
 
@@ -25,7 +26,13 @@ const MyTuitions = () => {
   const router = useRouter();
   let [fontsLoaded] = useFonts({ Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Roboto_500Medium, OpenSans_500Medium, OpenSans_300Light, OpenSans_400Regular, Montserrat_400Regular });
 
-  const isDesktop = Dimensions.get('window').width >= 1024;
+  const { width: screenWidth } = Dimensions.get('window');
+  const isDesktop = screenWidth >= 1024;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
+  const isMobile = screenWidth < 768;
+
+  // Generate responsive styles based on screen width
+  const styles = getResponsiveStyles(screenWidth);
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [filteredContacts, setFilteredContacts] = useState<Contact[]>([]);
@@ -182,8 +189,9 @@ const MyTuitions = () => {
 
   const resolvePostAuthor = (post: UnifiedPost) => {
     const cached = userProfileCache.get(post.author?.email) || { name: '', profilePic: '' };
-    let name = cached.name || post.author?.name || '';
-    let pic: string | null = cached.profilePic || post.author?.profile_pic || null;
+    // Prioritize post.author.name first, then cache, then fallback
+    let name = post.author?.name || cached.name || '';
+    let pic: string | null = post.author?.profile_pic || cached.profilePic || null;
     if (!name || name === 'null' || name.includes('@')) name = post.author?.email?.split('@')[0] || 'User';
     if (pic && !pic.startsWith('http') && !pic.startsWith('/')) pic = `/${pic}`;
     if (pic === '' || pic === 'null') pic = null;
@@ -193,77 +201,6 @@ const MyTuitions = () => {
   const fetchPosts = async (token: string) => {
     try {
       setPostsLoading(true);
-      
-      // Handle bypass token for student with mock data
-      if (token === "bypass_token_student1") {
-        const mockPosts: any[] = [
-          {
-            id: "mock_post_1",
-            author: {
-              email: "teacher1@example.com",
-              name: "Dr. Sarah Johnson",
-              role: "teacher",
-              profile_pic: ""
-            },
-            content: "Great work on today's mathematics assignment! Remember to practice the quadratic formula problems we discussed.",
-            likes: 12,
-            comments: [
-              {
-                id: "comment_1",
-                author: { email: "student1@example.com", name: "Student", role: "student", profile_pic: "" },
-                content: "Thank you! The examples really helped.",
-                createdAt: "2h ago"
-              }
-            ],
-            createdAt: "3h ago",
-            tags: ["mathematics", "homework"],
-            postImages: [],
-            isLiked: false
-          },
-          {
-            id: "mock_post_2",
-            author: {
-              email: "teacher2@example.com",
-              name: "Prof. Michael Chen",
-              role: "teacher", 
-              profile_pic: ""
-            },
-            content: "Physics lab tomorrow - don't forget to bring your notebooks and review the motion equations. We'll be doing practical experiments!",
-            likes: 8,
-            comments: [],
-            createdAt: "5h ago",
-            tags: ["physics", "lab", "reminder"],
-            postImages: [],
-            isLiked: true
-          },
-          {
-            id: "mock_post_3",
-            author: {
-              email: "teacher3@example.com",
-              name: "Dr. Emily Watson",
-              role: "teacher",
-              profile_pic: ""
-            },
-            content: "Chemistry quiz results are out! Excellent performance from the class. Average score: 85%. Keep up the great work! 🧪",
-            likes: 15,
-            comments: [
-              {
-                id: "comment_2", 
-                author: { email: "student1@example.com", name: "Student", role: "student", profile_pic: "" },
-                content: "So happy with my score!",
-                createdAt: "1h ago"
-              }
-            ],
-            createdAt: "1d ago",
-            tags: ["chemistry", "quiz", "results"],
-            postImages: [],
-            isLiked: false
-          }
-        ];
-        setPosts(mockPosts);
-        setPostsLoading(false);
-        return;
-      }
       
       const res = await axios.get(`${BASE_URL}/api/posts/all`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.data.success) {
@@ -322,6 +259,16 @@ const MyTuitions = () => {
       Alert.alert('Success', 'Report submitted'); setShowReportModal(false); setReportReason('');
     } catch (err: any) { Alert.alert('Error', err.response?.data?.message || 'Failed to submit report'); }
   };
+
+  const handleBackPress = useCallback(() => { router.push('/(tabs)/StudentDashBoard/Student'); }, [router]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') handleBackPress(); };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [handleBackPress]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -459,6 +406,7 @@ const MyTuitions = () => {
             {/* CENTER: My Tuitions Grid */}
             <View style={styles.centerContent}>
               <View style={styles.pageTitleContainer}>
+                <BackButton onPress={handleBackPress} color="white" />
                 <Ionicons name="school" size={28} color={COLORS.textPrimary} />
                 <Text style={styles.pageTitle}>My Tuitions</Text>
               </View>
@@ -490,61 +438,19 @@ const MyTuitions = () => {
               </View>
             </View>
 
-            {/* RIGHT: Thoughts Panel (UnifiedThoughtsCard with consistent UI patterns) */}
+            {/* RIGHT: Thoughts Panel */}
             <View style={styles.rightPanel}>
-              <Text style={styles.rightPanelTitle}>Thoughts</Text>
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.thoughtsList}>
-                {postsLoading && posts.length === 0 && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 30 }} />}
-                {!postsLoading && posts.length === 0 && (
-                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                    <MaterialIcons name="post-add" size={40} color="#ccc" />
-                    <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No thoughts yet</Text>
-                  </View>
-                )}
-                {posts.map((post: any) => {
-                  const resolvePostAuthor = (post: any) => {
-                    const userProfile = userProfileCache.get(post.author.email) || { name: 'Unknown User', profilePic: '' };
-                    let name = userProfile.name || post.author.name;
-                    let pic: string | null = userProfile.profilePic || post.author.profile_pic;
-                    let role = post.author.role;
-                    
-                    if (!name || name === 'null' || name === 'undefined' || name.trim() === '' || name.includes('@')) {
-                      name = post.author.email?.split('@')[0] || 'Unknown User';
-                    }
-                    
-                    if (pic && pic !== '' && pic !== 'null' && pic !== 'undefined') {
-                      if (!pic.startsWith('http') && !pic.startsWith('/')) {
-                        pic = `/${pic}`;
-                      }
-                    } else {
-                      pic = null;
-                    }
-                    
-                    if (!role || role.trim() === '' || role === 'null' || role === 'undefined') {
-                      role = 'User';
-                    }
-                    
-                    return { name, pic, role };
-                  };
-
-                  const initials = (name: string) => {
-                    return name ? name.split(' ').map(w => w.charAt(0)).join('').toUpperCase().slice(0, 2) : 'U';
-                  };
-
-                  return (
-                    <ThoughtsCard
-                      key={post.id}
-                      post={post}
-                      onLike={handleLike}
-                      onComment={openCommentsModal}
-                      onReport={(p) => { setReportType('post'); setReportItemId(p.id); setReportReason(''); setShowReportModal(true); }}
-                      getProfileImageSource={getProfileImageSource}
-                      initials={initials}
-                      resolvePostAuthor={resolvePostAuthor}
-                    />
-                  );
-                })}
-              </ScrollView>
+              <ThoughtsFeed
+                posts={posts}
+                postsLoading={postsLoading}
+                authToken={authToken}
+                BASE_URL={BASE_URL}
+                getProfileImageSource={getProfileImageSource}
+                initials={initials}
+                resolvePostAuthor={resolvePostAuthor}
+                formatTimeAgo={formatTimeAgo}
+                router={router}
+              />
             </View>
 
           </View>
@@ -596,68 +502,74 @@ const MyTuitions = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: COLORS.cardBackground },
-  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  rootContainer: { flex: 1, flexDirection: 'row', backgroundColor: COLORS.cardBackground },
-  mainLayout: { flex: 1, backgroundColor: COLORS.lightBackground },
-  topHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 32, paddingVertical: 20, backgroundColor: COLORS.cardBackground, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.lightBackground, borderRadius: 30, paddingHorizontal: 16, height: 44, width: '40%' },
-  searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, fontFamily: 'Poppins_400Regular', fontSize: 14, color: COLORS.textPrimary },
-  profileHeaderSection: { flexDirection: 'row', alignItems: 'center' },
-  bellIcon: { marginRight: 20, padding: 8, backgroundColor: COLORS.lightBackground, borderRadius: 20 },
-  notificationBadge: { position: 'absolute', top: -5, right: -5, backgroundColor: 'red', borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center' },
-  notificationText: { color: 'white', fontSize: 12, fontWeight: 'bold' },
-  headerUserName: { fontFamily: 'Poppins_500Medium', fontSize: 14, color: COLORS.textPrimary, marginRight: 12 },
-  headerAvatar: { width: 40, height: 40, borderRadius: 20 },
-  contentColumns: { flex: 1, flexDirection: 'row' },
-  centerContent: { flex: 1, paddingTop: 32, paddingHorizontal: 32, paddingBottom: 24 },
-  pageTitleContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
-  pageTitle: { fontFamily: 'Poppins_700Bold', fontSize: 24, color: COLORS.textPrimary, marginLeft: 12 },
-  gridContainerBox: { flex: 1, backgroundColor: COLORS.cardBackground, borderRadius: 20, borderWidth: 1, borderColor: '#E4ECF7', padding: 24, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 10 },
-  tuitionGrid: { paddingBottom: 20 },
-  cardsWrapper: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 16 },
-  tuitionCard: { width: '31%', minWidth: 180, marginBottom: 16, backgroundColor: COLORS.cardBackground, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden' },
-  cardImageContainer: { width: '100%', height: 180, position: 'relative' },
-  cardImage: { width: '100%', height: '100%' },
-  heartButton: { position: 'absolute', top: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 16, padding: 6 },
-  cardBody: { padding: 16 },
-  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  tagText: { color: COLORS.primary, fontFamily: 'Poppins_600SemiBold', fontSize: 10, letterSpacing: 0.5 },
-  ratingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.ratingGreen, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  ratingText: { color: '#FFFFFF', fontFamily: 'Poppins_600SemiBold', fontSize: 11, marginLeft: 4 },
-  teacherName: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.textPrimary, marginBottom: 4 },
-  teacherDesc: { fontFamily: 'Poppins_400Regular', fontSize: 11, color: COLORS.textSecondary, lineHeight: 16, marginBottom: 16 },
-  cardFooter: { alignItems: 'flex-end' },
-  reviewBtn: { backgroundColor: COLORS.ratingLight, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 },
-  reviewBtnText: { color: COLORS.textPrimary, fontFamily: 'Poppins_500Medium', fontSize: 12 },
-  paginationContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 32, gap: 8 },
-  pageDot: { width: 32, height: 32, borderRadius: 8, backgroundColor: COLORS.lightBackground, justifyContent: 'center', alignItems: 'center' },
-  pageDotActive: { backgroundColor: COLORS.textSecondary },
-  pageDotText: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.textPrimary },
-  pageDotTextActive: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: '#FFFFFF' },
-  rightPanel: { width: '25%', minWidth: 300, backgroundColor: COLORS.cardBackground, borderLeftWidth: 1, borderLeftColor: COLORS.border, paddingTop: 32, paddingHorizontal: 20 },
-  rightPanelTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 20, color: COLORS.primary, marginBottom: 24, textAlign: 'right' },
-  thoughtsList: { paddingBottom: 40 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },
-  loadingText: { fontSize: 16, fontFamily: 'Poppins_400Regular', color: COLORS.textSecondary, marginTop: 10 },
-  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40, marginTop: 50 },
-  emptyTitle: { fontSize: 20, fontFamily: 'Poppins_600SemiBold', color: COLORS.textPrimary, marginBottom: 10, textAlign: 'center' },
-  emptyText: { fontSize: 14, fontFamily: 'Poppins_400Regular', color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContainer: { backgroundColor: COLORS.cardBackground, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%', paddingBottom: 20 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  modalTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 18, color: COLORS.textPrimary },
-  commentsList: { paddingHorizontal: 16, paddingTop: 12 },
-  commentItem: { marginBottom: 16, padding: 12, backgroundColor: COLORS.lightBackground, borderRadius: 10 },
-  commentAuthor: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: COLORS.textPrimary, marginBottom: 4 },
-  commentContent: { fontFamily: 'Poppins_400Regular', fontSize: 13, color: COLORS.textPrimary, lineHeight: 18 },
-  commentTime: { fontFamily: 'Poppins_400Regular', fontSize: 11, color: COLORS.textSecondary, marginTop: 4 },
-  commentInputRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: COLORS.border },
-  commentInput: { flex: 1, backgroundColor: COLORS.lightBackground, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontFamily: 'Poppins_400Regular', fontSize: 14, color: COLORS.textPrimary, maxHeight: 100 },
-  commentSendBtn: { marginLeft: 10, backgroundColor: COLORS.primary, borderRadius: 20, padding: 10 },
-});
+// ─── RESPONSIVE STYLE HELPER ──────────────────────────────────────────────────────────
+const getResponsiveStyles = (screenWidth: number) => {
+  const isMobile = screenWidth < 768;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
+  const isSmallMobile = screenWidth < 375;
+
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: COLORS.cardBackground },
+    loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    rootContainer: { flex: 1, flexDirection: 'row', backgroundColor: COLORS.cardBackground },
+    mainLayout: { flex: 1, backgroundColor: COLORS.lightBackground },
+    topHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: isSmallMobile ? 12 : isMobile ? 16 : 32, paddingVertical: isSmallMobile ? 8 : isMobile ? 12 : 20, backgroundColor: COLORS.cardBackground, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+    searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.lightBackground, borderRadius: isMobile ? 20 : 30, paddingHorizontal: isSmallMobile ? 12 : 16, height: isSmallMobile ? 40 : 44, flex: 1, maxWidth: isMobile ? '50%' : '40%', marginRight: isMobile ? 8 : 12 },
+    searchIcon: { marginRight: isSmallMobile ? 8 : 10 },
+    searchInput: { flex: 1, fontFamily: 'Poppins_400Regular', fontSize: isSmallMobile ? 13 : 14, color: COLORS.textPrimary },
+    profileHeaderSection: { flexDirection: 'row', alignItems: 'center' },
+    bellIcon: { marginRight: isMobile ? 12 : 20, padding: isSmallMobile ? 6 : 8, backgroundColor: COLORS.lightBackground, borderRadius: 20 },
+    notificationBadge: { position: 'absolute', top: -5, right: -5, backgroundColor: 'red', borderRadius: 10, minWidth: isSmallMobile ? 18 : 20, height: isSmallMobile ? 18 : 20, justifyContent: 'center', alignItems: 'center' },
+    notificationText: { color: 'white', fontSize: isSmallMobile ? 10 : 12, fontWeight: 'bold' },
+    headerUserName: { fontFamily: 'Poppins_500Medium', fontSize: isSmallMobile ? 12 : isMobile ? 13 : 14, color: COLORS.textPrimary, marginRight: isMobile ? 8 : 12 },
+    headerAvatar: { width: isSmallMobile ? 36 : 40, height: isSmallMobile ? 36 : 40, borderRadius: isSmallMobile ? 18 : 20 },
+    contentColumns: { flex: 1, flexDirection: isMobile ? 'column' : 'row' },
+    centerContent: { flex: 1, paddingTop: isSmallMobile ? 12 : isMobile ? 16 : 32, paddingHorizontal: isSmallMobile ? 12 : isMobile ? 16 : 32, paddingBottom: isSmallMobile ? 16 : 24 },
+    pageTitleContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: isSmallMobile ? 16 : 24 },
+    pageTitle: { fontFamily: 'Poppins_700Bold', fontSize: isSmallMobile ? 20 : isMobile ? 22 : 24, color: COLORS.textPrimary, marginLeft: 12 },
+    gridContainerBox: { flex: 1, backgroundColor: COLORS.cardBackground, borderRadius: isMobile ? 12 : 20, borderWidth: 1, borderColor: '#E4ECF7', padding: isSmallMobile ? 8 : isMobile ? 12 : 24, ...Platform.select({ web: { boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }, default: { shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 10 } }) },
+    tuitionGrid: { paddingBottom: isSmallMobile ? 16 : 20 },
+    cardsWrapper: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: isMobile ? 'center' : 'space-between', gap: isSmallMobile ? 8 : isMobile ? 12 : 16 },
+    tuitionCard: { width: isMobile ? '100%' : isTablet ? '48%' : '31%', minWidth: isMobile ? '100%' : 180, marginBottom: isSmallMobile ? 8 : isMobile ? 12 : 16, backgroundColor: COLORS.cardBackground, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden' },
+    cardImageContainer: { width: '100%', height: isSmallMobile ? 160 : isMobile ? 180 : 200, position: 'relative' },
+    cardImage: { width: '100%', height: '100%' },
+    heartButton: { position: 'absolute', top: isSmallMobile ? 8 : 12, right: isSmallMobile ? 8 : 12, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 16, padding: isSmallMobile ? 4 : 6 },
+    cardBody: { padding: isSmallMobile ? 12 : 16 },
+    cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: isSmallMobile ? 6 : 8 },
+    tagText: { color: COLORS.primary, fontFamily: 'Poppins_600SemiBold', fontSize: isSmallMobile ? 9 : 10, letterSpacing: 0.5 },
+    ratingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.ratingGreen, paddingHorizontal: isSmallMobile ? 6 : 8, paddingVertical: isSmallMobile ? 1 : 2, borderRadius: 10 },
+    ratingText: { color: '#FFFFFF', fontFamily: 'Poppins_600SemiBold', fontSize: isSmallMobile ? 10 : 11, marginLeft: isSmallMobile ? 3 : 4 },
+    teacherName: { fontFamily: 'Poppins_600SemiBold', fontSize: isSmallMobile ? 13 : 14, color: COLORS.textPrimary, marginBottom: 4 },
+    teacherDesc: { fontFamily: 'Poppins_400Regular', fontSize: isSmallMobile ? 10 : 11, color: COLORS.textSecondary, lineHeight: isSmallMobile ? 14 : 16, marginBottom: isSmallMobile ? 12 : 16 },
+    cardFooter: { alignItems: 'flex-end' },
+    reviewBtn: { backgroundColor: COLORS.ratingLight, paddingHorizontal: isSmallMobile ? 12 : 16, paddingVertical: isSmallMobile ? 4 : 6, borderRadius: 20 },
+    reviewBtnText: { color: COLORS.textPrimary, fontFamily: 'Poppins_500Medium', fontSize: isSmallMobile ? 11 : 12 },
+    paginationContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: isSmallMobile ? 16 : isMobile ? 20 : 32, gap: isSmallMobile ? 6 : 8 },
+    pageDot: { width: isSmallMobile ? 28 : 32, height: isSmallMobile ? 28 : 32, borderRadius: 8, backgroundColor: COLORS.lightBackground, justifyContent: 'center', alignItems: 'center' },
+    pageDotActive: { backgroundColor: COLORS.textSecondary },
+    pageDotText: { fontFamily: 'Poppins_600SemiBold', fontSize: isSmallMobile ? 13 : 14, color: COLORS.textPrimary },
+    pageDotTextActive: { fontFamily: 'Poppins_600SemiBold', fontSize: isSmallMobile ? 13 : 14, color: '#FFFFFF' },
+    rightPanel: { width: isMobile ? '100%' : isTablet ? '35%' : '25%', minWidth: isMobile ? '100%' : 300, backgroundColor: COLORS.cardBackground, borderLeftWidth: isMobile ? 0 : 1, borderTopWidth: isMobile ? 1 : 0, borderLeftColor: COLORS.border, borderTopColor: COLORS.border, paddingTop: isSmallMobile ? 12 : isMobile ? 16 : 32, paddingHorizontal: isSmallMobile ? 12 : isMobile ? 16 : 20 },
+    thoughtsList: { paddingBottom: 40 },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: isSmallMobile ? 30 : 50 },
+    loadingText: { fontSize: isSmallMobile ? 14 : 16, fontFamily: 'Poppins_400Regular', color: COLORS.textSecondary, marginTop: 10 },
+    emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: isSmallMobile ? 16 : isMobile ? 20 : 40, marginTop: isSmallMobile ? 30 : 50 },
+    emptyTitle: { fontSize: isSmallMobile ? 18 : 20, fontFamily: 'Poppins_600SemiBold', color: COLORS.textPrimary, marginBottom: isSmallMobile ? 8 : 10, textAlign: 'center' },
+    emptyText: { fontSize: isSmallMobile ? 13 : 14, fontFamily: 'Poppins_400Regular', color: COLORS.textSecondary, textAlign: 'center', lineHeight: isSmallMobile ? 18 : 20 },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalContainer: { backgroundColor: COLORS.cardBackground, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%', paddingBottom: 20 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: isSmallMobile ? 16 : 20, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+    modalTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: isSmallMobile ? 16 : 18, color: COLORS.textPrimary },
+    commentsList: { paddingHorizontal: isSmallMobile ? 12 : 16, paddingTop: isSmallMobile ? 8 : 12 },
+    commentItem: { marginBottom: isSmallMobile ? 12 : 16, padding: isSmallMobile ? 10 : 12, backgroundColor: COLORS.lightBackground, borderRadius: 10 },
+    commentAuthor: { fontFamily: 'Poppins_600SemiBold', fontSize: isSmallMobile ? 12 : 13, color: COLORS.textPrimary, marginBottom: 4 },
+    commentContent: { fontFamily: 'Poppins_400Regular', fontSize: isSmallMobile ? 12 : 13, color: COLORS.textPrimary, lineHeight: isSmallMobile ? 16 : 18 },
+    commentTime: { fontFamily: 'Poppins_400Regular', fontSize: isSmallMobile ? 10 : 11, color: COLORS.textSecondary, marginTop: 4 },
+    commentInputRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: isSmallMobile ? 12 : 16, paddingTop: isSmallMobile ? 8 : 12, borderTopWidth: 1, borderTopColor: COLORS.border },
+    commentInput: { flex: 1, backgroundColor: COLORS.lightBackground, borderRadius: 20, paddingHorizontal: isSmallMobile ? 12 : 16, paddingVertical: isSmallMobile ? 8 : 10, fontFamily: 'Poppins_400Regular', fontSize: isSmallMobile ? 13 : 14, color: COLORS.textPrimary, maxHeight: 100 },
+    commentSendBtn: { marginLeft: isSmallMobile ? 8 : 10, backgroundColor: COLORS.primary, borderRadius: 20, padding: isSmallMobile ? 8 : 10 },
+  });
+};
 
 // ─── WEB-ONLY STYLES (from Student.tsx) ─────────────────────────────────────────────────────────
 const ws = StyleSheet.create({

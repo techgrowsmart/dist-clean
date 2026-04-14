@@ -3,8 +3,9 @@ import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Dimensions, FlatList, Image, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import Animated, {
     FadeInLeft,
     FadeInRight
@@ -16,37 +17,42 @@ import {
   orderBy,
   query,
   where,
+  doc,
+  getDoc,
+  addDoc,
+  serverTimestamp,
+  updateDoc,
+  arrayUnion,
 } from "firebase/firestore";
 import { db } from "../../../firebaseConfig";
 import WebNavbar from "../../../components/ui/WebNavbar";
 import WebSidebar from "../../../components/ui/WebSidebar";
+import ResponsiveSidebar from "../../../components/ui/ResponsiveSidebar";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
 import ThoughtsCard from './ThoughtsCard';
+import BackButton from '../../../components/BackButton';
 
-// Global Design Tokens from ConnectScreen
+// Global Design Tokens
 const COLORS = {
-  background: '#F7F9FC',
+  background: '#F5F7FB',
   sidebarBg: '#FFFFFF',
-  chatListBg: '#FFFFFF',
-  chatWindowBg: '#F8FAFC',
+  chatListBg: '#FAFBFC',
+  chatWindowBg: '#F9FAFB',
   feedBg: '#FFFFFF',
-  primaryBlue: '#2563EB',
+  primaryBlue: '#3B5BFE',
   activeNavBg: '#EEF2FF',
   softGreen: '#D1FAE5',
   textHeader: '#1F2937',
   textBody: '#4B5563',
   textMuted: '#94A3B8',
-  border: '#EEF2F6',
+  border: '#E5E7EB',
   receivedBubble: '#F3F4F6',
   sentBubble: '#E5E7EB',
   white: '#FFFFFF',
-  unreadDot: '#2563EB',
+  unreadDot: '#3B5BFE',
   onlineGreen: '#10B981',
 };
-
-// Minimal mock data
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150';
 
 interface Contact {
   name: string;
@@ -70,18 +76,9 @@ interface Message {
   teacherName?: string
 }
 
-interface ConnectionRequest {
-  id: string;
-  studentName: string;
-  studentEmail: string;
-  studentProfilePic: string;
-  teacherEmail: string;
-  status: string;
-}
-
 interface ConnectWebProps { 
   onBack?: () => void; 
-  isEmbedded?: boolean; // Add this prop to indicate if it's embedded in the main layout
+  isEmbedded?: boolean;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -99,25 +96,27 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
     width: Dimensions.get('window').width,
     height: Dimensions.get('window').height,
   });
-  // Chat state
+
+  // State
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [messages, setMessages] = useState<{ [key: string]: Message[] }>({});
-  const [connectionRequests, setConnectionRequests] = useState<ConnectionRequest[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [teacherBroadcastData, setTeacherBroadcastData] = useState<any[]>([]);
-  const [teacherBroadcastMessages, setTeacherBroadcastMessages] = useState<any[]>([]);
-  const [showSearchBar, setShowSearchBar] = useState(false);
   const [messageInput, setMessageInput] = useState<string>("");
   const [isSending, setIsSending] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'Teachers' | 'Broadcast'>('Teachers');
+  const [activeTab, setActiveTab] = useState<'Teachers' | 'Broadcast' | 'My Requests'>('Teachers');
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userImage, setUserImage] = useState<string | null>(null);
   const [studentName, setStudentName] = useState<string>('');
   const [userType, setUserType] = useState<string | null>(null);
   const [activeMenu, setActiveMenu] = useState("Connect");
-  const [unreadCount, setUnreadCount] = useState(0);
   const [userRole, setUserRole] = useState<string | null>(null);
+  
+  // Messages state
+  const [enrolledStudents, setEnrolledStudents] = useState<any[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(true);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   
   // Posts / Thoughts state
   const [posts, setPosts] = useState<any[]>([]);
@@ -133,6 +132,10 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
   const [reportItemId, setReportItemId] = useState('');
   const [reportReason, setReportReason] = useState('');
 
+  // Booking requests state
+  const [bookingRequests, setBookingRequests] = useState<any[]>([]);
+  const [bookingLoading, setBookingLoading] = useState(false);
+
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       setWindowSize({ width: window.width, height: window.height });
@@ -140,7 +143,7 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
     return () => subscription.remove();
   }, []);
 
-  const isDesktop = windowSize.width >= 1200;
+  const isDesktop = windowSize.width >= 1024;
 
   const handleSidebarItemPress = (itemName: string) => {
     setActiveMenu(itemName);
@@ -158,7 +161,7 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
     if (itemName === "Log out") { AsyncStorage.clear(); router.push("/login"); }
   };
 
-  // Load user info
+  // Load user info and fetch enrolled students
   useEffect(() => {
     const loadUserInfo = async () => {
       try {
@@ -174,6 +177,11 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
           setUserRole(role);
           setUserType(role);
         }
+        
+        if (email) {
+          await fetchEnrolledStudents(email);
+          await fetchStudentBookingRequests(email);
+        }
       } catch (error) {
         console.error("❌ Error loading user info:", error);
       }
@@ -181,6 +189,135 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
 
     loadUserInfo();
   }, []);
+
+  // Fetch student booking requests
+  const fetchStudentBookingRequests = async (studentEmail: string) => {
+    try {
+      setBookingLoading(true);
+      const auth = await getAuthData();
+      if (!auth?.token) return;
+
+      const response = await axios.get(`${BASE_URL}/api/bookings/student-requests`, {
+        headers: { Authorization: `Bearer ${auth.token}` }
+      });
+
+      if (response.data.success && response.data.requests) {
+        setBookingRequests(response.data.requests);
+      }
+    } catch (error) {
+      console.error('Error fetching booking requests:', error);
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+
+  // Fetch enrolled students from Firebase
+  const fetchEnrolledStudents = async (studentEmail: string) => {
+    try {
+      setLoadingStudents(true);
+      
+      const enrollmentsQuery = query(
+        collection(db, "enrollments"),
+        where("studentEmail", "==", studentEmail)
+      );
+      
+      const enrollmentsSnapshot = await getDocs(enrollmentsQuery);
+      const enrolledTeachers = [];
+      
+      for (const enrollmentDoc of enrollmentsSnapshot.docs) {
+        const enrollmentData = enrollmentDoc.data();
+        
+        const teacherDoc = await getDoc(doc(db, "users", enrollmentData.teacherEmail));
+        if (teacherDoc.exists()) {
+          const teacherData = teacherDoc.data();
+          enrolledTeachers.push({
+            id: teacherDoc.id,
+            email: teacherData.email,
+            name: teacherData.name || teacherData.displayName || 'Unknown Teacher',
+            profilePic: teacherData.profilePic || teacherData.photoURL || '',
+            role: teacherData.role || 'teacher',
+            subject: enrollmentData.subject || 'Subject',
+            enrollmentDate: enrollmentData.enrollmentDate,
+            lastMessage: '',
+            lastMessageTime: '',
+            unread: 0
+          });
+        }
+      }
+      
+      setEnrolledStudents(enrolledTeachers);
+      setContacts(enrolledTeachers);
+    } catch (error) {
+      console.error("❌ Error fetching enrolled students:", error);
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  // Handle contact selection
+  const handleSelectContact = (contact: any) => {
+    setSelectedContact(contact);
+    
+    const chatId = [userEmail, contact.email].sort().join('_');
+    setCurrentChatId(chatId);
+    
+    loadChatMessages(chatId);
+  };
+
+  // Load chat messages
+  const loadChatMessages = async (chatId: string) => {
+    try {
+      const messagesQuery = query(
+        collection(db, "chats", chatId, "messages"),
+        orderBy("timestamp", "asc")
+      );
+      
+      const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+        const messagesData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setChatMessages(messagesData);
+      });
+      
+      return unsubscribe;
+    } catch (error) {
+      console.error("❌ Error loading chat messages:", error);
+    }
+  };
+
+  // Send message
+  const sendMessage = async () => {
+    if (!messageInput.trim() || !currentChatId || !userEmail || !selectedContact) return;
+    
+    try {
+      setIsSending(true);
+      
+      const messageData = {
+        text: messageInput.trim(),
+        sender: userEmail,
+        receiver: selectedContact?.email,
+        timestamp: serverTimestamp(),
+        read: false
+      };
+      
+      await addDoc(collection(db, "chats", currentChatId, "messages"), messageData);
+      
+      const updatedContacts = contacts.map(contact => 
+        contact.email === selectedContact?.email 
+          ? { ...contact, lastMessage: messageInput.trim(), lastMessageTime: 'Just now' }
+          : contact
+      );
+      setContacts(updatedContacts);
+      
+      setMessageInput('');
+    } catch (error) {
+      console.error("❌ Error sending message:", error);
+      Alert.alert("Error", "Failed to send message");
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   // Helper functions for ThoughtsCard
   const getProfileImageSource = (profilePic?: string) => {
@@ -196,7 +333,6 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
   const initials = (name: string) =>
     name.split(' ').map(w => w.charAt(0)).join('').toUpperCase().slice(0, 2) || '?';
 
-  // ── Posts / Thoughts helpers ──
   const formatTimeAgo = (createdAt: string) => {
     try {
       if (!createdAt || createdAt === 'null' || createdAt === 'undefined') return 'Just now';
@@ -227,8 +363,9 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
 
   const resolvePostAuthor = (post: any) => {
     const cached = userProfileCache.get(post.author?.email) || { name: '', profilePic: '' };
-    let name = cached.name || post.author?.name || '';
-    let pic: string | null = cached.profilePic || post.author?.profile_pic || null;
+    // Prioritize post.author.name first, then cache, then fallback
+    let name = post.author?.name || cached.name || '';
+    let pic: string | null = post.author?.profile_pic || cached.profilePic || null;
     if (!name || name === 'null' || name.includes('@')) name = post.author?.email?.split('@')[0] || 'User';
     if (pic && !pic.startsWith('http') && !pic.startsWith('/')) pic = `/${pic}`;
     if (pic === '' || pic === 'null') pic = null;
@@ -240,7 +377,45 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
       setPostsLoading(true);
       const res = await axios.get(`${BASE_URL}/api/posts/all`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.data.success) {
-        const postsWithComments = await Promise.all(res.data.data.map(async (post: any) => {
+        // Process posts to handle snake_case to camelCase conversion and image URLs
+        const processedPosts = res.data.data.map((post: any) => {
+          // Convert snake_case to camelCase for frontend compatibility
+          const processedPost = {
+            ...post,
+            id: post.id,
+            author: {
+              email: post.author_email || post.author?.email,
+              name: post.author_name || post.author?.name,
+              role: post.author_role || post.author?.role,
+              profile_pic: post.author_profile_pic || post.author?.profile_pic
+            },
+            content: post.content,
+            postImage: post.post_image || post.postImage, // Handle both field names
+            postImages: post.post_images || post.postImages || (post.post_image ? [post.post_image] : []),
+            likes: post.likes_counter || post.likes || 0,
+            createdAt: post.created_at || post.createdAt,
+            tags: post.tags || []
+          };
+          
+          // Handle postImage (single image) - convert to absolute URL if needed
+          if (processedPost.postImage && !processedPost.postImage.startsWith('http') && !processedPost.postImage.includes(BASE_URL)) {
+            processedPost.postImage = processedPost.postImage.startsWith('/') 
+              ? `${BASE_URL}${processedPost.postImage}`
+              : `${BASE_URL}/${processedPost.postImage}`;
+          }
+          
+          // Handle postImages (array of images) - convert to absolute URLs if needed
+          if (processedPost.postImages && Array.isArray(processedPost.postImages)) {
+            processedPost.postImages = processedPost.postImages.map((img: string) => {
+              if (!img || img.startsWith('http') || img.includes(BASE_URL)) return img;
+              return img.startsWith('/') ? `${BASE_URL}${img}` : `${BASE_URL}/${img}`;
+            });
+          }
+          
+          return processedPost;
+        });
+        
+        const postsWithComments = await Promise.all(processedPosts.map(async (post: any) => {
           try {
             const cr = await axios.get(`${BASE_URL}/api/posts/${post.id}/comments`, { headers: { 'Authorization': `Bearer ${token}` } });
             return { ...post, createdAt: formatTimeAgo(post.createdAt), isLiked: post.isLiked || false, comments: cr.data.success ? cr.data.data.map((c: any) => ({ ...c, createdAt: formatTimeAgo(c.createdAt), isLiked: false })) : [] };
@@ -296,273 +471,15 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
     } catch (err: any) { Alert.alert('Error', err.response?.data?.message || 'Failed to submit report'); }
   };
 
-  // ── Chat API Functions ──
-  const fetchContacts = async () => {
-    if (!userEmail) {
-      console.warn("Cannot fetch contacts: userEmail is null");
-      return;
+  const handleBackPress = useCallback(() => { router.push('/(tabs)/StudentDashBoard/Student'); }, [router]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') handleBackPress(); };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
     }
-  
-    try {
-      const auth = await getAuthData();
-      const token = auth?.token;
-      
-      if (!token) {
-        console.error("No authentication token found");
-        Alert.alert("Authentication Error", "Please log in again");
-        return;
-      }
- 
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      };
-  
-      const type = userType === "teacher" ? "teacher" : "student";
-  
-      console.log("Fetching contacts for:", userEmail);
-      const res = await axios.post(
-        `${BASE_URL}/api/contacts`,
-        { userEmail, type },
-        { headers, timeout: 10000 }
-      );
-  
-      if (res.data.success) {
-        const data = res.data.contacts.map((contact: any) => ({
-          name: contact.teacherName || contact.studentName || 'Unknown User',
-          profilePic:  contact.teacherProfilePic || contact.studentProfilePic || contact.profilePic || "",
-          email: contact.teacherEmail || contact.studentEmail,
-          lastMessage: contact.lastMessage,
-          lastMessageTime: contact.lastMessageTime,
-        }));
-  
-        console.log("Successfully fetched", data.length, "contacts");
-        setContacts(data);
-      } else {
-        const errorMsg = res.data.message || "Could not fetch contacts";
-        console.error("API Error:", errorMsg);
-        Alert.alert("Failed", errorMsg);
-      }
-    } catch (error: any) {
-      console.error("Error fetching contacts:", error);
-      
-      if (error.code === 'ECONNABORTED') {
-        Alert.alert("Network Error", "Request timed out. Please check your connection.");
-      } else if (error.response?.status === 401) {
-        Alert.alert("Authentication Error", "Your session has expired. Please log in again.");
-      } else if (error.response?.status === 403) {
-        Alert.alert("Permission Error", "You don't have permission to access contacts.");
-      } else if (error.response?.status >= 500) {
-        Alert.alert("Server Error", "Something went wrong on our end. Please try again later.");
-      } else {
-        Alert.alert("Error", "Failed to fetch contacts. Please check your internet connection.");
-      }
-    }
-  };
-
-  const fetchBroadcasts = async () => {
-    if (!userEmail) return;
-
-    try {
-      const auth = await getAuthData();
-      if (!auth?.token) return;
-      
-      const token = auth.token;
-      const headers = {
-        Authorization: `Bearer ${token}`,
-      };
-
-      const requestBody = userType === "teacher" ? { userEmail } : { studentEmail: userEmail };
-
-      const res = await axios.post(
-        `${BASE_URL}/api/broadcasts`,
-        requestBody,
-        { 
-          headers,
-          timeout: 10000
-        }
-      );
-
-      if (res.data && res.data.broadcasts) {
-        const broadcasts = res.data.broadcasts;
-        const contactMap = new Map();
-        
-        broadcasts.forEach((b) => {
-          const email = b.teacherEmail;
-          const name = b.teacherName || "Teacher";
-          const proile = b.teacherProfilePic;
-         
-          if (!contactMap.has(email)) {
-            contactMap.set(email, {
-              email,
-              name,
-              profilePic: proile,
-              lastMessage: b.topic,
-              lastMessageTime: new Date(b.timestamp._seconds * 1000).toLocaleTimeString(),
-            });
-          }
-        });
-
-        const contactList = Array.from(contactMap.values());
-        setContacts((prevContacts) => {
-          const mergedMap = new Map<string, Contact>();
-
-          prevContacts.forEach((contact) => mergedMap.set(contact.email, contact));
-          contactList.forEach((contact) => {
-            if (!mergedMap.has(contact.email)) {
-              mergedMap.set(contact.email, contact);
-            } else {
-              const existing = mergedMap.get(contact.email)!;
-              mergedMap.set(contact.email, {
-                ...existing,
-                lastMessage: contact.lastMessage || existing.lastMessage,
-                lastMessageTime: contact.lastMessageTime || existing.lastMessageTime,
-              });
-            }
-          });
-
-          return Array.from(mergedMap.values());
-        });
-      }
-    } catch (err) {
-      console.log("Broadcast fetch error (silent):", err);
-    }
-  };
-
-  const sendMessage = async (contactName: string, message: { text: string }, broadcastMetadata?: any) => {
-    if (!userEmail || !message.text.trim()) {
-      console.warn("Cannot send message: missing user email or message text");
-      Alert.alert("Error", "Message or user email is missing.");
-      return;
-    }
-
-    try {
-      const auth = await getAuthData();
-      const token = auth?.token;
-      
-      if (!token) {
-        console.error("No authentication token found for sending message");
-        Alert.alert("Authentication Error", "Please log in again");
-        return;
-      }
-
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      };
-
-      // Broadcast Mode for teachers
-      if (activeTab === "Broadcast" && userType === "teacher" && broadcastMetadata) {
-        try {
-          const params = {
-            userType,
-            teacherEmail: broadcastMetadata.teacheremail,
-            className: broadcastMetadata.classname,
-            subject: broadcastMetadata.subject,
-            studentEmails: broadcastMetadata.emails,
-            studentNames: broadcastMetadata.names,
-            isBroadcast: true,
-            sender: broadcastMetadata.teacheremail,
-            teacherName: broadcastMetadata.teachername,
-            text: broadcastMetadata.message
-          };
-
-          await axios.post(`${BASE_URL}/api/broadcast-message-list-add`, params, { headers, timeout: 10000 });
-          console.log("Broadcast message sent successfully");
-        } catch (error) {
-          console.error("❌ Broadcast send error:", error);
-          Alert.alert("Error", "Something went wrong while sending broadcast");
-        }
-      } else {
-        // Direct message mode
-        const recipientEmail = contacts.find((c) => c.name === contactName)?.email;
-        if (!recipientEmail) {
-          console.error("Recipient not found for contact:", contactName);
-          Alert.alert("Error", "Recipient not found.");
-          return;
-        }
-
-        const authData = await getAuthData();
-        const role = authData?.role;
-        let senderName;
-        
-        if (role === "teacher") {
-          senderName = await AsyncStorage.getItem("teacherName");
-        } else {
-          senderName = await AsyncStorage.getItem("studentName");
-        }
-
-        console.log("Sending message from", userEmail, "to", recipientEmail);
-        const res = await axios.post(
-          `${BASE_URL}/api/send`,
-          {
-            sender: userEmail,
-            senderName: senderName || 'User',
-            recipient: recipientEmail,
-            text: message.text.trim(),
-            isBroadcast: false,
-          },
-          { headers, timeout: 10000 }
-        );
-
-        if (res.status >= 200 && res.status < 300) {
-          const newMessage: Message = {
-            id: new Date().toISOString(),
-            text: message.text.trim(),
-            sender: "me",
-            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            timestamp: new Date(),
-          };
-
-          setMessages((prevMessages) => ({
-            ...prevMessages,
-            [contactName]: [...(prevMessages[contactName] || []), newMessage],
-          }));
-
-          setContacts((prevContacts) =>
-            prevContacts.map((contact) =>
-              contact.name === contactName 
-                ? { ...contact, lastMessage: message.text.trim(), lastMessageTime: newMessage.time }
-                : contact
-            )
-          );
-          
-          console.log("Message sent successfully");
-        } else {
-          console.error("❌ Direct Message Error:", res.data);
-          Alert.alert("Error", res.data.message || "Failed to send message");
-        }
-      }
-    } catch (error: any) {
-      console.error("❌ Message Error:", error);
-      
-      if (error.code === 'ECONNABORTED') {
-        Alert.alert("Network Error", "Request timed out. Please check your connection.");
-      } else if (error.response?.status === 401) {
-        Alert.alert("Authentication Error", "Your session has expired. Please log in again.");
-      } else if (error.response?.status === 403) {
-        Alert.alert("Permission Error", "You don't have permission to send messages.");
-      } else if (error.response?.status >= 500) {
-        Alert.alert("Server Error", "Something went wrong on our end. Please try again later.");
-      } else {
-        Alert.alert("Error", "Failed to send message. Please check your internet connection.");
-      }
-    }
-  };
-
-  const handleSendMessage = async () => {
-    if (!messageInput.trim() || !selectedContact || isSending) return;
-
-    setIsSending(true);
-    try {
-      await sendMessage(selectedContact.name, { text: messageInput });
-      setMessageInput("");
-    } catch (error) {
-      console.error("Error sending message:", error);
-    } finally {
-      setIsSending(false);
-    }
-  };
+  }, [handleBackPress]);
 
   // Initialize posts data
   useEffect(() => {
@@ -577,21 +494,7 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
     }
   }, []);
 
-  // Fetch contacts when userEmail is loaded
-  useEffect(() => {
-    if (userEmail) {
-      fetchContacts();
-    }
-  }, [userEmail]);
-
-  // Fetch broadcasts when activeTab changes to broadcast
-  useEffect(() => {
-    if (activeTab === 'Broadcast' && userEmail) {
-      fetchBroadcasts();
-    }
-  }, [activeTab, userEmail]);
-
-  // Firebase real-time messaging
+  // Real-time messaging
   useEffect(() => {
     if (!selectedContact || !userEmail) return;
 
@@ -606,20 +509,17 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
       const messagesList: Message[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        const isBroadcast = data.isBroadcast || false;
         const isMe = data.sender === userEmail;
         const isRecipient = data.recipient === userEmail;
 
-        const shouldInclude = (activeTab === "Broadcast" && isBroadcast) || (activeTab === "Teachers" && !isBroadcast);
-      
-        if ((isMe || isRecipient) && shouldInclude) {
+        if (isMe || isRecipient) {
           messagesList.push({
             id: doc.id,
             text: data.text,
             sender: isMe ? "me" : "other",
             time: new Date(data.timestamp?.toDate()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             timestamp: data.timestamp?.toDate(),
-            isBroadcast: isBroadcast,
+            isBroadcast: data.isBroadcast || false,
           });
         }
       });
@@ -640,7 +540,7 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
         );
       }
     });
-  }, [selectedContact, userEmail, activeTab]);
+  }, [selectedContact, userEmail]);
 
   if (!fontsLoaded) {
     return (
@@ -650,379 +550,784 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
     );
   }
 
-  // MessageInputBar component with access to state
-  const MessageInputBar = () => {
-    const [isFocused, setIsFocused] = useState(false);
-    return (
-       <View style={styles.msgInputWrapper}>
-        <View style={[styles.msgInputInner, isFocused && styles.msgInputFocused]}>
-          <View style={styles.msgIconsL}>
-            <TouchableOpacity style={styles.msgIcon}><Ionicons name="add" size={24} color={COLORS.textMuted} /></TouchableOpacity>
-            <TouchableOpacity style={styles.msgIcon}><Ionicons name="image-outline" size={22} color={COLORS.textMuted} /></TouchableOpacity>
-            <TouchableOpacity style={styles.msgIcon}><Ionicons name="attach-outline" size={22} color={COLORS.textMuted} /></TouchableOpacity>
-          </View>
-          <TextInput 
-            style={styles.msgTextEntry} 
-            placeholder="Aa" 
-            placeholderTextColor={COLORS.textMuted} 
-            value={messageInput}
-            onChangeText={setMessageInput}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            editable={!isSending}
-          />
-          <View style={styles.msgIconsR}>
-            <TouchableOpacity style={styles.msgIcon}><Feather name="smile" size={20} color={COLORS.textMuted} /></TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.msgSendBtn} 
-              onPress={handleSendMessage}
-              disabled={isSending || !messageInput.trim() || !selectedContact}
-            >
-              {isSending ? (
-                <ActivityIndicator size="small" color={COLORS.primaryBlue} />
-              ) : (
-                <Ionicons name="send" size={20} color={COLORS.primaryBlue} />
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-   );
-};
-
-  // For desktop/web, return the desktop layout with WebSidebar, WebHeader, and ConnectScreen UI
+  // Desktop Layout
   if (isDesktop) {
-    // If embedded in the main layout, only render the chat content with ConnectScreen UI
+    // Embedded layout (when used inside another component)
     if (isEmbedded) {
       return (
-        <View style={styles.embeddedContent}>
+        <View style={styles.container}>
           <View style={styles.contentLayout}>
-            {/* Chat List Panel - Left side (from ConnectScreen) */}
-            <View style={styles.chatListPanel}>
-              <Text style={styles.panelHeader}>Connect</Text>
-              <View style={styles.segmentedToggle}>
-                <TouchableOpacity 
-                  style={[styles.toggleItem, activeTab === 'Teachers' && styles.toggleItemActive]}
-                  onPress={() => setActiveTab('Teachers')}
-                >
-                  <Text style={[styles.toggleText, activeTab === 'Teachers' && styles.toggleTextActive]}>Teachers</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.toggleItem, activeTab === 'Broadcast' && styles.toggleItemActive]}
-                  onPress={() => setActiveTab('Broadcast')}
-                >
-                  <Text style={[styles.toggleText, activeTab === 'Broadcast' && styles.toggleTextActive]}>Broadcast</Text>
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView showsVerticalScrollIndicator={false} style={styles.chatListScroll}>
-                {contacts
-                  .filter((contact) => contact.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((contact) => (
-                    <ChatListItem
-                      key={contact.email}
-                      name={contact.name}
-                      msg={contact.lastMessage || 'No chats, start by saying Hello'}
-                      time={contact.lastMessageTime || ''}
-                      unread={false}
-                      avatar={contact.profilePic || DEFAULT_AVATAR}
-                      onPress={() => setSelectedContact(contact)}
-                    />
-                  ))}
-              </ScrollView>
-            </View>
-
-            {/* Chat Window - Middle (from ConnectScreen) */}
-            <View style={styles.chatWindow}>
-              {/* Subtle Pattern Overlay */}
-              <View style={styles.patternOverlay} style={{pointerEvents:"none"}} />
-              
-              <ChatHeader 
-                name={selectedContact?.name || ''} 
-                avatar={selectedContact?.profilePic || DEFAULT_AVATAR} 
-                status="Online now" 
-              />
-              
-              <ScrollView 
-                style={styles.messagesArea} 
-                contentContainerStyle={styles.messagesContent}
-                showsVerticalScrollIndicator={false}
-              >
-                {selectedContact ? (
-                  messages[selectedContact.name]?.map((message) => (
-                    <ChatBubble 
-                      key={message.id} 
-                      text={message.text} 
-                      position={message.sender === 'me' ? 'right' : 'left'} 
-                    />
-                  )) || (
-                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                      <Text style={{ color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
-                        No messages yet. Start the conversation!
-                      </Text>
-                    </View>
-                  )
-                ) : (
-                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                    <Text style={{ color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
-                      Select a contact to start chatting
-                    </Text>
-                  </View>
-                )}
-                
-
-                              </ScrollView>
-
-              <MessageInputBar />
-            </View>
-
-            {/* RIGHT: Thoughts Panel */}
-            <View style={styles.rightPanel}>
-              <Text style={styles.rightPanelTitle}>Thoughts</Text>
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.thoughtsList}>
-                {postsLoading && posts.length === 0 && <ActivityIndicator color={COLORS.primaryBlue} style={{ marginTop: 30 }} />}
-                {!postsLoading && posts.length === 0 && (
-                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                    <MaterialCommunityIcons name="post-outline" size={40} color="#ccc" />
-                    <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No thoughts yet</Text>
-                  </View>
-                )}
-                {posts.map((post) => (
-                  <ThoughtsCard
-                    key={post.id}
-                    post={post}
-                    onLike={handleLike}
-                    onComment={openCommentsModal}
-                    onReport={(p) => { setReportType('post'); setReportItemId(p.id); setReportReason(''); setShowReportModal(true); }}
-                    getProfileImageSource={getProfileImageSource}
-                    initials={initials}
-                    resolvePostAuthor={resolvePostAuthor}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-          </View>
-        </View>
-      );
-    }
-
-    // Full layout for standalone usage with WebSidebar, WebHeader, and ConnectScreen UI
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        {/* WEB HEADER - Full Width */}
-        <WebNavbar
-          studentName={studentName}
-          profileImage={userImage}
-        />
-
-        <View style={styles.desktopChatLayout}>
-          {/* WebSidebar */}
-          <View style={styles.sidebarContainer}>
-            <WebSidebar
+            <ResponsiveSidebar
               activeItem={activeMenu}
               onItemPress={handleSidebarItemPress}
               userEmail={userEmail || ""}
               studentName={studentName || ""}
               profileImage={userImage || null}
-            />
-          </View>
+              showHamburger={false}
+            >
+                <View style={styles.mainWrapper}>
+                <View style={styles.contentColumns}>
+                  {/* CENTER: Chat Content */}
+                  <View style={styles.centerContent}>
+                    {/* LEFT: Chat List Panel */}
+                    <View style={styles.chatListPanel}>
+                      <View style={styles.chatListHeader}>
+                        <BackButton onPress={handleBackPress} color="white" />
+                        <Text style={styles.chatListTitle}>Messages</Text>
+                      </View>
+                    
+                    <View style={styles.tabContainer}>
+                      <TouchableOpacity
+                        style={[styles.tab, activeTab === 'Teachers' && styles.activeTab]}
+                        onPress={() => setActiveTab('Teachers')}
+                      >
+                        <Text style={[styles.tabText, activeTab === 'Teachers' && styles.activeTabText]}>
+                          Teachers
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.tab, activeTab === 'Broadcast' && styles.activeTab]}
+                        onPress={() => setActiveTab('Broadcast')}
+                      >
+                        <Text style={[styles.tabText, activeTab === 'Broadcast' && styles.activeTabText]}>
+                          Broadcast
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.tab, activeTab === 'My Requests' && styles.activeTab]}
+                        onPress={() => setActiveTab('My Requests')}
+                      >
+                        <Text style={[styles.tabText, activeTab === 'My Requests' && styles.activeTabText]}>
+                          My Requests
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
 
-          {/* Main Content with ConnectScreen UI */}
-          <View style={styles.contentLayout}>
-            {/* Chat List Panel - Left side (from ConnectScreen) */}
-            <View style={styles.chatListPanel}>
-              <Text style={styles.panelHeader}>Connect</Text>
-              <View style={styles.segmentedToggle}>
-                <TouchableOpacity 
-                  style={[styles.toggleItem, activeTab === 'Teachers' && styles.toggleItemActive]}
-                  onPress={() => setActiveTab('Teachers')}
-                >
-                  <Text style={[styles.toggleText, activeTab === 'Teachers' && styles.toggleTextActive]}>Teachers</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.toggleItem, activeTab === 'Broadcast' && styles.toggleItemActive]}
-                  onPress={() => setActiveTab('Broadcast')}
-                >
-                  <Text style={[styles.toggleText, activeTab === 'Broadcast' && styles.toggleTextActive]}>Broadcast</Text>
-                </TouchableOpacity>
+                    <ScrollView style={styles.chatList}>
+                      {activeTab === 'My Requests' ? (
+                        <>
+                          {bookingLoading && bookingRequests.length === 0 && (
+                            <ActivityIndicator size="large" color={COLORS.primaryBlue} style={{ marginTop: 30 }} />
+                          )}
+                          {!bookingLoading && bookingRequests.length === 0 && (
+                            <View style={styles.emptyContainer}>
+                              <Ionicons name="time-outline" size={64} color={COLORS.textMuted} />
+                              <Text style={styles.emptyText}>No booking requests yet</Text>
+                              <Text style={styles.emptySubtext}>Book a class from Teacher Details to see your requests here</Text>
+                            </View>
+                          )}
+                          {bookingRequests.map((request) => (
+                            <View key={request.id} style={localStyles.requestCard}>
+                              <View style={localStyles.requestHeader}>
+                                <Text style={localStyles.teacherName}>{request.teacherName || request.teacherEmail}</Text>
+                                <View style={[localStyles.statusBadge,
+                                  request.status === 'pending' && { backgroundColor: '#FEF3C7' },
+                                  request.status === 'accepted' && { backgroundColor: '#22C55E' },
+                                  request.status === 'rejected' && { backgroundColor: '#EF4444' }
+                                ]}>
+                                  <Text style={[localStyles.statusText,
+                                    request.status === 'pending' && { color: '#92400E' },
+                                    (request.status === 'accepted' || request.status === 'rejected') && { color: '#fff' }
+                                  ]}>
+                                    {request.status?.toUpperCase()}
+                                  </Text>
+                                </View>
+                              </View>
+                              <Text style={localStyles.requestSubject}>{request.subject}{request.className ? ` - ${request.className}` : ''}</Text>
+                              {request.charge > 0 && (
+                                <Text style={localStyles.requestCharge}>
+                                  {String(request.charge).includes('₹') ? request.charge : `₹${request.charge}`}/hr
+                                </Text>
+                              )}
+                              {request.status === 'accepted' && (
+                                <TouchableOpacity
+                                  style={localStyles.payButton}
+                                  onPress={() => router.push({
+                                    pathname: '/(tabs)/StudentDashBoard/BookClass',
+                                    params: {
+                                      teacherEmail: request.teacherEmail,
+                                      teacherName: request.teacherName,
+                                      selectedSubject: request.subject,
+                                      selectedClass: request.className,
+                                      charge: request.charge?.toString().replace(/[₹,]/g, '').trim()
+                                    }
+                                  })}
+                                >
+                                  <Text style={localStyles.payButtonText}>Proceed to Pay</Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          ))}
+                        </>
+                      ) : (
+                        <>
+                          {loadingStudents ? (
+                            <ActivityIndicator size="large" color={COLORS.primaryBlue} />
+                          ) : enrolledStudents.length === 0 ? (
+                            <View style={styles.emptyContainer}>
+                              <Ionicons name="chatbubbles-outline" size={64} color={COLORS.textMuted} />
+                              <Text style={styles.emptyText}>No conversations yet</Text>
+                              <Text style={styles.emptySubtext}>Start connecting with your teachers</Text>
+                            </View>
+                          ) : (
+                            enrolledStudents.map((contact) => (
+                              <TouchableOpacity
+                                key={contact.email}
+                                style={[styles.contactItem, selectedContact?.email === contact.email && styles.contactItemActive]}
+                                onPress={() => handleSelectContact(contact)}
+                              >
+                                {contact.profilePic ? (
+                                  <Image source={{ uri: contact.profilePic }} style={styles.contactAvatar} />
+                                ) : (
+                                  <View style={styles.contactAvatarFallback}>
+                                    <Text style={styles.contactAvatarText}>
+                                      {contact.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                                    </Text>
+                                  </View>
+                                )}
+                                <View style={styles.contactInfo}>
+                                  <Text style={styles.contactName}>{contact.name}</Text>
+                                  <Text style={styles.contactLastMessage} numberOfLines={1}>
+                                    {contact.lastMessage || 'Click to start chatting'}
+                                  </Text>
+                                </View>
+                                <View style={styles.contactMeta}>
+                                  <Text style={styles.contactTime}>{contact.lastMessageTime || ''}</Text>
+                                </View>
+                              </TouchableOpacity>
+                            ))
+                          )}
+                        </>
+                      )}
+                    </ScrollView>
+                  </View>
+
+                  {/* CENTER: Chat Window */}
+                  <View style={styles.chatWindowPanel}>
+                    {selectedContact ? (
+                      <View style={styles.chatWindow}>
+                        {/* Chat Header */}
+                        <View style={styles.chatHeader}>
+                          <View style={styles.chatHeaderLeft}>
+                            {selectedContact.profilePic ? (
+                              <Image source={{ uri: selectedContact.profilePic }} style={styles.chatAvatar} />
+                            ) : (
+                              <View style={styles.chatAvatarFallback}>
+                                <Text style={styles.chatAvatarText}>
+                                  {selectedContact.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                                </Text>
+                              </View>
+                            )}
+                            <View style={styles.chatHeaderInfo}>
+                              <Text style={styles.chatHeaderName}>{selectedContact.name}</Text>
+                              <Text style={styles.chatHeaderStatus}>Active now</Text>
+                            </View>
+                          </View>
+                          <TouchableOpacity onPress={() => setSelectedContact(null)}>
+                            <Ionicons name="close" size={24} color={COLORS.textHeader} />
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* Messages Area */}
+                        <ScrollView style={styles.messagesArea}>
+                          {chatMessages.length === 0 ? (
+                            <View style={styles.chatEmptyContainer}>
+                              <Text style={styles.chatEmptyText}>Start a conversation with {selectedContact.name}</Text>
+                            </View>
+                          ) : (
+                            chatMessages.map((message) => (
+                              <View
+                                key={message.id}
+                                style={[
+                                  styles.messageItem,
+                                  message.sender === userEmail ? styles.sentMessage : styles.receivedMessage
+                                ]}
+                              >
+                                <Text style={[
+                                  styles.messageText,
+                                  message.sender === userEmail ? styles.sentMessageText : styles.receivedMessageText
+                                ]}>
+                                  {message.text}
+                                </Text>
+                                <Text style={[
+                                  styles.messageTime,
+                                  message.sender === userEmail ? styles.sentMessageTime : styles.receivedMessageTime
+                                ]}>
+                                  {message.timestamp?.toDate ? new Date(message.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                </Text>
+                              </View>
+                            ))
+                          )}
+                        </ScrollView>
+
+                        {/* Message Input */}
+                        <View style={styles.messageInputContainer}>
+                          <TextInput
+                            style={styles.messageInput}
+                            placeholder="Type a message..."
+                            value={messageInput}
+                            onChangeText={setMessageInput}
+                            multiline
+                          />
+                          <TouchableOpacity 
+                            style={styles.sendButton} 
+                            onPress={sendMessage}
+                            disabled={isSending || !messageInput.trim()}
+                          >
+                            {isSending ? (
+                              <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                              <Ionicons name="send" size={20} color={COLORS.white} />
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={styles.chatEmptyState}>
+                        <Ionicons name="chatbubble-outline" size={64} color={COLORS.textMuted} />
+                        <Text style={styles.chatEmptyTitle}>Select a conversation</Text>
+                        <Text style={styles.chatEmptySubtitle}>Choose a teacher from the list to start chatting</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                {/* RIGHT PANEL: Thoughts */}
+                <View style={styles.rightPanel}>
+                  <Text style={styles.rightPanelTitle}>Thoughts</Text>
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.thoughtsList}>
+                    {postsLoading && posts.length === 0 && <ActivityIndicator color={COLORS.primaryBlue} style={{ marginTop: 30 }} />}
+                    {!postsLoading && posts.length === 0 && (
+                      <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                        <MaterialCommunityIcons name="post-outline" size={40} color="#ccc" />
+                        <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No thoughts yet</Text>
+                      </View>
+                    )}
+                    {posts.map((post) => (
+                      <ThoughtsCard
+                        key={post.id}
+                        post={post}
+                        onLike={handleLike}
+                        onComment={openCommentsModal}
+                        onReport={(p, reasons, comment) => { console.log('Report submitted for post:', p.id, 'Reasons:', reasons, 'Comment:', comment); }}
+                        getProfileImageSource={getProfileImageSource}
+                        initials={initials}
+                        resolvePostAuthor={resolvePostAuthor}
+                      />
+                    ))}
+                  </ScrollView>
+                </View>
+              </View>
+            </View>
+          </ResponsiveSidebar>
+        </View>
+        </View>
+      );
+    }
+
+    // Full standalone layout
+    return (
+      <View style={styles.container}>
+        <WebNavbar
+          studentName={studentName}
+          profileImage={userImage}
+        />
+        
+        <View style={styles.contentLayout}>
+          <ResponsiveSidebar
+            activeItem={activeMenu}
+            onItemPress={handleSidebarItemPress}
+            userEmail={userEmail || ""}
+            studentName={studentName || ""}
+            profileImage={userImage || null}
+          >
+            <View style={styles.mainWrapper}>
+            <View style={styles.contentColumns}>
+              {/* CENTER: Chat Content */}
+              <View style={styles.centerContent}>
+                {/* LEFT: Chat List Panel */}
+                <View style={styles.chatListPanel}>
+                  <View style={styles.chatListHeader}>
+                    <BackButton onPress={handleBackPress} color="white" />
+                    <Text style={styles.chatListTitle}>Messages</Text>
+                  </View>
+                  
+                  <View style={styles.tabContainer}>
+                    <TouchableOpacity
+                      style={[styles.tab, activeTab === 'Teachers' && styles.activeTab]}
+                      onPress={() => setActiveTab('Teachers')}
+                    >
+                      <Text style={[styles.tabText, activeTab === 'Teachers' && styles.activeTabText]}>
+                        Teachers
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.tab, activeTab === 'Broadcast' && styles.activeTab]}
+                      onPress={() => setActiveTab('Broadcast')}
+                    >
+                      <Text style={[styles.tabText, activeTab === 'Broadcast' && styles.activeTabText]}>
+                        Broadcast
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.tab, activeTab === 'My Requests' && styles.activeTab]}
+                      onPress={() => setActiveTab('My Requests')}
+                    >
+                      <Text style={[styles.tabText, activeTab === 'My Requests' && styles.activeTabText]}>
+                        My Requests
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView style={styles.chatList}>
+                    {activeTab === 'My Requests' ? (
+                      <>
+                        {bookingLoading && bookingRequests.length === 0 && (
+                          <ActivityIndicator size="large" color={COLORS.primaryBlue} style={{ marginTop: 30 }} />
+                        )}
+                        {!bookingLoading && bookingRequests.length === 0 && (
+                          <View style={styles.emptyContainer}>
+                            <Ionicons name="time-outline" size={64} color={COLORS.textMuted} />
+                            <Text style={styles.emptyText}>No booking requests yet</Text>
+                            <Text style={styles.emptySubtext}>Book a class from Teacher Details to see your requests here</Text>
+                          </View>
+                        )}
+                        {bookingRequests.map((request) => (
+                          <View key={request.id} style={localStyles.requestCard}>
+                            <View style={localStyles.requestHeader}>
+                              <Text style={localStyles.teacherName}>{request.teacherName || request.teacherEmail}</Text>
+                              <View style={[localStyles.statusBadge,
+                                request.status === 'pending' && { backgroundColor: '#FEF3C7' },
+                                request.status === 'accepted' && { backgroundColor: '#22C55E' },
+                                request.status === 'rejected' && { backgroundColor: '#EF4444' }
+                              ]}>
+                                <Text style={[localStyles.statusText,
+                                  request.status === 'pending' && { color: '#92400E' },
+                                  (request.status === 'accepted' || request.status === 'rejected') && { color: '#fff' }
+                                ]}>
+                                  {request.status?.toUpperCase()}
+                                </Text>
+                              </View>
+                            </View>
+                            <Text style={localStyles.requestSubject}>{request.subject}{request.className ? ` - ${request.className}` : ''}</Text>
+                            {request.charge > 0 && (
+                              <Text style={localStyles.requestCharge}>
+                                {String(request.charge).includes('₹') ? request.charge : `₹${request.charge}`}/hr
+                              </Text>
+                            )}
+                            {request.status === 'accepted' && (
+                              <TouchableOpacity
+                                style={localStyles.payButton}
+                                onPress={() => router.push({
+                                  pathname: '/(tabs)/StudentDashBoard/BookClass',
+                                  params: {
+                                    teacherEmail: request.teacherEmail,
+                                    teacherName: request.teacherName,
+                                    selectedSubject: request.subject,
+                                    selectedClass: request.className,
+                                    charge: request.charge?.toString().replace(/[₹,]/g, '').trim()
+                                  }
+                                })}
+                              >
+                                <Text style={localStyles.payButtonText}>Proceed to Pay</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        {loadingStudents ? (
+                          <ActivityIndicator size="large" color={COLORS.primaryBlue} />
+                        ) : enrolledStudents.length === 0 ? (
+                          <View style={styles.emptyContainer}>
+                            <Ionicons name="chatbubbles-outline" size={64} color={COLORS.textMuted} />
+                            <Text style={styles.emptyText}>No conversations yet</Text>
+                            <Text style={styles.emptySubtext}>Start connecting with your teachers</Text>
+                          </View>
+                        ) : (
+                          enrolledStudents.map((contact) => (
+                            <TouchableOpacity
+                              key={contact.email}
+                              style={[styles.contactItem, selectedContact?.email === contact.email && styles.contactItemActive]}
+                              onPress={() => handleSelectContact(contact)}
+                            >
+                              {contact.profilePic ? (
+                                <Image source={{ uri: contact.profilePic }} style={styles.contactAvatar} />
+                              ) : (
+                                <View style={styles.contactAvatarFallback}>
+                                  <Text style={styles.contactAvatarText}>
+                                    {contact.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                                  </Text>
+                                </View>
+                              )}
+                              <View style={styles.contactInfo}>
+                                <Text style={styles.contactName}>{contact.name}</Text>
+                                <Text style={styles.contactLastMessage} numberOfLines={1}>
+                                  {contact.lastMessage || 'Click to start chatting'}
+                                </Text>
+                              </View>
+                              <View style={styles.contactMeta}>
+                                <Text style={styles.contactTime}>{contact.lastMessageTime || ''}</Text>
+                              </View>
+                            </TouchableOpacity>
+                          ))
+                        )}
+                      </>
+                    )}
+                  </ScrollView>
+                </View>
+
+                {/* CENTER: Chat Window */}
+                <View style={styles.chatWindowPanel}>
+                  {selectedContact ? (
+                    <View style={styles.chatWindow}>
+                      <View style={styles.chatHeader}>
+                        <View style={styles.chatHeaderLeft}>
+                          {selectedContact.profilePic ? (
+                            <Image source={{ uri: selectedContact.profilePic }} style={styles.chatAvatar} />
+                          ) : (
+                            <View style={styles.chatAvatarFallback}>
+                              <Text style={styles.chatAvatarText}>
+                                {selectedContact.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                              </Text>
+                            </View>
+                          )}
+                          <View style={styles.chatHeaderInfo}>
+                            <Text style={styles.chatHeaderName}>{selectedContact.name}</Text>
+                            <Text style={styles.chatHeaderStatus}>Active now</Text>
+                          </View>
+                        </View>
+                        <TouchableOpacity onPress={() => setSelectedContact(null)}>
+                          <Ionicons name="close" size={24} color={COLORS.textHeader} />
+                        </TouchableOpacity>
+                      </View>
+
+                      <ScrollView style={styles.messagesArea}>
+                        {chatMessages.length === 0 ? (
+                          <View style={styles.chatEmptyContainer}>
+                            <Text style={styles.chatEmptyText}>Start a conversation with {selectedContact.name}</Text>
+                          </View>
+                        ) : (
+                          chatMessages.map((message) => (
+                            <View
+                              key={message.id}
+                              style={[
+                                styles.messageItem,
+                                message.sender === userEmail ? styles.sentMessage : styles.receivedMessage
+                              ]}
+                            >
+                              <Text style={[
+                                styles.messageText,
+                                message.sender === userEmail ? styles.sentMessageText : styles.receivedMessageText
+                              ]}>
+                                {message.text}
+                              </Text>
+                              <Text style={[
+                                styles.messageTime,
+                                message.sender === userEmail ? styles.sentMessageTime : styles.receivedMessageTime
+                              ]}>
+                                {message.timestamp?.toDate ? new Date(message.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                              </Text>
+                            </View>
+                          ))
+                        )}
+                      </ScrollView>
+
+                      <View style={styles.messageInputContainer}>
+                        <TextInput
+                          style={styles.messageInput}
+                          placeholder="Type a message..."
+                          value={messageInput}
+                          onChangeText={setMessageInput}
+                          multiline
+                        />
+                        <TouchableOpacity 
+                          style={styles.sendButton} 
+                          onPress={sendMessage}
+                          disabled={isSending || !messageInput.trim()}
+                        >
+                          {isSending ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Ionicons name="send" size={20} color={COLORS.white} />
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.chatEmptyState}>
+                      <Ionicons name="chatbubble-outline" size={64} color={COLORS.textMuted} />
+                      <Text style={styles.chatEmptyTitle}>Select a conversation</Text>
+                      <Text style={styles.chatEmptySubtitle}>Choose a teacher from the list to start chatting</Text>
+                    </View>
+                  )}
+                </View>
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} style={styles.chatListScroll}>
-                {contacts
-                  .filter((contact) => contact.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((contact) => (
-                    <ChatListItem
-                      key={contact.email}
-                      name={contact.name}
-                      msg={contact.lastMessage || 'No chats, start by saying Hello'}
-                      time={contact.lastMessageTime || ''}
-                      unread={false}
-                      avatar={contact.profilePic || DEFAULT_AVATAR}
-                      onPress={() => setSelectedContact(contact)}
+              {/* RIGHT PANEL: Thoughts */}
+              <View style={styles.rightPanel}>
+                <Text style={styles.rightPanelTitle}>Thoughts</Text>
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.thoughtsList}>
+                  {postsLoading && posts.length === 0 && <ActivityIndicator color={COLORS.primaryBlue} style={{ marginTop: 30 }} />}
+                  {!postsLoading && posts.length === 0 && (
+                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                      <MaterialCommunityIcons name="post-outline" size={40} color="#ccc" />
+                      <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No thoughts yet</Text>
+                    </View>
+                  )}
+                  {posts.map((post) => (
+                    <ThoughtsCard
+                      key={post.id}
+                      post={post}
+                      onLike={handleLike}
+                      onComment={openCommentsModal}
+                      onReport={(p, reasons, comment) => { console.log('Report submitted for post:', p.id, 'Reasons:', reasons, 'Comment:', comment); }}
+                      getProfileImageSource={getProfileImageSource}
+                      initials={initials}
+                      resolvePostAuthor={resolvePostAuthor}
                     />
                   ))}
-              </ScrollView>
+                </ScrollView>
+              </View>
             </View>
-
-            {/* Chat Window - Middle (from ConnectScreen) */}
-            <View style={styles.chatWindow}>
-              {/* Subtle Pattern Overlay */}
-              <View style={styles.patternOverlay} style={{pointerEvents:"none"}} />
-              
-              <ChatHeader 
-                name={selectedContact?.name || ''} 
-                avatar={selectedContact?.profilePic || DEFAULT_AVATAR} 
-                status="Online now" 
-              />
-              
-              <ScrollView 
-                style={styles.messagesArea} 
-                contentContainerStyle={styles.messagesContent}
-                showsVerticalScrollIndicator={false}
-              >
-                {selectedContact ? (
-                  messages[selectedContact.name]?.map((message) => (
-                    <ChatBubble 
-                      key={message.id} 
-                      text={message.text} 
-                      position={message.sender === 'me' ? 'right' : 'left'} 
-                    />
-                  )) || (
-                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                      <Text style={{ color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
-                        No messages yet. Start the conversation!
-                      </Text>
-                    </View>
-                  )
-                ) : (
-                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                    <Text style={{ color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
-                      Select a contact to start chatting
-                    </Text>
-                  </View>
-                )}
-                
-
-                              </ScrollView>
-
-              <MessageInputBar />
-            </View>
-
-            {/* RIGHT: Thoughts Panel */}
-            <View style={styles.rightPanel}>
-              <Text style={styles.rightPanelTitle}>Thoughts</Text>
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.thoughtsList}>
-                {postsLoading && posts.length === 0 && <ActivityIndicator color={COLORS.primaryBlue} style={{ marginTop: 30 }} />}
-                {!postsLoading && posts.length === 0 && (
-                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                    <MaterialCommunityIcons name="post-outline" size={40} color="#ccc" />
-                    <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No thoughts yet</Text>
-                  </View>
-                )}
-                {posts.map((post) => (
-                  <ThoughtsCard
-                    key={post.id}
-                    post={post}
-                    onLike={handleLike}
-                    onComment={openCommentsModal}
-                    onReport={(p) => { setReportType('post'); setReportItemId(p.id); setReportReason(''); setShowReportModal(true); }}
-                    getProfileImageSource={getProfileImageSource}
-                    initials={initials}
-                    resolvePostAuthor={resolvePostAuthor}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-          </View>
         </View>
-        </SafeAreaView>
+          
+          </ResponsiveSidebar>
+        </View>
+      </View>
     );
   }
 
-  // For mobile/tablet, return the ConnectScreen UI
+  // Mobile Layout
   return (
     <View style={[styles.container, { height: windowSize.height }]}>
-      <View style={styles.contentLayout}>
-        {/* Chat List Panel for mobile */}
-        <View style={styles.chatListPanel}>
-          <Text style={styles.panelHeader}>Connect</Text>
-          <View style={styles.segmentedToggle}>
+      {/* Mobile Header with Back Button */}
+      <View style={styles.mobileHeader}>
+        <TouchableOpacity 
+          style={styles.mobileBackButton}
+          onPress={handleBackPress}
+        >
+          <Ionicons name="arrow-back" size={24} color="#5f5fff" />
+        </TouchableOpacity>
+        <Text style={styles.mobileHeaderTitle}>Connect</Text>
+        <View style={{ width: 40 }} />
+      </View>
+      
+      <View style={styles.mobileContainer}>
+        {/* Chat List for Mobile */}
+        <View style={styles.mobileChatList}>
+          <View style={styles.mobileTabContainer}>
             <TouchableOpacity 
-              style={[styles.toggleItem, activeTab === 'Teachers' && styles.toggleItemActive]}
+              style={[styles.mobileTab, activeTab === 'Teachers' && styles.mobileActiveTab]}
               onPress={() => setActiveTab('Teachers')}
             >
-              <Text style={[styles.toggleText, activeTab === 'Teachers' && styles.toggleTextActive]}>Teachers</Text>
+              <Text style={[styles.mobileTabText, activeTab === 'Teachers' && styles.mobileActiveTabText]}>Teachers</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={[styles.toggleItem, activeTab === 'Broadcast' && styles.toggleItemActive]}
+              style={[styles.mobileTab, activeTab === 'Broadcast' && styles.mobileActiveTab]}
               onPress={() => setActiveTab('Broadcast')}
             >
-              <Text style={[styles.toggleText, activeTab === 'Broadcast' && styles.toggleTextActive]}>Broadcast</Text>
+              <Text style={[styles.mobileTabText, activeTab === 'Broadcast' && styles.mobileActiveTabText]}>Broadcast</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.mobileTab, activeTab === 'My Requests' && styles.mobileActiveTab]}
+              onPress={() => setActiveTab('My Requests')}
+            >
+              <Text style={[styles.mobileTabText, activeTab === 'My Requests' && styles.mobileActiveTabText]}>My Requests</Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} style={styles.chatListScroll}>
-            {contacts
-              .filter((contact) => contact.name.toLowerCase().includes(searchQuery.toLowerCase()))
-              .map((contact) => (
-                <ChatListItem
-                  key={contact.email}
-                  name={contact.name}
-                  msg={contact.lastMessage || 'No chats, start by saying Hello'}
-                  time={contact.lastMessageTime || ''}
-                  unread={false}
-                  avatar={contact.profilePic || DEFAULT_AVATAR}
-                  onPress={() => setSelectedContact(contact)}
-                />
-              ))}
-          </ScrollView>
-        </View>
-
-        {/* Chat Window for mobile */}
-        <View style={styles.chatWindow}>
-          <View style={styles.patternOverlay} style={{pointerEvents:"none"}} />
-          
-          <ChatHeader 
-            name={selectedContact?.name || ''} 
-            avatar={selectedContact?.profilePic || DEFAULT_AVATAR} 
-            status="Online now" 
-          />
-          
-          <ScrollView 
-            style={styles.messagesArea} 
-            contentContainerStyle={styles.messagesContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {selectedContact ? (
-                  messages[selectedContact.name]?.map((message) => (
-                    <ChatBubble 
-                      key={message.id} 
-                      text={message.text} 
-                      position={message.sender === 'me' ? 'right' : 'left'} 
-                    />
-                  )) || (
-                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                      <Text style={{ color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
-                        No messages yet. Start the conversation!
-                      </Text>
-                    </View>
-                  )
-                ) : (
-                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                    <Text style={{ color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
-                      Select a contact to start chatting
-                    </Text>
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.mobileChatScroll}>
+            {activeTab === 'My Requests' ? (
+              <>
+                {bookingLoading && bookingRequests.length === 0 && (
+                  <View style={styles.mobileLoadingContainer}>
+                    <ActivityIndicator size="large" color={COLORS.primaryBlue} />
+                    <Text style={styles.mobileLoadingText}>Loading booking requests...</Text>
                   </View>
                 )}
-            
-            <View style={{ height: 35 }} />
-
+                {!bookingLoading && bookingRequests.length === 0 && (
+                  <View style={styles.mobileEmptyState}>
+                    <MaterialCommunityIcons name="time-outline" size={48} color={COLORS.textMuted} />
+                    <Text style={styles.mobileEmptyStateText}>No booking requests yet</Text>
+                    <Text style={styles.mobileEmptyStateSubtext}>Book a class from Teacher Details to see your requests here</Text>
+                  </View>
+                )}
+                {bookingRequests.map((request) => (
+                  <View key={request.id} style={localStyles.requestCard}>
+                    <View style={localStyles.requestHeader}>
+                      <Text style={localStyles.teacherName}>{request.teacherName || request.teacherEmail}</Text>
+                      <View style={[localStyles.statusBadge,
+                        request.status === 'pending' && { backgroundColor: '#FEF3C7' },
+                        request.status === 'accepted' && { backgroundColor: '#22C55E' },
+                        request.status === 'rejected' && { backgroundColor: '#EF4444' }
+                      ]}>
+                        <Text style={[localStyles.statusText,
+                          request.status === 'pending' && { color: '#92400E' },
+                          (request.status === 'accepted' || request.status === 'rejected') && { color: '#fff' }
+                        ]}>
+                          {request.status?.toUpperCase()}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={localStyles.requestSubject}>{request.subject}{request.className ? ` - ${request.className}` : ''}</Text>
+                    {request.charge > 0 && (
+                      <Text style={localStyles.requestCharge}>
+                        {String(request.charge).includes('₹') ? request.charge : `₹${request.charge}`}/hr
+                      </Text>
+                    )}
+                    {request.status === 'accepted' && (
+                      <TouchableOpacity
+                        style={localStyles.payButton}
+                        onPress={() => router.push({
+                          pathname: '/(tabs)/StudentDashBoard/BookClass',
+                          params: {
+                            teacherEmail: request.teacherEmail,
+                            teacherName: request.teacherName,
+                            selectedSubject: request.subject,
+                            selectedClass: request.className,
+                            charge: request.charge?.toString().replace(/[₹,]/g, '').trim()
+                          }
+                        })}
+                      >
+                        <Text style={localStyles.payButtonText}>Proceed to Pay</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+              </>
+            ) : (
+              <>
+                {loadingStudents ? (
+                  <View style={styles.mobileLoadingContainer}>
+                    <ActivityIndicator size="large" color={COLORS.primaryBlue} />
+                    <Text style={styles.mobileLoadingText}>Loading enrolled teachers...</Text>
+                  </View>
+                ) : enrolledStudents.length === 0 ? (
+                  <View style={styles.mobileEmptyState}>
+                    <MaterialCommunityIcons name="account-search" size={48} color={COLORS.textMuted} />
+                    <Text style={styles.mobileEmptyStateText}>No enrolled teachers found</Text>
+                    <Text style={styles.mobileEmptyStateSubtext}>Enroll in subjects to start chatting with teachers</Text>
+                  </View>
+                ) : (
+                  enrolledStudents.map((contact) => (
+                    <TouchableOpacity
+                      key={contact.email}
+                      style={styles.mobileContactItem}
+                      onPress={() => handleSelectContact(contact)}
+                    >
+                      {contact.profilePic ? (
+                        <Image source={{ uri: contact.profilePic }} style={styles.mobileContactAvatar} />
+                      ) : (
+                        <View style={styles.mobileContactAvatarFallback}>
+                          <Text style={styles.mobileContactAvatarText}>
+                            {contact.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.mobileContactInfo}>
+                        <Text style={styles.mobileContactName}>{contact.name}</Text>
+                        <Text style={styles.mobileContactLastMessage} numberOfLines={1}>
+                          {contact.lastMessage || 'Click to start chatting'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </>
+            )}
           </ScrollView>
-
-          <MessageInputBar />
         </View>
       </View>
       
+      {/* Chat Screen Modal for Mobile */}
+      <Modal
+        visible={!!selectedContact}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setSelectedContact(null)}
+      >
+        {selectedContact && (
+          <View style={styles.mobileFullScreenChat}>
+            <View style={styles.mobileChatScreenHeader}>
+              <TouchableOpacity 
+                style={styles.mobileBackButton} 
+                onPress={() => setSelectedContact(null)}
+              >
+                <Ionicons name="arrow-back" size={24} color="#FFF" />
+              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                {selectedContact.profilePic ? (
+                  <Image source={{ uri: selectedContact.profilePic }} style={styles.mobileChatHeaderAvatar} />
+                ) : (
+                  <View style={styles.mobileChatHeaderAvatarFallback}>
+                    <Text style={styles.mobileChatHeaderAvatarText}>
+                      {selectedContact.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.mobileChatHeaderInfo}>
+                  <Text style={styles.mobileChatHeaderName}>{selectedContact.name}</Text>
+                </View>
+              </View>
+            </View>
+
+            <FlatList
+              data={chatMessages}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.mobileChatMessagesList}
+              renderItem={({ item }) => (
+                <View style={[
+                  styles.mobileMessageBubble,
+                  item.sender === userEmail ? styles.mobileMyMessage : styles.mobileOtherMessage,
+                ]}>
+                  <Text style={[
+                    styles.mobileMessageText,
+                    item.sender === userEmail ? styles.mobileMyMessageText : styles.mobileOtherMessageText,
+                  ]}>
+                    {item.text}
+                  </Text>
+                  <Text style={[
+                    styles.mobileMessageTime,
+                    item.sender === userEmail ? styles.mobileMyMessageTime : styles.mobileOtherMessageTime,
+                  ]}>
+                    {item.timestamp?.toDate ? new Date(item.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                  </Text>
+                </View>
+              )}
+              ListEmptyComponent={
+                <View style={styles.mobileEmptyChatContainer}>
+                  <Text style={styles.mobileEmptyChatText}>No messages yet. Start the conversation!</Text>
+                </View>
+              }
+            />
+
+            <View style={styles.mobileChatInputContainer}>
+              <TextInput
+                style={styles.mobileChatInput}
+                value={messageInput}
+                onChangeText={setMessageInput}
+                placeholder="Message to connect"
+                placeholderTextColor="#888"
+                editable={!isSending}
+              />
+              <TouchableOpacity 
+                onPress={sendMessage}
+                style={styles.mobileSendButton}
+                disabled={isSending || !messageInput.trim()}
+              >
+                {isSending ? (
+                  <ActivityIndicator size="small" color={COLORS.primaryBlue} />
+                ) : (
+                  <Ionicons name="send" size={24} color={COLORS.primaryBlue} />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </Modal>
+
       {/* Comments Modal */}
       <Modal visible={showCommentsModal} animationType="slide" transparent onRequestClose={() => setShowCommentsModal(false)}>
         <View style={styles.modalOverlay}>
@@ -1067,201 +1372,797 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
   );
 }
 
-// Helper components from ConnectScreen
-const ChatListItem = ({ name, msg, time, unread, avatar, online, active, onPress }: any) => (
-  <TouchableOpacity style={[styles.chatItem, active && styles.chatItemActive]} onPress={onPress}>
-    <View style={styles.chatAvatarWrapper}>
-      <Image source={{ uri: avatar }} style={styles.listAvatar} />
-      {online && <View style={styles.statusOnline} />}
-    </View>
-    <View style={styles.chatMain}>
-      <View style={styles.chatTop}>
-        <Text style={styles.chatName}>{name}</Text>
-        {time ? <Text style={styles.chatTime}>{time}</Text> : null}
-      </View>
-      <Text style={[styles.chatMsgPreview, unread && styles.chatMsgUnread]}>{msg}</Text>
-    </View>
-    {unread && <View style={styles.blueUnreadDot} />}
-  </TouchableOpacity>
-);
-
-const ChatHeader = ({ name, avatar, status }: any) => (
-  <View style={styles.chatWinHeader}>
-    <View style={styles.headerL}>
-      <View style={styles.headerAvWrap}>
-        <Image source={{ uri: avatar }} style={styles.headerAv} />
-        <View style={styles.headerOnDot} />
-      </View>
-      <View style={styles.headerTxt}>
-        <Text style={styles.headerNameTxt}>{name}</Text>
-        <Text style={styles.headerStatusTxt}>{status}</Text>
-      </View>
-    </View>
-    <View style={styles.headerR}>
-      <TouchableOpacity style={styles.headerCallBtn}><Ionicons name="call-outline" size={20} color={COLORS.textHeader} /></TouchableOpacity>
-      <TouchableOpacity style={styles.headerCallBtn}><Ionicons name="videocam-outline" size={20} color={COLORS.textHeader} /></TouchableOpacity>
-    </View>
-  </View>
-);
-
-const ChatBubble = ({ text, position }: any) => (
-  <Animated.View 
-     entering={position === 'right' ? FadeInRight.delay(100) : FadeInLeft.delay(100)}
-     style={[styles.bubbleWrap, position === 'right' ? styles.bubbleR : styles.bubbleL]}
-  >
-    <View style={[styles.bubbleBox, position === 'right' ? styles.bubbleBoxR : styles.bubbleBoxL]}>
-      <Text style={styles.bubbleText}>{text}</Text>
-    </View>
-  </Animated.View>
-);
-
-// Web-only styles (same as MyTuitions.tsx)
-const ws = StyleSheet.create({
-  // Header
-  header: { height: 56, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#fff', zIndex: 10 },
-  logo: { fontSize: 18, fontWeight: 'bold', color: '#4A7BF7', fontFamily: 'Poppins_700Bold', marginRight: 20, minWidth: 110 },
-  searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8f9fa', borderRadius: 20, paddingHorizontal: 12, height: 36, marginRight: 20 },
-  searchInput: { flex: 1, fontSize: 14, color: '#333', fontFamily: 'Poppins_400Regular' },
-  headerRight: { flexDirection: 'row', alignItems: 'center' },
-  notifBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: '#dc3545', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center' },
-  notifBadgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold', fontFamily: 'Poppins_600SemiBold' },
-  headerUsername: { fontSize: 14, color: '#333', marginRight: 12, fontFamily: 'Poppins_500Medium' },
-  headerAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center' },
-});
-
 const styles = StyleSheet.create({
-  // Basic styles
-  safeArea: { flex: 1, backgroundColor: COLORS.background },
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
   loaderContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  desktopContent: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  embeddedContent: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  desktopChatLayout: {
+  contentLayout: {
     flex: 1,
     flexDirection: 'row',
-    height: '100%',
+    overflow: 'hidden',
   },
-  sidebarContainer: {
-    width: 240,
-    minWidth: 200,
-    maxWidth: 260,
-  },
-
-  // ConnectScreen styles
-  container: { 
-    flex: 1, 
+  mainWrapper: {
+    flex: 1,
+    flexDirection: 'column',
     backgroundColor: COLORS.background,
-    overflow: 'hidden'
   },
-  contentLayout: { 
-    flex: 1, 
+  contentColumns: {
+    flex: 1,
     flexDirection: 'row',
-    height: '100%'
+    overflow: 'hidden',
   },
-
-  // Chat List Panel (from ConnectScreen)
-  chatListPanel: { 
-    width: 300, 
-    height: '100%',
-    backgroundColor: COLORS.chatListBg, 
-    borderRightWidth: 1, 
-    borderRightColor: COLORS.border 
+  centerContent: {
+    flex: 1,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    minWidth: 0,
   },
-  panelHeader: { fontFamily: 'Poppins_700Bold', fontSize: 26, color: COLORS.textHeader, padding: 25, paddingBottom: 15 },
-  segmentedToggle: { flexDirection: 'row', backgroundColor: COLORS.softGreen, borderRadius: 12, padding: 4, marginHorizontal: 20, marginBottom: 20 },
-  toggleItem: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
-  toggleItemActive: { backgroundColor: COLORS.primaryBlue },
-  toggleText: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: COLORS.textHeader },
-  toggleTextActive: { color: COLORS.white },
-  chatListScroll: { flex: 1 },
-  chatItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 18, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F9FAFB', position: 'relative' },
-  chatItemActive: { backgroundColor: '#F3F4F6' },
-  chatAvatarWrapper: { position: 'relative' },
-  listAvatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#E2E8F0' },
-  statusOnline: { position: 'absolute', bottom: 2, right: 2, width: 12, height: 12, borderRadius: 6, backgroundColor: COLORS.onlineGreen, borderWidth: 2, borderColor: COLORS.white },
-  chatMain: { flex: 1, marginLeft: 15 },
-  chatTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 },
-  chatName: { fontFamily: 'Poppins_700Bold', fontSize: 14, color: COLORS.textHeader },
-  chatTime: { fontFamily: 'Poppins_400Regular', fontSize: 11, color: COLORS.textMuted },
-  chatMsgPreview: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: COLORS.textBody },
-  chatMsgUnread: { color: COLORS.primaryBlue, fontFamily: 'Poppins_600SemiBold' },
-  blueUnreadDot: { position: 'absolute', right: 20, top: '40%', width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.unreadDot },
-
-  // Chat Window (from ConnectScreen)
-  chatWindow: { 
-    flex: 1, 
-    height: '100%',
-    backgroundColor: COLORS.chatWindowBg, 
-    position: 'relative' 
+  
+  // Chat List Panel
+  chatListPanel: {
+    flex: 1,
+    maxWidth: 400,
+    backgroundColor: COLORS.chatListBg,
+    borderRightWidth: 1,
+    borderRightColor: COLORS.border,
   },
-  patternOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.04, backgroundColor: 'transparent' },
-  chatWinHeader: { height: 85, backgroundColor: COLORS.white, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 30, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  headerL: { flexDirection: 'row', alignItems: 'center' },
-  headerAvWrap: { position: 'relative' },
-  headerAv: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#E2E8F0' },
-  headerOnDot: { position: 'absolute', bottom: 2, right: 2, width: 14, height: 14, borderRadius: 7, backgroundColor: COLORS.onlineGreen, borderWidth: 2, borderColor: COLORS.white },
-  headerTxt: { marginLeft: 16 },
-  headerNameTxt: { fontFamily: 'Poppins_700Bold', fontSize: 18, color: COLORS.textHeader },
-  headerStatusTxt: { fontFamily: 'Poppins_400Regular', fontSize: 13, color: COLORS.textMuted },
-  headerR: { flexDirection: 'row', gap: 16 },
-  headerCallBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
-
-  messagesArea: { flex: 1 },
-  messagesContent: { padding: 30, paddingBottom: 110 },
-  dateCenter: { fontFamily: 'Poppins_600SemiBold', fontSize: 11, color: COLORS.textMuted, textAlign: 'center', marginBottom: 25 },
-  timeCenter: { fontFamily: 'Poppins_700Bold', fontSize: 11, color: COLORS.textMuted, textAlign: 'center', marginBottom: 25, backgroundColor: '#EDF2F7', alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 5, borderRadius: 12 },
-  bubbleWrap: { marginBottom: 18, maxWidth: '65%' },
-  bubbleL: { alignSelf: 'flex-start' },
-  bubbleR: { alignSelf: 'flex-end' },
-  bubbleBox: { paddingHorizontal: 22, paddingVertical: 14, borderRadius: 22 },
-  bubbleBoxL: { backgroundColor: COLORS.receivedBubble, borderTopLeftRadius: 5 },
-  bubbleBoxR: { backgroundColor: COLORS.sentBubble, borderTopRightRadius: 5 },
-  bubbleText: { fontFamily: 'Poppins_400Regular', fontSize: 14, color: COLORS.textHeader, lineHeight: 22 },
-  imageCardContainer: { alignSelf: 'flex-end', width: '65%', height: 260, borderRadius: 24, overflow: 'hidden', marginTop: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 15, elevation: 6 },
-  chatImageCard: { width: '100%', height: '100%' },
-
-  // Message Input Bar
-  msgInputWrapper: { paddingHorizontal: 30, paddingBottom: 25, position: 'absolute', bottom: 0, left: 0, right: 0 },
-  msgInputInner: { height: 64, backgroundColor: COLORS.white, borderRadius: 32, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.06, shadowRadius: 18, elevation: 12 },
-  msgInputFocused: { shadowOpacity: 0.12, shadowRadius: 22, borderColor: COLORS.primaryBlue + '20', borderWidth: 1 },
-  msgIconsL: { flexDirection: 'row', gap: 14 },
-  msgIconsR: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  msgIcon: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
-  msgTextEntry: { flex: 1, marginHorizontal: 18, fontFamily: 'Poppins_400Regular', fontSize: 15 },
-  msgSendBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' },
-
+  chatListHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  chatListTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.textHeader,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  activeTab: {
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.primaryBlue,
+  },
+  tabText: {
+    fontSize: 14,
+    color: COLORS.textBody,
+    fontFamily: 'Poppins_500Medium',
+  },
+  activeTabText: {
+    color: COLORS.primaryBlue,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  chatList: {
+    flex: 1,
+  },
+  
+  // Contact Items
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: 8,
+    marginBottom: 8,
+    marginHorizontal: 8,
+  },
+  contactItemActive: {
+    backgroundColor: '#F3F4F6',
+  },
+  contactAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  contactAvatarFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.primaryBlue,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contactAvatarText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  contactInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  contactName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.textHeader,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  contactLastMessage: {
+    fontSize: 14,
+    color: COLORS.textBody,
+    marginTop: 2,
+    fontFamily: 'Poppins_400Regular',
+  },
+  contactMeta: {
+    alignItems: 'flex-end',
+  },
+  contactTime: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    fontFamily: 'Poppins_400Regular',
+  },
+  
+  // Chat Window
+  chatWindowPanel: {
+    flex: 1,
+    backgroundColor: COLORS.chatWindowBg,
+    borderLeftWidth: 1,
+    borderLeftColor: COLORS.border,
+    minWidth: 0,
+  },
+  chatWindow: {
+    flex: 1,
+  },
+  chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  chatHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  chatAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  chatAvatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primaryBlue,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  chatAvatarText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  chatHeaderInfo: {
+    flex: 1,
+  },
+  chatHeaderName: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textHeader,
+  },
+  chatHeaderStatus: {
+    fontSize: 12,
+    color: COLORS.onlineGreen,
+    fontFamily: 'Poppins_400Regular',
+    marginTop: 2,
+  },
+  messagesArea: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: COLORS.chatWindowBg,
+  },
+  messageItem: {
+    marginBottom: 12,
+    maxWidth: '70%',
+  },
+  sentMessage: {
+    alignSelf: 'flex-end',
+    backgroundColor: COLORS.primaryBlue,
+    padding: 12,
+    borderRadius: 16,
+    borderBottomRightRadius: 4,
+  },
+  receivedMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.receivedBubble,
+    padding: 12,
+    borderRadius: 16,
+    borderBottomLeftRadius: 4,
+  },
+  messageText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+  },
+  sentMessageText: {
+    color: COLORS.white,
+  },
+  receivedMessageText: {
+    color: COLORS.textHeader,
+  },
+  messageTime: {
+    fontSize: 10,
+    fontFamily: 'Poppins_400Regular',
+    marginTop: 4,
+  },
+  sentMessageTime: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'right',
+  },
+  receivedMessageTime: {
+    color: COLORS.textMuted,
+  },
+  messageInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    padding: 16,
+    backgroundColor: COLORS.white,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    gap: 12,
+  },
+  messageInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    maxHeight: 100,
+    backgroundColor: COLORS.chatWindowBg,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.primaryBlue,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  // Empty States
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+    marginTop: 16,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    marginTop: 8,
+    fontFamily: 'Poppins_400Regular',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  chatEmptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  chatEmptyTitle: {
+    fontSize: 18,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textMuted,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  chatEmptySubtitle: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    fontFamily: 'Poppins_400Regular',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  chatEmptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  chatEmptyText: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    fontFamily: 'Poppins_400Regular',
+    textAlign: 'center',
+  },
+  
   // Right Panel
-  rightPanel: { 
-    width: 360, 
-    height: '100%',
-    backgroundColor: COLORS.feedBg, 
-    borderLeftWidth: 1, 
-    borderLeftColor: COLORS.border, 
-    position: 'relative' 
+  rightPanel: {
+    width: 340,
+    backgroundColor: '#FAFBFC',
+    borderLeftWidth: 1,
+    borderLeftColor: COLORS.border,
+    paddingHorizontal: 12,
+    paddingTop: 16,
+    flexDirection: 'column',
+    flexShrink: 0,
   },
-  rightPanelTitle: { fontFamily: 'Poppins_700Bold', fontSize: 32, color: COLORS.primaryBlue, padding: 25, paddingBottom: 15, textAlign: 'right' },
-  thoughtsList: { paddingBottom: 40 },
+  rightPanelTitle: {
+    fontSize: 18,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textHeader,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  thoughtsList: {
+    paddingBottom: 24,
+  },
+  
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  modalTitle: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 18,
+    color: COLORS.textHeader,
+  },
+  commentsList: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  commentItem: {
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: COLORS.background,
+    borderRadius: 10,
+  },
+  commentAuthor: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 13,
+    color: COLORS.textHeader,
+    marginBottom: 4,
+  },
+  commentContent: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 13,
+    color: COLORS.textHeader,
+    lineHeight: 18,
+  },
+  commentTime: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 4,
+  },
+  commentInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  commentInput: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 14,
+    color: COLORS.textHeader,
+    maxHeight: 100,
+  },
+  commentSendBtn: {
+    marginLeft: 10,
+    backgroundColor: COLORS.primaryBlue,
+    borderRadius: 20,
+    padding: 10,
+  },
+  
+  // Mobile Styles
+  mobileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  mobileBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mobileContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  mobileChatList: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+  },
+  mobileHeaderTitle: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 20,
+    color: COLORS.textHeader,
+  },
+  mobileTabContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    paddingHorizontal: 16,
+  },
+  mobileTab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  mobileActiveTab: {
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.primaryBlue,
+  },
+  mobileTabText: {
+    fontSize: 14,
+    color: COLORS.textBody,
+    fontFamily: 'Poppins_500Medium',
+  },
+  mobileActiveTabText: {
+    color: COLORS.primaryBlue,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  mobileChatScroll: {
+    flex: 1,
+    padding: 12,
+  },
+  mobileLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  mobileLoadingText: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 14,
+    color: COLORS.textMuted,
+    marginTop: 12,
+  },
+  mobileEmptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  mobileEmptyStateText: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 16,
+    color: COLORS.textHeader,
+    marginTop: 16,
+  },
+  mobileEmptyStateSubtext: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  mobileContactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  mobileContactAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  mobileContactAvatarFallback: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: COLORS.primaryBlue,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mobileContactAvatarText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  mobileContactInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  mobileContactName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.textHeader,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  mobileContactLastMessage: {
+    fontSize: 14,
+    color: COLORS.textBody,
+    marginTop: 2,
+    fontFamily: 'Poppins_400Regular',
+  },
+  mobileFullScreenChat: {
+    flex: 1,
+    backgroundColor: '#f1f1f1',
+  },
+  mobileChatScreenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    backgroundColor: COLORS.primaryBlue,
+  },
+  mobileBackButton: {
+    marginRight: 12,
+  },
+  mobileChatHeaderAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  mobileChatHeaderAvatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  mobileChatHeaderAvatarText: {
+    color: COLORS.primaryBlue,
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  mobileChatHeaderInfo: {
+    flex: 1,
+  },
+  mobileChatHeaderName: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  mobileChatMessagesList: {
+    paddingVertical: 10,
+  },
+  mobileMessageBubble: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    margin: 8,
+    maxWidth: Dimensions.get('window').width * 0.75,
+  },
+  mobileMyMessage: {
+    alignSelf: 'flex-end',
+    backgroundColor: COLORS.primaryBlue,
+    borderBottomRightRadius: 4,
+    marginRight: 12,
+  },
+  mobileOtherMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#ffffff',
+    borderBottomLeftRadius: 4,
+    marginLeft: 12,
+  },
+  mobileMessageText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_400Regular',
+  },
+  mobileMyMessageText: {
+    color: '#ffffff',
+  },
+  mobileOtherMessageText: {
+    color: '#000000',
+  },
+  mobileMessageTime: {
+    fontSize: 10,
+    marginTop: 5,
+    alignSelf: 'flex-end',
+    fontFamily: 'Poppins_400Regular',
+  },
+  mobileMyMessageTime: {
+    color: '#ffffff',
+  },
+  mobileOtherMessageTime: {
+    color: '#888',
+  },
+  mobileEmptyChatContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  mobileEmptyChatText: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 14,
+    color: '#888',
+  },
+  mobileChatInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderColor: '#ccc',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  mobileChatInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 16,
+    fontFamily: 'Poppins_400Regular',
+    backgroundColor: '#fff',
+  },
+  mobileSendButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
 
-  // Modal styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContainer: { backgroundColor: COLORS.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%', paddingBottom: 20 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  modalTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 18, color: COLORS.textHeader },
-  commentsList: { paddingHorizontal: 16, paddingTop: 12 },
-  commentItem: { marginBottom: 16, padding: 12, backgroundColor: COLORS.background, borderRadius: 10 },
-  commentAuthor: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: COLORS.textHeader, marginBottom: 4 },
-  commentContent: { fontFamily: 'Poppins_400Regular', fontSize: 13, color: COLORS.textHeader, lineHeight: 18 },
-  commentTime: { fontFamily: 'Poppins_400Regular', fontSize: 11, color: COLORS.textMuted, marginTop: 4 },
-  commentInputRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: COLORS.border },
-  commentInput: { flex: 1, backgroundColor: COLORS.background, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontFamily: 'Poppins_400Regular', fontSize: 14, color: COLORS.textHeader, maxHeight: 100 },
-  commentSendBtn: { marginLeft: 10, backgroundColor: COLORS.primaryBlue, borderRadius: 20, padding: 10 },
+// Local styles for booking requests panel
+const localStyles = StyleSheet.create({
+  tabContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    marginBottom: 12,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  activeTab: {
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.primaryBlue,
+  },
+  tabText: {
+    fontSize: 13,
+    color: COLORS.textBody,
+    fontFamily: 'Poppins_500Medium',
+  },
+  activeTabText: {
+    color: COLORS.primaryBlue,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  badge: {
+    backgroundColor: COLORS.primaryBlue,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 6,
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  requestCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    marginHorizontal: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  requestHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  teacherName: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textHeader,
+    flex: 1,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  statusText: {
+    fontSize: 10,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  requestSubject: {
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    color: COLORS.textBody,
+    marginBottom: 4,
+  },
+  requestCharge: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.primaryBlue,
+    marginTop: 4,
+  },
+  payButton: {
+    backgroundColor: '#22C55E',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  payButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+  },
 });

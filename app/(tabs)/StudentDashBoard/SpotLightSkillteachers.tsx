@@ -288,8 +288,9 @@ export default function SpotLightSkillteachers({ onBack }: {
 
   const resolvePostAuthor = (post: any) => {
     const cached = userProfileCache.get(post.author?.email) || { name: '', profilePic: '' };
-    let name = cached.name || post.author?.name || '';
-    let pic: string | null = cached.profilePic || post.author?.profile_pic || null;
+    // Prioritize post.author.name first, then cache, then fallback
+    let name = post.author?.name || cached.name || '';
+    let pic: string | null = post.author?.profile_pic || cached.profilePic || null;
     if (!name) name = 'Unknown User';
     return { name, pic: pic || '', role: 'student' };
   };
@@ -545,7 +546,7 @@ export default function SpotLightSkillteachers({ onBack }: {
                       post={post}
                       onLike={handleLike}
                       onComment={openCommentsModal}
-                      onReport={(p) => { setReportType('post'); setReportItemId(p.id); setReportReason(''); setShowReportModal(true); }}
+                      onReport={(p, reasons, comment) => { console.log('Report submitted for post:', p.id, 'Reasons:', reasons, 'Comment:', comment); }}
                       getProfileImageSource={getProfileImageSource}
                       initials={initials}
                       resolvePostAuthor={resolvePostAuthor}

@@ -37,7 +37,7 @@ import MyTeacher from "./MyTeacher";
 import LeftScreen from './LeftScreen';
 import RightScreen from './RightScreen';
 import SkillSpotlights from './SkillSpotlights';
-import ThoughtsCard, { ThoughtsBackground } from './ThoughtsCard';
+import ThoughtsCard, { ThoughtsBackground, ThoughtsFeed } from './ThoughtsCard';
 import AllBoards from './AllBoardsPage';
 import AllSkills from './AllSkills';
 import AllSubjects from './SubjectSelection';
@@ -64,11 +64,6 @@ interface Post {
   content: string; likes: number; comments?: any[]; createdAt: string;
   tags?: string[]; postImage?: string; isLiked?: boolean;
 }
-interface Comment {
-  id: string; author: { email: string; name: string; role: string; profile_pic: string; };
-  content: string; likes: number; createdAt: string; isLiked?: boolean;
-}
-
 const SCREEN_COUNT = 3;
 const categoryColors: Record<string, string> = {
   'Chemistry': '#00BCD4', 'History': '#E91E63', 'Mathematics': '#3F51B5',
@@ -138,10 +133,6 @@ export default function Student() {
   const [postsLoading, setPostsLoading] = useState(false);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [userProfileCache, setUserProfileCache] = useState<Map<string, { name: string; profilePic: string }>>(new Map());
-  const [showCommentsModal, setShowCommentsModal] = useState(false);
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [postComments, setPostComments] = useState<Comment[]>([]);
-  const [commentText, setCommentText] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportType, setReportType] = useState<'post' | 'comment'>('post');
   const [reportItemId, setReportItemId] = useState('');
@@ -294,7 +285,45 @@ export default function Student() {
       setPostsLoading(true);
       const res = await axios.get(`${BASE_URL}/api/posts/all`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.data.success) {
-        const postsWithComments = await Promise.all(res.data.data.map(async (post: any) => {
+        // Process posts to handle snake_case to camelCase conversion and image URLs
+        const processedPosts = res.data.data.map((post: any) => {
+          // Convert snake_case to camelCase for frontend compatibility
+          const processedPost = {
+            ...post,
+            id: post.id,
+            author: {
+              email: post.author_email || post.author?.email,
+              name: post.author_name || post.author?.name,
+              role: post.author_role || post.author?.role,
+              profile_pic: post.author_profile_pic || post.author?.profile_pic
+            },
+            content: post.content,
+            postImage: post.post_image || post.postImage, // Handle both field names
+            postImages: post.post_images || post.postImages || (post.post_image ? [post.post_image] : []),
+            likes: post.likes_counter || post.likes || 0,
+            createdAt: post.created_at || post.createdAt,
+            tags: post.tags || []
+          };
+          
+          // Handle postImage (single image) - convert to absolute URL if needed
+          if (processedPost.postImage && !processedPost.postImage.startsWith('http') && !processedPost.postImage.includes(BASE_URL)) {
+            processedPost.postImage = processedPost.postImage.startsWith('/') 
+              ? `${BASE_URL}${processedPost.postImage}`
+              : `${BASE_URL}/${processedPost.postImage}`;
+          }
+          
+          // Handle postImages (array of images) - convert to absolute URLs if needed
+          if (processedPost.postImages && Array.isArray(processedPost.postImages)) {
+            processedPost.postImages = processedPost.postImages.map((img: string) => {
+              if (!img || img.startsWith('http') || img.includes(BASE_URL)) return img;
+              return img.startsWith('/') ? `${BASE_URL}${img}` : `${BASE_URL}/${img}`;
+            });
+          }
+          
+          return processedPost;
+        });
+        
+        const postsWithComments = await Promise.all(processedPosts.map(async (post: any) => {
           try {
             const cr = await axios.get(`${BASE_URL}/api/posts/${post.id}/comments`, { headers: { 'Authorization': `Bearer ${token}` } });
             return { ...post, createdAt: formatTimeAgo(post.createdAt), isLiked: post.isLiked || false, comments: cr.data.success ? cr.data.data.map((c: any) => ({ ...c, createdAt: formatTimeAgo(c.createdAt), isLiked: false })) : [] };
@@ -317,32 +346,6 @@ export default function Student() {
       if (newLiked) await axios.post(`${BASE_URL}/api/posts/${postId}/like`, {}, { headers: { 'Authorization': `Bearer ${authToken}` } });
       else await axios.delete(`${BASE_URL}/api/posts/${postId}/like`, { headers: { 'Authorization': `Bearer ${authToken}` } });
     } catch { setPosts(ps => ps.map(p => p.id === postId ? { ...p, likes: post.likes, isLiked: post.isLiked } : p)); }
-  };
-
-  const fetchPostComments = async (postId: string) => {
-    try {
-      const res = await axios.get(`${BASE_URL}/api/posts/${postId}/comments`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-      if (res.data.success) setPostComments(res.data.data.map((c: any) => ({ ...c, createdAt: formatTimeAgo(c.createdAt), isLiked: false })));
-    } catch { setPostComments([]); }
-  };
-
-  const openCommentsModal = async (post: Post) => {
-    setSelectedPost(post); setShowCommentsModal(true); setCommentText('');
-    await fetchPostComments(post.id);
-  };
-
-  const addComment = async () => {
-    if (!commentText.trim() || !selectedPost || !authToken) return;
-    try {
-      const res = await axios.post(`${BASE_URL}/api/posts/${selectedPost.id}/comments`, { content: commentText.trim() }, { headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' } });
-      if (res.data.success) {
-        const newC: Comment = { ...res.data.data, createdAt: 'Just now', isLiked: false };
-        setPostComments(prev => [newC, ...prev]);
-        setCommentText('');
-        setPosts(ps => ps.map(p => p.id === selectedPost.id ? { ...p, comments: [newC, ...(p.comments || [])] } : p));
-        await fetchPostComments(selectedPost.id);
-      }
-    } catch (err: any) { Alert.alert('Error', err.response?.data?.message || 'Failed to add comment'); }
   };
 
   const submitReport = async () => {
@@ -671,8 +674,9 @@ const renderWebMainContent = () => {
 };
   const resolvePostAuthor = (post: Post) => {
     const cached = userProfileCache.get(post.author.email) || { name: '', profilePic: '' };
-    let name = cached.name || post.author.name || '';
-    let pic: string | null = cached.profilePic || post.author.profile_pic || null;
+    // Prioritize post.author.name first, then cache, then fallback
+    let name = post.author.name || cached.name || '';
+    let pic: string | null = post.author.profile_pic || cached.profilePic || null;
     if (!name || name === 'null' || name.includes('@')) name = post.author.email?.split('@')[0] || 'User';
     if (pic && !pic.startsWith('http') && !pic.startsWith('/')) pic = `/${pic}`;
     if (pic === '' || pic === 'null') pic = null;
@@ -681,75 +685,17 @@ const renderWebMainContent = () => {
 
   const renderWebRightSidebar = () => (
     <View style={ws.rightSidebar}>
-      <Text style={ws.thoughtsTitle}>Thoughts</Text>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
-        {postsLoading && posts.length === 0 && <ActivityIndicator color="#4A7BF7" style={{ marginTop: 30 }} />}
-        {!postsLoading && posts.length === 0 && (
-          <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-            <MaterialCommunityIcons name="post-outline" size={40} color="#ccc" />
-            <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'RedHatDisplay_400Regular' }}>No thoughts yet</Text>
-          </View>
-        )}
-        {posts.map((post) => (
-          <ThoughtsCard key={post.id} post={post} onLike={handleLike} onComment={openCommentsModal}
-            onReport={(post) => { setReportType('post'); setReportItemId(post.id); setReportReason(''); setShowReportModal(true); }}
-            getProfileImageSource={getProfileImageSource} initials={initials} resolvePostAuthor={resolvePostAuthor} />
-        ))}
-      </ScrollView>
-
-      <Modal visible={showCommentsModal} animationType="slide" transparent onRequestClose={() => setShowCommentsModal(false)}>
-        <View style={ws.modalOverlay}>
-          <View style={ws.modalBox}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Text style={ws.modalTitle}>Comments</Text>
-              <TouchableOpacity onPress={() => setShowCommentsModal(false)}><Ionicons name="close" size={24} color="#666" /></TouchableOpacity>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#f0f0f0' }}>
-              <TextInput style={ws.commentInput} placeholder="Add a comment..." placeholderTextColor="#999" value={commentText} onChangeText={setCommentText} multiline maxLength={200} />
-              <TouchableOpacity style={[ws.postBtn, !commentText.trim() && { backgroundColor: '#ccc' }]} onPress={addComment} disabled={!commentText.trim()}>
-                <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Poppins_400Regular' }}>Post</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={{ maxHeight: 300 }}>
-              {postComments.length === 0
-                ? <Text style={{ textAlign: 'center', color: '#aaa', paddingVertical: 30, fontFamily: 'Poppins_400Regular' }}>No comments yet</Text>
-                : postComments.map((c) => {
-                    const ca = resolvePostAuthor({ author: c.author } as Post);
-                    const cSrc = getProfileImageSource(ca.pic || undefined);
-                    return (
-                      <View key={c.id} style={{ flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' }}>
-                        {cSrc ? <Image source={cSrc} style={ws.commentAvatar} /> : <View style={[ws.commentAvatar, ws.avatarPlaceholder]}><Text style={ws.avatarTxt}>{initials(ca.name)}</Text></View>}
-                        <View style={{ flex: 1, marginLeft: 10 }}>
-                          <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#222', fontFamily: 'Poppins_600SemiBold' }}>{ca.name}</Text>
-                          <Text style={{ fontSize: 13, color: '#374151', marginTop: 2, fontFamily: 'Poppins_400Regular' }}>{c.content}</Text>
-                          <Text style={{ fontSize: 11, color: '#aaa', marginTop: 3, fontFamily: 'Poppins_400Regular' }}>{c.createdAt}</Text>
-                        </View>
-                      </View>
-                    );
-                  })}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={showReportModal} animationType="fade" transparent onRequestClose={() => setShowReportModal(false)}>
-        <View style={ws.modalOverlay}>
-          <View style={[ws.modalBox, { maxHeight: undefined }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Text style={ws.modalTitle}>Report {reportType === 'post' ? 'Post' : 'Comment'}</Text>
-              <TouchableOpacity onPress={() => setShowReportModal(false)}><Ionicons name="close" size={24} color="#666" /></TouchableOpacity>
-            </View>
-            <Text style={{ fontSize: 13, color: '#555', marginBottom: 12, fontFamily: 'Poppins_400Regular' }}>Please provide a reason for reporting:</Text>
-            <TextInput style={ws.reportInput} placeholder="Enter reason..." placeholderTextColor="#999" value={reportReason} onChangeText={setReportReason} multiline maxLength={200} />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 16, gap: 10 }}>
-              <TouchableOpacity style={ws.cancelBtn} onPress={() => setShowReportModal(false)}><Text style={{ color: '#666', fontFamily: 'Poppins_400Regular' }}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity style={[ws.reportBtn, !reportReason.trim() && { backgroundColor: '#ccc' }]} onPress={submitReport} disabled={!reportReason.trim()}>
-                <Text style={{ color: '#fff', fontFamily: 'Poppins_400Regular' }}>Submit</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ThoughtsFeed
+        posts={posts}
+        postsLoading={postsLoading}
+        authToken={authToken}
+        BASE_URL={BASE_URL}
+        getProfileImageSource={getProfileImageSource}
+        initials={initials}
+        resolvePostAuthor={resolvePostAuthor}
+        formatTimeAgo={formatTimeAgo}
+        router={router}
+      />
     </View>
   );
 
@@ -783,7 +729,7 @@ const renderWebMainContent = () => {
               )}
             </View>
           </ResponsiveSidebar>
-          {!showConnect && <View style={{ width: 300 }}>{renderWebRightSidebar()}</View>}
+          {!showConnect && <View style={{ width: '28%', minWidth: 280, maxWidth: 380 }}>{renderWebRightSidebar()}</View>}
         </View>
       </View>
     );
@@ -993,7 +939,7 @@ export const styles = StyleSheet.create({
   dot: { width: wp("2%"), height: wp("2%"), borderRadius: wp("1%"), backgroundColor: "#ddd" },
   activeDot: { backgroundColor: "#5f5fff", width: wp("4%") },
   navButtonContainer: { position: "absolute", flexDirection: "row", justifyContent: "space-between", width: "100%", paddingHorizontal: wp("5%"), top: "50%", marginTop: -30, zIndex: 10 },
-  navButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: "rgba(95,95,255,0.8)", justifyContent: "center", alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 },
+  navButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: "rgba(95,95,255,0.8)", justifyContent: "center", alignItems: "center", ...Platform.select({ web: { boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }, default: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 } }) },
   navButtonText: { fontSize: 20, color: "#fff", fontWeight: "bold" },
   imageContainer: { position: "relative", marginBottom: hp("1%") },
   dotsContainer: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: hp("2%"), gap: wp("1.5%") },
@@ -1019,14 +965,14 @@ export const styles = StyleSheet.create({
   clearButtonText: { fontSize: wp("3.2%"), color: "#82878F", fontWeight: "bold" },
   questionButton: { padding: wp("1%"), marginLeft: wp("1%") },
   notificationButton: { padding: wp("1.5%"), borderRadius: wp("2%"), backgroundColor: "rgba(255,255,255,0.1)", position: "relative" },
-  notificationBadge: { position: "absolute", top: -3, right: -3, backgroundColor: "#FF3B30", borderRadius: 10, minWidth: 20, height: 20, justifyContent: "center", alignItems: "center", paddingHorizontal: 4, zIndex: 1000, elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
+  notificationBadge: { position: "absolute", top: -3, right: -3, backgroundColor: "#FF3B30", borderRadius: 10, minWidth: 20, height: 20, justifyContent: "center", alignItems: "center", paddingHorizontal: 4, zIndex: 1000, elevation: 8, ...Platform.select({ web: { boxShadow: '0 2px 3.84px rgba(0,0,0,0.25)' }, default: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 } }) },
   notificationText: { color: "#ffffff", fontSize: 10, fontWeight: "700", textAlign: "center", includeFontPadding: false },
   spotlightT: { flexDirection: "row", alignItems: "center", gap: wp("0.8%"), flexShrink: 1 },
   tutors: { color: "#454358", fontSize: wp("5.33%"), fontWeight: "500", fontFamily: "Poppins_400Regular", lineHeight: hp("4%") },
   spot: { color: "#03070e", fontSize: wp("5.33%"), fontWeight: "600", fontFamily: "Poppins_600SemiBold", lineHeight: hp("4%"), flexShrink: 1, flexWrap: "nowrap" },
   trend: { color: "#ff0000", lineHeight: hp("2.42%"), fontSize: wp("3.73%"), fontFamily: "OpenSans_500Medium" },
-  teacherCard: { marginRight: wp("0.8%"), marginLeft: wp("0.8%"), alignItems: "center", width: wp("28%"), padding: 0, borderRadius: 0, backgroundColor: "transparent", shadowColor: "transparent", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0, shadowRadius: 0, elevation: 0 },
-  teacherImage: { width: wp("28%"), height: wp("28%"), borderRadius: wp("2%"), marginBottom: hp("0.5%"), borderWidth: 0, borderColor: "transparent", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
+  teacherCard: { marginRight: wp("0.8%"), marginLeft: wp("0.8%"), alignItems: "center", width: wp("28%"), padding: 0, borderRadius: 0, backgroundColor: "transparent", ...Platform.select({ web: { boxShadow: 'none' }, default: { shadowColor: "transparent", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0, shadowRadius: 0, elevation: 0 } }) },
+  teacherImage: { width: wp("28%"), height: wp("28%"), borderRadius: wp("2%"), marginBottom: hp("0.5%"), borderWidth: 0, borderColor: "transparent", ...Platform.select({ web: { boxShadow: '0 2px 3px rgba(0,0,0,0.15)' }, default: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 } }) },
   teacherName: { fontSize: wp("3.2%"), color: "#1a1a1a", textAlign: "center", fontFamily: "Poppins_600SemiBold", fontWeight: "600", marginBottom: hp("0.2%"), maxWidth: "100%", letterSpacing: 0.1, lineHeight: wp("3.8%") },
   teacherSub: { color: "#888", fontSize: wp("2.6%"), fontFamily: "Poppins_400Regular", textAlign: "center", marginTop: 0, opacity: 0.8 },
   mytutorsContainer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", margin: "auto", backgroundColor: "#dbe2ff", height: hp("7.5%"), paddingHorizontal: wp("4.5%"), paddingVertical: hp("0.2%"), marginHorizontal: wp("4%"), borderRadius: wp("4.533%"), marginTop: hp("1.8%"), borderWidth: wp("1%"), borderColor: "#5f5fff" },
@@ -1096,14 +1042,14 @@ const ws = StyleSheet.create({
   avatarTxt: { fontSize: 12, fontWeight: 'bold', color: '#6B7280', fontFamily: 'Poppins_600SemiBold' },
   // Main content
   main: { flex: 1, paddingHorizontal: 14, paddingTop: 14, backgroundColor: 'rgba(255,255,255,0.55)' },
-  card: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e8e8e8', padding: 16, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  card: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e8e8e8', padding: 16, marginBottom: 16, ...Platform.select({ web: { boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 } }) },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   cardTitle: { fontSize: 15, fontWeight: '600', color: '#333', fontFamily: 'Poppins_600SemiBold' },
   seeAll: { fontSize: 13, color: '#4A7BF7', fontFamily: 'Poppins_400Regular' },
   catChip: { borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 4, marginRight: 7 },
   catText: { fontSize: 11, fontFamily: 'Poppins_400Regular' },
   // Tutor cards — white card with colored chip + large circle image
-  tutorCard: { alignItems: 'center', marginRight: 12, width: 160, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e8e8e8', paddingVertical: 16, paddingHorizontal: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 6, elevation: 3 },
+  tutorCard: { alignItems: 'center', marginRight: 12, width: 160, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e8e8e8', paddingVertical: 16, paddingHorizontal: 10, ...Platform.select({ web: { boxShadow: '0 2px 6px rgba(0,0,0,0.07)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 6, elevation: 3 } }) },
   tutorChip: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4, marginBottom: 14, alignItems: 'center' },
   tutorChipText: { fontSize: 11, fontFamily: 'Poppins_400Regular', textAlign: 'center', fontWeight: '500' },
   tutorImg: { width: 100, height: 100, borderRadius: 50, marginBottom: 10 },
@@ -1112,7 +1058,7 @@ const ws = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#ddd', marginHorizontal: 3 },
   dotActive: { backgroundColor: '#444', width: 18, borderRadius: 3 },
   // Spotlight cards — image top, white info bottom
-  spotCard: { flex: 1, borderRadius: 14, overflow: 'hidden', backgroundColor: '#fff', borderWidth: 1, borderColor: '#e8e8e8', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
+  spotCard: { flex: 1, borderRadius: 14, overflow: 'hidden', backgroundColor: '#fff', borderWidth: 1, borderColor: '#e8e8e8', ...Platform.select({ web: { boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 } }) },
   spotImgWrap: { width: '100%', height: 220, position: 'relative' },
   spotImg: { width: '100%', height: '100%' },
   spotBadge: { position: 'absolute', bottom: 0, left: 0, backgroundColor: '#FF6600', paddingHorizontal: 12, paddingVertical: 6, borderTopRightRadius: 8 },
