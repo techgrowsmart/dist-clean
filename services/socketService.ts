@@ -2,7 +2,11 @@ import { io, Socket } from 'socket.io-client';
 import { getAuthToken } from '../utils/authStorage';
 import { Platform } from 'react-native';
 
-const SOCKET_URL = Platform.OS === 'web' ? 'http://localhost:3000' : 'http://localhost:3000';
+const PROD_SOCKET_URL = 'wss://growsmartserver.gogrowsmart.com';
+const DEV_SOCKET_URL = 'http://localhost:3000';
+const SOCKET_URL = process.env.NODE_ENV === 'production' || process.env.EXPO_PUBLIC_DEV_MODE === 'false'
+  ? PROD_SOCKET_URL
+  : (process.env.EXPO_PUBLIC_WS_URL || DEV_SOCKET_URL);
 
 class SocketService {
   private socket: Socket | null = null;
