@@ -3,6 +3,7 @@ import React from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View, Linking, Platform } from "react-native";
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import BillIcon from "../../../assets/svgIcons/Bill";
+import Book from "../../../assets/svgIcons/Book";
 import ContactPhoneIcon from "../../../assets/svgIcons/ContactPhone";
 import FaqIcon from "../../../assets/svgIcons/FaqIcon";
 import LogoutIcon from "../../../assets/svgIcons/Logout";
@@ -17,6 +18,7 @@ import { styles } from "./Student";
 
 const menuItems = [
   { name: "My Tuitions", icon: TutorCap },
+  { name: "Favourite", icon: Book },
   { name: "Share", icon: ShareIcon },
   { name: "Subscription", icon: SubscriptionIcon },
   { name: "Billing", icon: BillIcon },
@@ -30,13 +32,15 @@ type SidebarProps = {
   visible: boolean;
   onClose: () => void;
   activeItem: string;
+  activeSubText?: string | null;
+  setActiveSubText?: (value: string | null) => void;
   onItemPress: (itemName: string) => void;
   userEmail: string;
   studentName: string;
   profileImage: string | null;
 };
 
-const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, studentName, profileImage }: SidebarProps) => {
+const Sidebar = ({ visible, onClose, activeItem, activeSubText, setActiveSubText, onItemPress, userEmail, studentName, profileImage }: SidebarProps) => {
   const router = useRouter();
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
@@ -50,38 +54,38 @@ const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, student
   if (isWeb) {
     return (
       <View style={styles.container}>
-        <View style={styles.webSidebar}>
-          <View style={styles.webProfileSection}>
+        <View style={sidebarStyles.webSidebar}>
+          <View style={sidebarStyles.webProfileSection}>
             {profileImage ? (
               <Image source={{ uri: profileImage }} style={styles.profileImage} />
             ) : (
-              <View style={styles.webProfilePlaceholder}>
-                <Text style={styles.webProfileInitial}>{studentName ? studentName[0]?.toUpperCase() : '?'}</Text>
+              <View style={sidebarStyles.webProfilePlaceholder}>
+                <Text style={sidebarStyles.webProfileInitial}>{studentName ? studentName[0]?.toUpperCase() : '?'}</Text>
               </View>
             )}
-            <Text style={styles.webStudentName}>{studentName || 'Student'}</Text>
+            <Text style={sidebarStyles.webStudentName}>{studentName || 'Student'}</Text>
           </View>
 
-          <View style={styles.webMenuItems}>
+          <View style={sidebarStyles.webMenuItems}>
             {menuItems.map((item, index) => {
               const IconComponent = item.icon;
               const isActive = activeItem === item.name;
               return (
-                <TouchableOpacity key={index} onPress={() => handleItemPress(item.name)} style={[styles.webNavItem, isActive && styles.webNavItemActive]}>
+                <TouchableOpacity key={index} onPress={() => handleItemPress(item.name)} style={[sidebarStyles.webNavItem, isActive && sidebarStyles.webNavItemActive]}>
                   <IconComponent size={20} color={isActive ? '#FFF' : '#374151'} />
-                  <Text style={[styles.webNavText, isActive && styles.webNavTextActive]}>{item.name}</Text>
+                  <Text style={[sidebarStyles.webNavText, isActive && sidebarStyles.webNavTextActive]}>{item.name}</Text>
                 </TouchableOpacity>
               );
             })}
           </View>
 
-          <View style={styles.webFooter}>
+          <View style={sidebarStyles.webFooter}>
             <TouchableOpacity onPress={() => Linking.openURL('mailto:support@gogrowsmart.com?subject=Complaint')}>
-              <Text style={styles.webFooterLink}>Raise a Complaint</Text>
+              <Text style={sidebarStyles.webFooterLink}>Raise a Complaint</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleLogout} style={styles.webLogoutRow}>
+            <TouchableOpacity onPress={handleLogout} style={sidebarStyles.webLogoutRow}>
               <LogoutIcon size={18} color="#374151" />
-              <Text style={styles.webLogoutText}>Log Out</Text>
+              <Text style={sidebarStyles.webLogoutText}>Log Out</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -94,6 +98,8 @@ const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, student
       Linking.openURL("https://gogrowsmart.com/terms-and-conditions");
     } else if (itemName === "Privacy Policy") {
       Linking.openURL("https://gogrowsmart.com/privacy-policy");
+    } else if (itemName === "Favourite") {
+      router.push("/(tabs)/StudentDashBoard/Favourite");
     } else {
       onItemPress(itemName);
     }
@@ -108,7 +114,7 @@ const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, student
         // Force redirect to login page on web
         window.location.href = '/login';
       } else {
-        router.replace("/(tabs)/LoginScreen");
+        router.replace("/login");
       }
       
       Toast.show({
@@ -132,7 +138,7 @@ const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, student
       if (Platform.OS === "web") {
         window.location.href = '/login';
       } else {
-        router.replace("/(tabs)/LoginScreen");
+        router.replace("/login");
       }
       onClose();
     } finally {
@@ -219,7 +225,7 @@ const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, student
       {/* Logout Modal */}
       {showLogoutModal && (
         <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#FFF", justifyContent: "center", alignItems: "center", zIndex: 1000, paddingHorizontal: wp('8%') }}>
-          <TouchableOpacity style={{ position: "absolute", top: hp('6%'), right: wp('6%'), zIndex: 1001, backgroundColor: "#F3F4F6", width: wp('8%'), height: wp('8%'), borderRadius: wp('4%'), justifyContent: "center", alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 }} onPress={() => setShowLogoutModal(false)}>
+          <TouchableOpacity style={{ position: "absolute", top: hp('6%'), right: wp('6%'), zIndex: 1001, backgroundColor: "#F3F4F6", width: wp('8%'), height: wp('8%'), borderRadius: wp('4%'), justifyContent: "center", alignItems: "center", ...Platform.select({ web: { boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }, default: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 } }) }} onPress={() => setShowLogoutModal(false)}>
             <Text style={{ fontSize: wp('4%'), fontWeight: "600", color: "#6B7280", fontFamily: "Poppins" }}>×</Text>
           </TouchableOpacity>
           <Text style={{ color: "#111827", fontSize: wp('5%'), fontWeight: "700", textAlign: "center", fontFamily: "Poppins", marginBottom: hp('2%') }}>
@@ -237,10 +243,27 @@ const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, student
                 backgroundColor: isLoggingOut ? "#9CA3AF" : "#EF4444", 
                 justifyContent: "center", 
                 alignItems: "center", 
-                shadowColor: "#000", 
-                shadowOffset: { width: 0, height: 4 }, 
-                shadowOpacity: 0.1, 
-                shadowRadius: 8, 
+                ...Platform.select({
+ 
+                  web: {
+ 
+                    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+ 
+                  },
+ 
+                  default: {
+ 
+                    shadowColor: '#000',
+ 
+                    shadowOffset: { width: 0, height: 4 },
+ 
+                    shadowOpacity: 0.3,
+ 
+                    shadowRadius: 8,
+ 
+                  },
+ 
+                }), 
                 elevation: 4 
               }} 
               onPress={confirmLogout}
@@ -262,6 +285,94 @@ const Sidebar = ({ visible, onClose, activeItem, onItemPress, userEmail, student
     </TouchableOpacity>
   );
 };
+
+const sidebarStyles = StyleSheet.create({
+  webSidebar: {
+    width: 280,
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRightWidth: 1,
+    borderRightColor: '#E5E7EB',
+    padding: 20,
+  },
+  webProfileSection: {
+    alignItems: 'center',
+    marginBottom: 30,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  webProfilePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  webProfileInitial: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#4F46E5',
+    fontFamily: 'Poppins',
+  },
+  webStudentName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    fontFamily: 'Poppins',
+    marginBottom: 4,
+  },
+  webMenuItems: {
+    flex: 1,
+  },
+  webNavItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  webNavItemActive: {
+    backgroundColor: '#EEF2FF',
+  },
+  webNavText: {
+    fontSize: 16,
+    color: '#6B7280',
+    fontFamily: 'Poppins',
+    marginLeft: 12,
+  },
+  webNavTextActive: {
+    color: '#4F46E5',
+    fontWeight: '600',
+  },
+  webFooter: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 20,
+  },
+  webFooterLink: {
+    fontSize: 14,
+    color: '#4F46E5',
+    fontFamily: 'Poppins',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  webLogoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  webLogoutText: {
+    fontSize: 16,
+    color: '#EF4444',
+    fontFamily: 'Poppins',
+    fontWeight: '600',
+  },
+});
 
 export default Sidebar;
 

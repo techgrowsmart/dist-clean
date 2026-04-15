@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   ImageBackground,
   Animated,
+  Platform,
 } from 'react-native';
 import {
   useFonts,
@@ -456,11 +457,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    shadowColor: 'rgba(0,0,0,0.06)',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
-    elevation: 3,
+    ...Platform.select({
+      web: { boxShadow: '0 6px 10px rgba(0,0,0,0.06)' },
+      default: { shadowColor: 'rgba(0,0,0,0.06)', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 1, shadowRadius: 10, elevation: 3 },
+    }),
   },
   tutorTagPill: {
     paddingHorizontal: 12,
@@ -475,10 +475,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   tutorAvatarGlowWrapper: {
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    elevation: 4,
+    ...Platform.select({
+      web: { boxShadow: '0 6px 14px rgba(0,0,0,0.4)' },
+      default: { shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 14, elevation: 4 },
+    }),
   },
   tutorAvatarBig: {
     width: 80,

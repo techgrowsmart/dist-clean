@@ -56,16 +56,25 @@ const StudentsList: React.FC<StudentsListProps> = ({ students, onBack }) => {
     );
 
     const renderStudentCard = ({ item }: { item: Student }) => (
-        <View style={styles.studentCard}>
-            <Image 
-                source={{ uri: item.profilePic }} 
-                style={styles.studentImage} 
-                resizeMode="cover"
-            />
+        <TouchableOpacity style={styles.studentCard} activeOpacity={0.8}>
+            {item.profilePic ? (
+                <Image
+                    source={{ uri: item.profilePic }}
+                    style={styles.studentImage}
+                    resizeMode="cover"
+                    onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
+                />
+            ) : (
+                <View style={[styles.studentImage, { backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ fontSize: responsiveSize(40), color: '#5f5fff', fontWeight: 'bold' }}>
+                        {item.name?.charAt(0)?.toUpperCase() || '?'}
+                    </Text>
+                </View>
+            )}
             <Text style={styles.studentName} numberOfLines={2}>
-                {item.name}
+                {item.name || 'Unknown Student'}
             </Text>
-        </View>
+        </TouchableOpacity>
     );
 
     if (!fontsLoaded) {

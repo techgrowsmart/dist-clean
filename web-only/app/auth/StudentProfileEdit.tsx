@@ -250,11 +250,7 @@ const webStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 16,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   leftLogoText: {
     fontSize: 40,
@@ -267,9 +263,6 @@ const webStyles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 20,
-    textShadowColor: 'rgba(0, 0, 0, 0.4)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
   },
   brandSubtitle: {
     fontSize: 20,
@@ -277,9 +270,6 @@ const webStyles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     letterSpacing: 3,
-    textShadowColor: 'rgba(0, 0, 0, 0.4)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
   },
   rightColumn: {
     flex: 1,
@@ -356,10 +346,27 @@ const webStyles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     marginTop: 20,
-    shadowColor: '#7C4DDB',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 12,
   },
   saveButtonDisabled: {
@@ -436,10 +443,27 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 20,
-    shadowColor: '#7C4DDB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 8,
   },
   saveButtonDisabled: {

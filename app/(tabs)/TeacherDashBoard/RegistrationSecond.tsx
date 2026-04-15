@@ -189,7 +189,7 @@ const RegistrationSecond = () => {
   ) => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         quality: 0.7,
       });
@@ -433,7 +433,7 @@ const RegistrationSecond = () => {
 
           {/* Form */}
           <View style={styles.content}>
-            <Text style={styles.tutor}>Become a Tutor</Text>
+            <Text style={styles.tutor}>Befcome a Tutor</Text>
 
             <View style={styles.mainContent}>
               <Text style={styles.mainContentTtile}>Personal Information</Text>

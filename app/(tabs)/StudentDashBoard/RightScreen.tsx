@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Image, ImageBackground, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Image, ImageBackground, ActivityIndicator, Alert, Modal, TextInput, Platform } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFonts, Quicksand_400Regular, Quicksand_500Medium, Quicksand_600SemiBold, Quicksand_700Bold } from '@expo-google-fonts/quicksand';
 import { getAuthData, storeAuthData } from '../../../utils/authStorage';
@@ -36,55 +36,51 @@ const getProfileImageSource = (profilePic?: string) => {
 
 // Helper function to format teacher names
 const formatTeacherName = (name: string, email: string): string => {
+  // If name is null, undefined, or empty, use email as fallback
+  if (!name || name === 'null' || name === 'undefined' || name.trim() === '') {
+    if (email && email.includes('@')) {
+      const emailUsername = email.split('@')[0];
+      // Format email username to be more readable
+      const formattedName = emailUsername.replace(/[0-9]/g, '').replace(/[_\.]/g, ' ');
+      if (formattedName.length > 0) {
+        return formattedName.charAt(0).toUpperCase() + formattedName.slice(1).toLowerCase();
+      }
+    }
+    return 'Teacher';
+  }
+  
   // If the name looks like an email username, format it better
-  if (name && (name.includes('@') || name.match(/^[a-zA-Z0-9]+$/))) {
-    // Extract username from email if name is the email itself
-    if (name.includes('@')) {
-      name = name.split('@')[0];
-    }
-    
-    // Special handling for common patterns
-    if (name.toLowerCase().startsWith('teacher')) {
-      // For "teacher31", "teacher56", etc., extract the number and make it "Teacher 31", "Teacher 56"
-      const match = name.match(/teacher(\d+)/i);
-      if (match) {
-        return `Teacher ${match[1]}`;
-      }
-      // If just "teacher" without numbers
-      return 'Teacher';
-    }
-    
-    // Format the username to be more readable
-    // Remove numbers and capitalize first letter
-    const formattedName = name.replace(/[0-9]/g, '');
-    if (formattedName.length > 0) {
-      return formattedName.charAt(0).toUpperCase() + formattedName.slice(1).toLowerCase();
-    }
+  if (name.includes('@')) {
+    name = name.split('@')[0];
   }
   
-  // If name is already proper format, return as is
-  if (name && name.trim() && !name.includes('@')) {
-    return name.charAt(0).toUpperCase() + name.slice(1);
+  // Special handling for common patterns
+  if (name.toLowerCase().startsWith('teacher')) {
+    // For "teacher31", "teacher56", etc., extract the number and make it "Teacher 31", "Teacher 56"
+    const match = name.match(/teacher(\d+)/i);
+    if (match) {
+      return `Teacher ${match[1]}`;
+    }
+    // If just "teacher" without numbers
+    return 'Teacher';
   }
   
-  // Ultimate fallback - use email username
-  if (email && email.includes('@')) {
-    const emailUsername = email.split('@')[0];
-    if (emailUsername.toLowerCase().startsWith('teacher')) {
-      const match = emailUsername.match(/teacher(\d+)/i);
-      if (match) {
-        return `Teacher ${match[1]}`;
-      }
-      return 'Teacher';
-    }
-    
-    const cleanUsername = emailUsername.replace(/[0-9]/g, '');
-    if (cleanUsername.length > 0) {
-      return cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1).toLowerCase();
-    }
+  // If name is already proper format (contains letters and spaces), return as is with proper capitalization
+  if (name.trim() && !name.match(/^[0-9_\.@]+$/)) {
+    // Capitalize first letter of each word
+    return name.split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
   }
   
-  return 'Teacher';
+  // Format the username to be more readable
+  // Remove numbers and special characters, capitalize first letter
+  const formattedName = name.replace(/[0-9_\.]/g, ' ').trim();
+  if (formattedName.length > 0) {
+    return formattedName.charAt(0).toUpperCase() + formattedName.slice(1).toLowerCase();
+  }
+  
+  return name.charAt(0).toUpperCase() + name.slice(1);
 };
 
 interface Like {
@@ -644,7 +640,6 @@ const RightScreen: React.FC = () => {
                       <Text style={styles.authorName}>{displayName}</Text>
                       <View style={styles.roleContainer}>
                         <Text style={styles.roleText}>{displayRole}</Text>
-                        <Text style={styles.timeText}> • {post.createdAt}</Text>
                       </View>
                     </View>
                   </View>
@@ -1037,7 +1032,7 @@ const styles = StyleSheet.create({
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: hp('8%') },
   emptyStateText: { fontSize: wp('4.5%'), fontFamily: 'Quicksand_500Medium', color: '#9CA3AF', marginTop: 16 },
   emptyStateSubtext: { fontSize: wp('3.5%'), fontFamily: 'Quicksand_400Regular', color: '#D1D5DB', marginTop: 8 },
-  postCard: { backgroundColor: '#FFFFFF', borderRadius: wp('5%'), padding: wp('4%'), marginBottom: hp('2%'), shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  postCard: { backgroundColor: '#FFFFFF', borderRadius: wp('5%'), padding: wp('4%'), marginBottom: hp('2%'), ...Platform.select({ web: { boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 } }) },
   postHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   avatar: { width: wp('11%'), height: wp('11%'), borderRadius: wp('5.5%'), marginRight: wp('3%') },
   avatarPlaceholder: { backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' },

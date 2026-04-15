@@ -6,7 +6,7 @@ import {
 } from '@expo-google-fonts/mulish';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, Keyboard, KeyboardAvoidingView, Linking, Platform, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, Keyboard, KeyboardAvoidingView, Linking, Platform, StyleSheet, Text, TextInput, TouchableOpacity, Pressable, View } from 'react-native';
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import Toast from 'react-native-toast-message';
 import { BASE_URL } from '../../config';
@@ -71,11 +71,17 @@ export default function SignUpScreen() {
                     params: { otpId: data.otpId, email, name, phone },
                 });
             } else {
-                if (data.alreadyRegistered) {
+                // Handle 409 Conflict - User already registered
+                if (response.status === 409 || data.alreadyRegistered) {
                     Toast.show({ 
                         type: "error", 
-                        text1: data.message || "Email already registered" 
+                        text1: data.message || "Email already registered",
+                        text2: "Please login instead"
                     });
+                    // Optionally redirect to login after a delay
+                    setTimeout(() => {
+                        router.push("/auth/LoginOptionsScreen");
+                    }, 2000);
                 } else {
                     Alert.alert("Error", data.message || "Signup failed!");
                 }
@@ -183,8 +189,7 @@ export default function SignUpScreen() {
     // Mobile fallback
     return (
         <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                <View style={styles.contentContainer}>
+            <Pressable onPress={Keyboard.dismiss} style={styles.contentContainer}>
                     <View style={styles.backButtonContainer}>
                         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                             <Text style={styles.backButtonText}>← Back</Text>
@@ -255,8 +260,7 @@ export default function SignUpScreen() {
                             <Text style={styles.loginLink}> Login</Text>
                         </TouchableOpacity>
                     </View>
-                </View>
-            </TouchableWithoutFeedback>
+            </Pressable>
         </KeyboardAvoidingView>
     );
 }

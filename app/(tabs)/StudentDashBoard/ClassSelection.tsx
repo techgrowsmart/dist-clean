@@ -14,6 +14,7 @@ import { Montserrat_400Regular } from '@expo-google-fonts/montserrat';
 import Sidebar from "./Sidebar";
 import WebSidebar from "../../../components/ui/WebSidebar";
 import WebNavbar from "../../../components/ui/WebNavbar";
+import ResponsiveSidebar from "../../../components/ui/ResponsiveSidebar";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
 
@@ -38,7 +39,12 @@ const Banner = () => (
 );
 
 const ClassCard = ({ item, onPress, isFromFallback = false }: { item: any; onPress: () => void; isFromFallback?: boolean }) => (
-  <TouchableOpacity style={styles.classCardWrapper} onPress={onPress}>
+  <TouchableOpacity 
+    style={styles.classCardWrapper} 
+    onPress={onPress}
+    activeOpacity={0.7}
+    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+  >
     <View style={styles.classCardContainer}>
       <Image source={{ uri: item.image }} style={styles.classCardImage} resizeMode="cover" />
       <View style={styles.classCardContent}>
@@ -73,8 +79,15 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
   const finalBoardName = boardName || (localParams.boardName as string) || '';
   const finalBoardId = boardId || (localParams.boardId as string) || '';
   
+  // Detect if this is a university selection
+  const isUniversities = localParams.isUniversities === 'true' || 
+                         finalBoardName === 'All Universities' ||
+                         finalBoardName === 'Universities' ||
+                         finalBoardId === 'board_universities';
+  
   const [classesData, setClassesData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedUniversity, setSelectedUniversity] = useState<any | null>(null);
   
   let [fontsLoaded] = useFonts({ Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Roboto_500Medium, OpenSans_500Medium, OpenSans_300Light, OpenSans_400Regular, Montserrat_400Regular });
 
@@ -100,6 +113,30 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
   const [reportItemId, setReportItemId] = useState('');
   const [reportReason, setReportReason] = useState('');
 
+  const handleBackPress = () => {
+    if (selectedUniversity) {
+      // If showing years, go back to universities list
+      setSelectedUniversity(null);
+    } else if (onBack) {
+      onBack();
+    } else {
+      router.back();
+    }
+  };
+
+  // ESC key handler for web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleBackPress();
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [onBack]);
+
   // Fetch classes for the selected board
   useEffect(() => {
     const fetchClasses = async () => {
@@ -124,50 +161,142 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
           'Content-Type': 'application/json' 
         };
         
-        console.log('🔄 Fetching classes for boardId:', finalBoardId);
+        console.log('🔄 Fetching data for boardId:', finalBoardId, 'isUniversities:', isUniversities, 'selectedUniversity:', selectedUniversity);
         
-        const response = await axios.post(`${BASE_URL}/api/board`, 
-          { boardId: finalBoardId }, 
-          { headers }
-        );
+        let response;
         
-        console.log('📊 Backend classes response:', response.data);
-        console.log('📊 Response status:', response.status);
-        
-        if (response.data && response.data.classes) {
-          console.log('✅ Classes received from API:', response.data.classes);
+        if (isUniversities && selectedUniversity) {
+          // Show years for selected university
+          console.log('🎓 Fetching years for university:', selectedUniversity.universityName);
+          response = await axios.post(`${BASE_URL}/api/universities/${selectedUniversity.universityId}/years`, {}, { headers });
           
-          // Filter for classes 6-12 only
-          const filteredClasses = response.data.classes.filter((cls: any) => {
-            const classNumber = parseInt(cls.className.replace(/[^0-9]/g, ''));
-            return classNumber >= 6 && classNumber <= 12;
-          });
+          if (response.data && response.data.years) {
+            console.log('✅ Years received from API:', response.data.years);
+            
+            const yearsList = response.data.years.map((year: any) => ({
+              id: year.yearId,
+              classId: year.yearId,
+              className: year.yearName,
+              teacherCount: year.teacherCount || 0,
+              universityId: selectedUniversity.universityId,
+              universityName: selectedUniversity.universityName,
+              year: year.yearName,
+              yearId: year.yearId,
+              isYear: true
+            }));
+            
+            console.log('🎯 Years list:', yearsList);
+            
+            const imageUrls = [
+              'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=300&q=80',
+              'https://images.unsplash.com/photo-1546410531-bea422015320?w=300&q=80',
+              'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=300&q=80',
+              'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=300&q=80',
+              'https://images.unsplash.com/photo-1588072432836-e10032774350?w=300&q=80',
+              'https://images.unsplash.com/photo-1522661067900-ab829854a57f?w=300&q=80'
+            ];
+            
+            const yearsWithImages = yearsList.map((year: any, index: number) => ({
+              ...year,
+              image: imageUrls[index % imageUrls.length]
+            }));
+            
+            setClassesData(yearsWithImages);
+          } else {
+            console.log('⚠️ No years data received');
+            setClassesData([]);
+          }
+        } else if (isUniversities) {
+          // For universities, fetch universities list
+          console.log('🎓 Fetching universities list from:', `${BASE_URL}/api/universities`);
+          response = await axios.post(`${BASE_URL}/api/universities`, {}, { headers });
           
-          console.log('🎯 Filtered classes 6-12:', filteredClasses);
+          console.log('📡 Full API response:', response.data);
           
-          // Add images for classes 6-12
-          const imageUrls = [
-            'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=300&q=80',
-            'https://images.unsplash.com/photo-1546410531-bea422015320?w=300&q=80',
-            'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=300&q=80',
-            'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=300&q=80',
-            'https://images.unsplash.com/photo-1588072432836-e10032774350?w=300&q=80',
-            'https://images.unsplash.com/photo-1522661067900-ab829854a57f?w=300&q=80',
-            'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&q=80'
-          ];
-          
-          const classesWithImages = filteredClasses.map((cls: any, index: number) => ({
-            ...cls,
-            image: imageUrls[index % imageUrls.length],
-            // Ensure we use the real teacherCount from backend
-            teacherCount: cls.teacherCount || 0
-          }));
-          
-          console.log('🎨 Classes with images and real teacher counts:', classesWithImages);
-          
-          setClassesData(classesWithImages);
+          if (response.data && Array.isArray(response.data)) {
+            console.log('✅ Universities received from API:', response.data);
+            
+            // Show universities only (not combined with years)
+            const universitiesList = response.data.map((university: any) => ({
+              id: university.universityId,
+              classId: university.universityId,
+              className: university.universityName,
+              teacherCount: university.teacherCount || 0,
+              universityId: university.universityId,
+              universityName: university.universityName,
+              isUniversity: true,
+              image: university.image || null
+            }));
+            
+            console.log('🎯 Universities list:', universitiesList);
+            
+            // Add images for universities if not provided by API
+            const imageUrls = [
+              'https://images.unsplash.com/photo-1592280771190-3e2e4d571952?w=400&q=80',
+              'https://images.unsplash.com/photo-1562774053-701939374585?w=400&q=80',
+              'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=400&q=80',
+              'https://images.unsplash.com/photo-1571260899304-425eee4c7efc?w=400&q=80',
+              'https://images.unsplash.com/photo-1544531586-fde5298cdd40?w=400&q=80',
+              'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=400&q=80',
+              'https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=400&q=80'
+            ];
+            
+            const universitiesWithImages = universitiesList.map((uni: any, index: number) => ({
+              ...uni,
+              image: uni.image || imageUrls[index % imageUrls.length]
+            }));
+            
+            setClassesData(universitiesWithImages);
+          } else {
+            console.log('⚠️ No universities data received, response.data:', response.data);
+            setClassesData([]);
+          }
         } else {
-          console.error('❌ Invalid response structure:', response.data);
+          // For regular boards, fetch classes
+          console.log('🔄 Fetching classes for boardId:', finalBoardId);
+          response = await axios.post(`${BASE_URL}/api/board`, 
+            { boardId: finalBoardId }, 
+            { headers }
+          );
+          
+          console.log('📊 Backend classes response:', response.data);
+          console.log('📊 Response status:', response.status);
+          
+          if (response.data && response.data.classes) {
+            console.log('✅ Classes received from API:', response.data.classes);
+            
+            // Filter based on type: boards use classes 6-12
+            const filteredClasses = response.data.classes.filter((cls: any) => {
+              const classNumber = parseInt(cls.className.replace(/[^0-9]/g, ''));
+              return classNumber >= 6 && classNumber <= 12;
+            });
+            
+            console.log('🎯 Filtered classes:', filteredClasses);
+            
+            // Add images for classes 6-12
+            const imageUrls = [
+              'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=300&q=80',
+              'https://images.unsplash.com/photo-1546410531-bea422015320?w=300&q=80',
+              'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=300&q=80',
+              'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=300&q=80',
+              'https://images.unsplash.com/photo-1588072432836-e10032774350?w=300&q=80',
+              'https://images.unsplash.com/photo-1522661067900-ab829854a57f?w=300&q=80',
+              'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&q=80'
+            ];
+            
+            const classesWithImages = filteredClasses.map((cls: any, index: number) => ({
+              ...cls,
+              image: imageUrls[index % imageUrls.length],
+              // Ensure we use the real teacherCount from backend
+              teacherCount: cls.teacherCount || 0
+            }));
+            
+            console.log('🎨 Classes with images and real teacher counts:', classesWithImages);
+            
+            setClassesData(classesWithImages);
+          } else {
+            console.error('❌ Invalid response structure:', response.data);
+          }
         }
       } catch (error: any) {
         console.error('❌ Error fetching classes from API:', error);
@@ -179,15 +308,31 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
         
         // Only use fallback if API completely fails, but log it clearly
         console.warn('⚠️ Using fallback data - API failed');
-        const fallbackClasses = [
-          { id: '6', name: 'Class 6', teacherCount: 0, image: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=300&q=80' },
-          { id: '7', name: 'Class 7', teacherCount: 0, image: 'https://images.unsplash.com/photo-1546410531-bea422015320?w=300&q=80' },
-          { id: '8', name: 'Class 8', teacherCount: 0, image: 'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=300&q=80' },
-          { id: '9', name: 'Class 9', teacherCount: 0, image: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=300&q=80' },
-          { id: '10', name: 'Class 10', teacherCount: 0, image: 'https://images.unsplash.com/photo-1588072432836-e10032774350?w=300&q=80' },
-          { id: '11', name: 'Class 11', teacherCount: 0, image: 'https://images.unsplash.com/photo-1522661067900-ab829854a57f?w=300&q=80' },
-          { id: '12', name: 'Class 12', teacherCount: 0, image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&q=80' }
-        ];
+        
+        // Use different fallback data based on type (universities vs boards)
+        let fallbackClasses;
+        if (isUniversities) {
+          // For universities, show years 1-6
+          fallbackClasses = [
+            { id: 'year_1', classId: 'year_1', name: '1st Year', className: 'Year 1', teacherCount: 0, image: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=300&q=80' },
+            { id: 'year_2', classId: 'year_2', name: '2nd Year', className: 'Year 2', teacherCount: 0, image: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=300&q=80' },
+            { id: 'year_3', classId: 'year_3', name: '3rd Year', className: 'Year 3', teacherCount: 0, image: 'https://images.unsplash.com/photo-1562774053-701939374585?w=300&q=80' },
+            { id: 'year_4', classId: 'year_4', name: '4th Year', className: 'Year 4', teacherCount: 0, image: 'https://images.unsplash.com/photo-1592280771190-3e2e4d571952?w=300&q=80' },
+            { id: 'year_5', classId: 'year_5', name: '5th Year', className: 'Year 5', teacherCount: 0, image: 'https://images.unsplash.com/photo-1564062022182-482f4d5e1b21?w=300&q=80' },
+            { id: 'year_6', classId: 'year_6', name: '6th Year', className: 'Year 6', teacherCount: 0, image: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=300&q=80' }
+          ];
+        } else {
+          // For boards, show classes 6-12
+          fallbackClasses = [
+            { id: '6', classId: '6', name: 'Class 6', className: 'Class 6', teacherCount: 0, image: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=300&q=80' },
+            { id: '7', classId: '7', name: 'Class 7', className: 'Class 7', teacherCount: 0, image: 'https://images.unsplash.com/photo-1546410531-bea422015320?w=300&q=80' },
+            { id: '8', classId: '8', name: 'Class 8', className: 'Class 8', teacherCount: 0, image: 'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=300&q=80' },
+            { id: '9', classId: '9', name: 'Class 9', className: 'Class 9', teacherCount: 0, image: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=300&q=80' },
+            { id: '10', classId: '10', name: 'Class 10', className: 'Class 10', teacherCount: 0, image: 'https://images.unsplash.com/photo-1588072432836-e10032774350?w=300&q=80' },
+            { id: '11', classId: '11', name: 'Class 11', className: 'Class 11', teacherCount: 0, image: 'https://images.unsplash.com/photo-1522661067900-ab829854a57f?w=300&q=80' },
+            { id: '12', classId: '12', name: 'Class 12', className: 'Class 12', teacherCount: 0, image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&q=80' }
+          ];
+        }
         
         // Store fallback data with a flag
         const fallbackDataWithFlag = fallbackClasses.map(cls => ({ ...cls, isFromFallback: true }));
@@ -198,7 +343,7 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
     };
     
     fetchClasses();
-  }, [finalBoardId]);
+  }, [finalBoardId, selectedUniversity]);
 
   // ── Load user role ──
   useEffect(() => {
@@ -264,8 +409,9 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
 
   const resolvePostAuthor = (post: any) => {
     const cached = userProfileCache.get(post.author?.email) || { name: '', profilePic: '' };
-    let name = cached.name || post.author?.name || '';
-    let pic: string | null = cached.profilePic || post.author?.profile_pic || null;
+    // Prioritize post.author.name first, then cache, then fallback
+    let name = post.author?.name || cached.name || '';
+    let pic: string | null = post.author?.profile_pic || cached.profilePic || null;
     if (!name || name === 'null' || name.includes('@')) name = post.author?.email?.split('@')[0] || 'User';
     if (pic && !pic.startsWith('http') && !pic.startsWith('/')) pic = `/${pic}`;
     if (pic === '' || pic === 'null') pic = null;
@@ -358,7 +504,7 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
     if (itemName === "Profile") router.push("/(tabs)/StudentDashBoard/Profile");
     if (itemName === "Billing") router.push({ pathname: "/(tabs)/Billing", params: { userEmail, userType: userRole } });
     if (itemName === "Faq") router.push("/(tabs)/StudentDashBoard/Faq");
-    if (itemName === "Share") router.push({ pathname: "/(tabs)/StudentDashBoard/Share", params: { userEmail, studentName, profileImage } });
+    if (itemName === "Share") router.push({ pathname: "/(tabs)/StudentDashBoard/Share", params: { userEmail, studentName: "Student", profileImage: null } });
     if (itemName === "Subscription") router.push({ pathname: "/(tabs)/StudentDashBoard/Subscription", params: { userEmail } });
     if (itemName === "Terms") router.push("/(tabs)/StudentDashBoard/TermsAndConditions");
     if (itemName === "Contact Us") router.push("/(tabs)/Contact");
@@ -368,54 +514,13 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* ── WEB HEADER - Full Width ── */}
-      {isDesktop && (
-        <WebNavbar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-        />
-      )}
-
-      <View style={styles.rootContainer}>
-
-        {/* ── MOBILE TOP NAVBAR ── */}
-        {!isDesktop && (
-          <View style={styles.topHeader}>
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color={COLORS.textSecondary} style={styles.searchIcon} />
-              <TextInput placeholder="Type in search" placeholderTextColor={COLORS.textSecondary} style={styles.searchInput as any} value={searchQuery} onChangeText={setSearchQuery} />
-            </View>
-            <View style={styles.profileHeaderSection}>
-              <TouchableOpacity style={styles.bellIcon} onPress={() => router.push("/(tabs)/StudentDashBoard/StudentNotification")}>
-                <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
-                {unreadCount > 0 && (
-                  <View style={styles.notificationBadge}><Text style={styles.notificationText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>
-                )}
-              </TouchableOpacity>
-              <Text style={styles.headerUserName}>Student</Text>
-              <Image source={require("../../../assets/images/Profile.png")} style={styles.headerAvatar} />
-            </View>
-          </View>
-        )}
-
-        {/* ── LEFT SIDEBAR (WebSidebar component — desktop only, no duplicate) ── */}
-        {isDesktop && (
-          <WebSidebar
-            activeItem={sidebarActiveItem}
-            onItemPress={handleSidebarItemPress}
-            userEmail={userEmail || "student@example.com"}
-          />
-        )}
-
-        {/* ── LEFT SIDEBAR (reused component) ── */}
-        <Sidebar
-          visible={!isDesktop}
-          onClose={() => {}}
-          activeItem={activeMenu}
-          onItemPress={handleSidebarItemPress}
-          userEmail={userEmail || "student@example.com"}
-        />
-
+      <ResponsiveSidebar
+        activeItem={sidebarActiveItem}
+        onItemPress={handleSidebarItemPress}
+        userEmail={userEmail || ""}
+        studentName="Student"
+        profileImage={null}
+      >
         {/* ── MAIN AREA ── */}
         <View style={styles.mainLayout}>
 
@@ -435,10 +540,10 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
                     
                     {/* Navigation Title Header */}
                     <View style={styles.pageNavHeader}>
-                      <TouchableOpacity style={styles.backButton} onPress={onBack || (() => router.back())}>
+                      <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
                         <Ionicons name="arrow-back" size={20} color={COLORS.textPrimary} />
                       </TouchableOpacity>
-                      <Text style={styles.pageTitle}>{finalBoardName} | All Classes</Text>
+                      <Text style={styles.pageTitle}>{selectedUniversity ? selectedUniversity.universityName + ' - Years' : (isUniversities ? 'Universities' : finalBoardName + ' | Class')}</Text>
                     </View>
 
                     {/* Main Bounded Container */}
@@ -450,13 +555,13 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
                         {loading ? (
                           <View style={styles.loadingContainer}>
                             <ActivityIndicator size="large" color={COLORS.primary} />
-                            <Text style={styles.loadingText}>Loading classes...</Text>
+                            <Text style={styles.loadingText}>Loading {selectedUniversity ? 'years' : 'universities'}...</Text>
                           </View>
                         ) : classesData.length > 0 ? (
-                          classesData.map((classItem) => (
-                            <ClassCard 
-                              key={classItem.id} 
-                              item={classItem} 
+                          classesData.map((classItem, index) => (
+                            <ClassCard
+                              key={`${classItem.id || classItem.classId || 'class'}-${index}`}
+                              item={classItem}
                               isFromFallback={classItem.isFromFallback}
                               onPress={() => {
                               console.log('🎯 ClassItem pressed:', classItem);
@@ -464,9 +569,45 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
                                 id: classItem.id,
                                 classId: classItem.classId,
                                 name: classItem.name,
-                                className: classItem.className
+                                className: classItem.className,
+                                universityId: classItem.universityId,
+                                universityName: classItem.universityName,
+                                year: classItem.year,
+                                yearId: classItem.yearId,
+                                isUniversity: classItem.isUniversity,
+                                isYear: classItem.isYear
                               });
                               
+                              // Handle university selection
+                              if (classItem.isUniversity) {
+                                setSelectedUniversity(classItem);
+                                return;
+                              }
+                              
+                              // Handle year selection - navigate to SubjectSelection
+                              if (classItem.isYear) {
+                                const params: any = { 
+                                  boardName: finalBoardName, 
+                                  boardId: finalBoardId,
+                                  classId: classItem.yearId,
+                                  className: classItem.year,
+                                  isUniversities: 'true',
+                                  universityId: classItem.universityId,
+                                  universityName: classItem.universityName,
+                                  year: classItem.year,
+                                  yearId: classItem.yearId,
+                                  yearIndex: classItem.yearId
+                                };
+                                
+                                console.log('🚀 Navigating to SubjectSelection with params:', params);
+                                router.push({
+                                  pathname: '/(tabs)/StudentDashBoard/SubjectSelection',
+                                  params: params
+                                });
+                                return;
+                              }
+                              
+                              // Regular board flow
                               if (onClassSelect) {
                                 const selectedClass = { 
                                   classId: classItem.classId || classItem.id, 
@@ -475,25 +616,27 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
                                 console.log('🚀 Calling onClassSelect with:', selectedClass);
                                 onClassSelect(selectedClass);
                               } else {
-                                // Navigate to the web UI version from growsmart-ui-screens
-                                console.log('Class selected:', { classId: classItem.classId || classItem.id, className: classItem.className || classItem.name });
+                                // Navigate to SubjectSelection
+                                const params: any = { 
+                                  boardName: finalBoardName, 
+                                  boardId: finalBoardId,
+                                  classId: classItem.classId || classItem.id,
+                                  className: classItem.className || classItem.name
+                                };
+                                
+                                console.log('🚀 Navigating to SubjectSelection with params:', params);
                                 router.push({
                                   pathname: '/(tabs)/StudentDashBoard/SubjectSelection',
-                                  params: { 
-                                    boardName: finalBoardName, 
-                                    boardId: finalBoardId,
-                                    classId: classItem.classId || classItem.id,
-                                    className: classItem.className || classItem.name
-                                  }
-                                } as any);
+                                  params: params
+                                });
                               }
                             }}
                             />
                           ))
                         ) : (
                           <View style={styles.emptyContainer}>
-                            <Text style={styles.emptyTitle}>No Classes Available</Text>
-                            <Text style={styles.emptyText}>No classes found for this board.</Text>
+                            <Text style={styles.emptyTitle}>No {selectedUniversity ? 'Years' : 'Universities'} Available</Text>
+                            <Text style={styles.emptyText}>No {selectedUniversity ? 'years' : 'universities'} found for this {selectedUniversity ? 'university' : 'board'}.</Text>
                           </View>
                         )}
                       </View>
@@ -502,23 +645,42 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
 
                     {/* Pagination */}
                     <View style={styles.paginationRow}>
-                      <TouchableOpacity style={styles.pageBtnInactiveArrow}>
+                      <TouchableOpacity 
+                        style={styles.pageBtnInactiveArrow}
+                        onPress={() => console.log('Previous page')}
+                        disabled
+                      >
                         <Ionicons name="chevron-back" size={16} color={COLORS.textPrimary} />
                       </TouchableOpacity>
                       
-                      <TouchableOpacity style={styles.pageBtnActive}>
+                      <TouchableOpacity 
+                        style={styles.pageBtnActive}
+                        onPress={() => console.log('Page 1 selected')}
+                      >
                         <Text style={styles.pageBtnUserTextActive}>1</Text>
                       </TouchableOpacity>
                       
-                      <TouchableOpacity style={styles.pageBtnInactive}>
+                      <TouchableOpacity 
+                        style={styles.pageBtnInactive}
+                        onPress={() => console.log('Page 2 selected')}
+                        activeOpacity={0.7}
+                      >
                         <Text style={styles.pageBtnUserTextInactive}>2</Text>
                       </TouchableOpacity>
                       
-                      <TouchableOpacity style={styles.pageBtnInactive}>
+                      <TouchableOpacity 
+                        style={styles.pageBtnInactive}
+                        onPress={() => console.log('Page 3 selected')}
+                        activeOpacity={0.7}
+                      >
                         <Text style={styles.pageBtnUserTextInactive}>3</Text>
                       </TouchableOpacity>
                       
-                      <TouchableOpacity style={styles.pageBtnInactiveArrow}>
+                      <TouchableOpacity 
+                        style={styles.pageBtnInactiveArrow}
+                        onPress={() => console.log('Next page')}
+                        activeOpacity={0.7}
+                      >
                         <Ionicons name="chevron-forward" size={16} color={COLORS.textPrimary} />
                       </TouchableOpacity>
                     </View>
@@ -528,35 +690,9 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
               </View>
             </View>
 
-            {/* RIGHT: Thoughts Panel (ThoughtsCard reused from Student.tsx) */}
-            <View style={styles.rightPanel}>
-              <Text style={styles.rightPanelTitle}>Thoughts</Text>
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.thoughtsList}>
-                {postsLoading && posts.length === 0 && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 30 }} />}
-                {!postsLoading && posts.length === 0 && (
-                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                    <MaterialIcons name="post-add" size={40} color="#ccc" />
-                    <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No thoughts yet</Text>
-                  </View>
-                )}
-                {posts.map((post) => (
-                  <ThoughtsCard
-                    key={post.id}
-                    post={post}
-                    onLike={handleLike}
-                    onComment={openCommentsModal}
-                    onReport={(p) => { setReportType('post'); setReportItemId(p.id); setReportReason(''); setShowReportModal(true); }}
-                    getProfileImageSource={getProfileImageSource}
-                    initials={initials}
-                    resolvePostAuthor={resolvePostAuthor}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-
           </View>
         </View>
-      </View>
+      </ResponsiveSidebar>
 
       {/* ── Comments Modal ── */}
       <Modal visible={showCommentsModal} animationType="slide" transparent onRequestClose={() => setShowCommentsModal(false)}>
@@ -627,9 +763,19 @@ const styles = StyleSheet.create({
   
   // Class Selection specific styles
   pageNavHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
-  backButton: { 
-    width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, 
-    justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.cardBackground, marginRight: 16 
+  backButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: COLORS.cardBackground,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    marginRight: 16,
   },
   boxContainer: {
     backgroundColor: COLORS.cardBackground,

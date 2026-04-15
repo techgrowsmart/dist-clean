@@ -1,17 +1,17 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
+    Platform,
     ActivityIndicator,
     Alert,
     Image,
     Keyboard,
     KeyboardAvoidingView,
-    Platform,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    TouchableWithoutFeedback,
+    Pressable,
     View,
     Dimensions,
 } from "react-native";
@@ -125,13 +125,11 @@ export default function LoginOtp() {
 
         Alert.alert("Success", "Login successful!");
         
-        setTimeout(() => {
-          if (data.role === "teacher") {
-            router.replace("/(tabs)/TeacherDashBoard/Teacher");
-          } else {
-            router.replace("/(tabs)/StudentDashBoard/Student");
-          }
-        }, 1000);
+        if (data.role === "teacher") {
+          router.replace("/(tabs)/TeacherDashBoard/Teacher");
+        } else {
+          router.replace("/(tabs)/StudentDashBoard/Student");
+        }
       } else {
         Alert.alert("Error", data.message || "Invalid OTP");
       }
@@ -183,8 +181,7 @@ export default function LoginOtp() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? hp('5%') : hp('2%')}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.innerContainer}>
+      <Pressable onPress={Keyboard.dismiss} style={styles.innerContainer}>
           {isLargeScreen ? (
             // Web/Desktop Layout
             <View style={styles.webContainer}>
@@ -299,8 +296,7 @@ export default function LoginOtp() {
               )}
             </>
           )}
-        </View>
-      </TouchableWithoutFeedback>
+        </Pressable>
     </KeyboardAvoidingView>
   );
 }

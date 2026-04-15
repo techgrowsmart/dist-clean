@@ -45,7 +45,7 @@ const CropConfirmationModal: React.FC<CropConfirmationModalProps> = ({
         <View style={styles.modalContainer}>
           <Text style={styles.modalTitle}>Confirm Crop</Text>
           <Text style={styles.modalMessage}>
-            Are you sure you want to save this image?.
+            Are you sure you want to save this image
           </Text>
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>

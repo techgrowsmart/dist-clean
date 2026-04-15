@@ -22,6 +22,7 @@ import {
 import { useRouter } from 'expo-router';
 import { getAuthData } from '../../../utils/authStorage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BASE_URL } from '../../../config';
 
 interface WebTeacherSidebarProps {
   activeItem: string;
@@ -59,7 +60,7 @@ export default function WebTeacherSidebar({
               style: 'destructive',
               onPress: async () => {
                 await AsyncStorage.clear();
-                router.push('/login' as any);
+                router.push({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } });
               },
             },
           ]
@@ -83,6 +84,28 @@ export default function WebTeacherSidebar({
         <View style={styles.logoContainer}>
           <Text style={styles.logoText}>Growsmart</Text>
         </View>
+
+        {/* Profile with avatar */}
+        <TouchableOpacity
+          style={[styles.navItem, activeItem === 'Profile' && styles.activeNavItem]}
+          onPress={() => handleNavigation('Profile', '/(tabs)/TeacherDashBoard/ProfileWeb')}
+        >
+          <View style={styles.avatar}>
+            {profileImage ? (
+              <Image
+                source={{ uri: profileImage.startsWith('http') ? profileImage : `${BASE_URL}${profileImage.startsWith('/') ? '' : '/'}${profileImage}` }}
+                style={{ width: 28, height: 28, borderRadius: 14 }}
+              />
+            ) : (
+              <Ionicons name="person-circle-outline" size={24} color={activeItem === 'Profile' ? '#4255ff' : '#374151'} />
+            )}
+          </View>
+          <Text style={[styles.navItemText, activeItem === 'Profile' && styles.activeNavItemText]}>
+            {teacherName || 'Teacher'}
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.divider} />
 
         {/* Main Navigation Items */}
         <TouchableOpacity
@@ -339,6 +362,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#4255ff',
     fontFamily: 'Poppins_700Bold',
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
   navItem: {
     flexDirection: 'row',

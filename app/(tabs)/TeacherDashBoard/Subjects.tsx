@@ -64,6 +64,10 @@ const Subjects = () => {
       if (response.ok) {
         const data = await response.json();
         setSubjects(data.subjects || []);
+      } else if (response.status === 500) {
+        console.error('Server error (500) fetching subjects');
+        // Don't show error UI for server errors, just empty state
+        setSubjects([]);
       } else {
         setError('Failed to fetch subjects');
       }

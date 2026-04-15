@@ -1,12 +1,14 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { View, Text, Image, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Platform, Dimensions, ScrollView, SafeAreaView, Alert, Modal } from "react-native";
+import { Platform, View, Text, Image, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Dimensions, ScrollView, SafeAreaView, Alert, Modal } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome } from '@expo/vector-icons';
 import { autoRefreshToken } from '../../../utils/tokenRefresh';
-import ThoughtsCard from './ThoughtsCard';
+import ThoughtsCard, { ThoughtsFeed } from '../StudentDashBoard/ThoughtsCard';
+import ResponsiveSidebar from '../../../components/ui/ResponsiveSidebar';
+import StudentThoughtsCard from '../../../components/ui/StudentThoughtsCard';
 import { Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, useFonts } from "@expo-google-fonts/poppins";
 import { Roboto_500Medium } from '@expo-google-fonts/roboto';
 import { OpenSans_500Medium, OpenSans_300Light, OpenSans_400Regular } from "@expo-google-fonts/open-sans";
@@ -16,6 +18,7 @@ import WebSidebar from "../../../components/ui/WebSidebar";
 import WebNavbar from "../../../components/ui/WebNavbar";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
+import BackButton from "../../../components/BackButton";
 
 const COLORS = { primary: '#3B5BFE', lightBackground: '#F5F7FB', cardBackground: '#FFFFFF', border: '#E5E7EB', textPrimary: '#1F2937', textSecondary: '#6B7280', ratingGreen: '#22C55E', ratingLight: '#DCFCE7' };
 
@@ -25,7 +28,21 @@ const MyTuitions = () => {
   const router = useRouter();
   let [fontsLoaded] = useFonts({ Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Roboto_500Medium, OpenSans_500Medium, OpenSans_300Light, OpenSans_400Regular, Montserrat_400Regular });
 
-  const isDesktop = Platform.OS === 'web' && Dimensions.get('window').width >= 1024;
+  const { width: screenWidth } = Dimensions.get('window');
+  const [isMobile, setIsMobile] = useState(Dimensions.get('window').width < 768);
+  const isDesktop = screenWidth >= 1024;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
+
+  // Update isMobile on resize
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setIsMobile(window.width < 768);
+    });
+    return () => subscription?.remove();
+  }, []);
+
+  // Generate responsive styles based on screen width
+  const styles = getResponsiveStyles(screenWidth);
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [filteredContacts, setFilteredContacts] = useState<Contact[]>([]);
@@ -39,6 +56,8 @@ const MyTuitions = () => {
   const [sidebarActiveItem, setSidebarActiveItem] = useState("My Tuitions");
   const [unreadCount, setUnreadCount] = useState(0);
   const [favoriteContacts, setFavoriteContacts] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 6;
 
   const [posts, setPosts] = useState<any[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
@@ -52,6 +71,7 @@ const MyTuitions = () => {
   const [reportType, setReportType] = useState<'post' | 'comment'>('post');
   const [reportItemId, setReportItemId] = useState('');
   const [reportReason, setReportReason] = useState('');
+  const [showConnect, setShowConnect] = useState(false);
 
   // ── Fetch profile ──
   useEffect(() => {
@@ -180,10 +200,11 @@ const MyTuitions = () => {
 
   const initials = (name: string) => name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : 'U';
 
-  const resolvePostAuthor = (post: any) => {
+  const resolvePostAuthor = (post: UnifiedPost) => {
     const cached = userProfileCache.get(post.author?.email) || { name: '', profilePic: '' };
-    let name = cached.name || post.author?.name || '';
-    let pic: string | null = cached.profilePic || post.author?.profile_pic || null;
+    // Prioritize post.author.name first, then cache, then fallback
+    let name = post.author?.name || cached.name || '';
+    let pic: string | null = post.author?.profile_pic || cached.profilePic || null;
     if (!name || name === 'null' || name.includes('@')) name = post.author?.email?.split('@')[0] || 'User';
     if (pic && !pic.startsWith('http') && !pic.startsWith('/')) pic = `/${pic}`;
     if (pic === '' || pic === 'null') pic = null;
@@ -193,6 +214,7 @@ const MyTuitions = () => {
   const fetchPosts = async (token: string) => {
     try {
       setPostsLoading(true);
+      
       const res = await axios.get(`${BASE_URL}/api/posts/all`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.data.success) {
         const postsWithComments = await Promise.all(res.data.data.map(async (post: any) => {
@@ -227,7 +249,7 @@ const MyTuitions = () => {
     } catch { setPostComments([]); }
   };
 
-  const openCommentsModal = async (post: any) => { setSelectedPost(post); setShowCommentsModal(true); setCommentText(''); await fetchPostComments(post.id); };
+  const openCommentsModal = async (post: UnifiedPost) => { setSelectedPost(post); setShowCommentsModal(true); setCommentText(''); await fetchPostComments(post.id); };
 
   const addComment = async () => {
     if (!commentText.trim() || !selectedPost || !authToken) return;
@@ -250,6 +272,16 @@ const MyTuitions = () => {
       Alert.alert('Success', 'Report submitted'); setShowReportModal(false); setReportReason('');
     } catch (err: any) { Alert.alert('Error', err.response?.data?.message || 'Failed to submit report'); }
   };
+
+  const handleBackPress = useCallback(() => { router.push('/(tabs)/StudentDashBoard/Student'); }, [router]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') handleBackPress(); };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [handleBackPress]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -277,6 +309,27 @@ const MyTuitions = () => {
     event.stopPropagation();
     router.push({ pathname: "/(tabs)/StudentDashBoard/TeacherDetails", params: { name: contact.name, email: contact.email, profilePic: contact.profilePic, showReview: "true" } });
   };
+
+  const renderWebRightSidebar = () => (
+    <StudentThoughtsCard
+      posts={posts}
+      postsLoading={postsLoading}
+      userProfileCache={userProfileCache}
+      currentUserEmail={userEmail || undefined}
+      getProfileImageSource={getProfileImageSource}
+      initials={initials}
+      resolvePostAuthor={resolvePostAuthor}
+      handleLike={handleLike}
+      setPosts={setPosts}
+      onComment={openCommentsModal}
+      isMobile={isMobile}
+      showThoughtsPanel={true}
+      authToken={authToken}
+      BASE_URL={BASE_URL}
+      formatTimeAgo={formatTimeAgo}
+      router={router}
+    />
+  );
 
   const handleSidebarItemPress = (itemName: string) => {
     setActiveMenu(itemName);
@@ -320,59 +373,138 @@ const MyTuitions = () => {
     </TouchableOpacity>
   );
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      {/* ── WEB HEADER - Full Width ── */}
-      {isDesktop && (
+  // Pagination logic
+  const totalPages = Math.ceil(filteredContacts.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedContacts = filteredContacts.slice(startIndex, endIndex);
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  // Web return with responsive sidebar and Thoughts
+  if (Platform.OS === 'web') {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#fff' }}>
+        {/* Web Header - outside ResponsiveSidebar like Student Dashboard */}
         <WebNavbar
           studentName={studentName}
           profileImage={profileImage}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
         />
-      )}
+        <View style={{ flex: 1, flexDirection: 'row', overflow: 'hidden' }}>
+          <ResponsiveSidebar
+            activeItem={sidebarActiveItem}
+            onItemPress={handleSidebarItemPress}
+            userEmail={userEmail || ""}
+            studentName={studentName || ""}
+            profileImage={profileImage || null}
+          >
+            <View style={{ flex: 1, padding: 24 }}>
+              <View style={styles.pageTitleContainer}>
+                <BackButton onPress={handleBackPress} color="white" />
+                <Ionicons name="school" size={28} color={COLORS.textPrimary} />
+                <Text style={styles.pageTitle}>My Tuitions</Text>
+              </View>
+
+              <View style={styles.gridContainerBox}>
+                <ScrollView contentContainerStyle={styles.tuitionGrid} showsVerticalScrollIndicator={false}>
+                  {loading ? (
+                    <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /><Text style={styles.loadingText}>Loading your tuitions...</Text></View>
+                  ) : paginatedContacts.length > 0 ? (
+                    <>
+                      <View style={styles.cardsWrapper}>
+                        {paginatedContacts.map((contact, index) => renderTuitionCard(contact, index))}
+                      </View>
+                      {totalPages > 1 && (
+                        <View style={styles.paginationContainer}>
+                          <TouchableOpacity 
+                            onPress={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            style={{ opacity: currentPage === 1 ? 0.5 : 1 }}
+                          >
+                            <Ionicons name="chevron-back" size={20} color={COLORS.textSecondary} />
+                          </TouchableOpacity>
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                            <TouchableOpacity 
+                              key={page} 
+                              style={[styles.pageDot, currentPage === page && styles.pageDotActive]}
+                              onPress={() => handlePageChange(page)}
+                            >
+                              <Text style={[styles.pageDotText, currentPage === page && styles.pageDotTextActive]}>{page}</Text>
+                            </TouchableOpacity>
+                          ))}
+                          <TouchableOpacity 
+                            onPress={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            style={{ opacity: currentPage === totalPages ? 0.5 : 1 }}
+                          >
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyTitle}>No Tuitions Yet</Text>
+                      <Text style={styles.emptyText}>You haven't enrolled in any tuitions yet. Start by connecting with teachers!</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            </View>
+          </ResponsiveSidebar>
+          {/* Thoughts panel - conditionally rendered based on screen size */}
+          {!showConnect && (
+            <>
+              {isMobile ? (
+                renderWebRightSidebar()
+              ) : (
+                <View style={{ width: '28%', minWidth: 280, maxWidth: 380 }}>{renderWebRightSidebar()}</View>
+              )}
+            </>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  // Mobile return
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      {/* ── MOBILE TOP NAVBAR ── */}
+      <View style={styles.topHeader}>
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={COLORS.textSecondary} style={styles.searchIcon} />
+          <TextInput placeholder="Type in search" placeholderTextColor={COLORS.textSecondary} style={styles.searchInput as any} value={searchQuery} onChangeText={setSearchQuery} />
+        </View>
+        <View style={styles.profileHeaderSection}>
+          <TouchableOpacity style={styles.bellIcon} onPress={() => router.push("/(tabs)/StudentDashBoard/StudentNotification")}>
+            <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
+            {unreadCount > 0 && (
+              <View style={styles.notificationBadge}><Text style={styles.notificationText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>
+            )}
+          </TouchableOpacity>
+          <Text style={styles.headerUserName}>{studentName || 'Student'}</Text>
+          <Image source={profileImage ? { uri: profileImage } : require("../../../assets/images/Profile.png")} style={styles.headerAvatar} />
+        </View>
+      </View>
 
       <View style={styles.rootContainer}>
 
-        {/* ── MOBILE TOP NAVBAR ── */}
-        {!isDesktop && (
-          <View style={styles.topHeader}>
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color={COLORS.textSecondary} style={styles.searchIcon} />
-              <TextInput placeholder="Type in search" placeholderTextColor={COLORS.textSecondary} style={styles.searchInput as any} value={searchQuery} onChangeText={setSearchQuery} />
-            </View>
-            <View style={styles.profileHeaderSection}>
-              <TouchableOpacity style={styles.bellIcon} onPress={() => router.push("/(tabs)/StudentDashBoard/StudentNotification")}>
-                <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
-                {unreadCount > 0 && (
-                  <View style={styles.notificationBadge}><Text style={styles.notificationText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>
-                )}
-              </TouchableOpacity>
-              <Text style={styles.headerUserName}>{studentName || 'Student'}</Text>
-              <Image source={profileImage ? { uri: profileImage } : require("../../../assets/images/Profile.png")} style={styles.headerAvatar} />
-            </View>
-          </View>
-        )}
-
-        {/* ── LEFT SIDEBAR (WebSidebar component — desktop only, no duplicate) ── */}
-        {isDesktop && (
-          <WebSidebar
-            activeItem={sidebarActiveItem}
-            onItemPress={handleSidebarItemPress}
-            userEmail={userEmail || "student@example.com"}
-            studentName={studentName || "Student"}
-            profileImage={profileImage}
-          />
-        )}
-
-        {/* ── LEFT SIDEBAR (reused component) ── */}
+        {/* ── LEFT SIDEBAR (mobile only) ── */}
         <Sidebar
-          activeMenu={activeMenu}
+          visible={false}
+          onClose={() => {}}
+          activeItem={sidebarActiveItem}
           onItemPress={handleSidebarItemPress}
-          studentName={studentName}
+          userEmail={userEmail || ""}
+          studentName={studentName || "Student"}
           profileImage={profileImage}
-          userEmail={userEmail}
-          userRole={userRole}
         />
 
         {/* ── MAIN AREA ── */}
@@ -384,6 +516,7 @@ const MyTuitions = () => {
             {/* CENTER: My Tuitions Grid */}
             <View style={styles.centerContent}>
               <View style={styles.pageTitleContainer}>
+                <BackButton onPress={handleBackPress} color="white" />
                 <Ionicons name="school" size={28} color={COLORS.textPrimary} />
                 <Text style={styles.pageTitle}>My Tuitions</Text>
               </View>
@@ -392,18 +525,38 @@ const MyTuitions = () => {
                 <ScrollView contentContainerStyle={styles.tuitionGrid} showsVerticalScrollIndicator={false}>
                   {loading ? (
                     <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /><Text style={styles.loadingText}>Loading your tuitions...</Text></View>
-                  ) : filteredContacts.length > 0 ? (
+                  ) : paginatedContacts.length > 0 ? (
                     <>
                       <View style={styles.cardsWrapper}>
-                        {filteredContacts.map((contact, index) => renderTuitionCard(contact, index))}
+                        {paginatedContacts.map((contact, index) => renderTuitionCard(contact, index))}
                       </View>
-                      <View style={styles.paginationContainer}>
-                        <TouchableOpacity><Ionicons name="chevron-back" size={20} color={COLORS.textSecondary} /></TouchableOpacity>
-                        <TouchableOpacity style={[styles.pageDot, styles.pageDotActive]}><Text style={styles.pageDotTextActive}>1</Text></TouchableOpacity>
-                        <TouchableOpacity style={styles.pageDot}><Text style={styles.pageDotText}>2</Text></TouchableOpacity>
-                        <TouchableOpacity style={styles.pageDot}><Text style={styles.pageDotText}>3</Text></TouchableOpacity>
-                        <TouchableOpacity><Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} /></TouchableOpacity>
-                      </View>
+                      {totalPages > 1 && (
+                        <View style={styles.paginationContainer}>
+                          <TouchableOpacity 
+                            onPress={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            style={{ opacity: currentPage === 1 ? 0.5 : 1 }}
+                          >
+                            <Ionicons name="chevron-back" size={20} color={COLORS.textSecondary} />
+                          </TouchableOpacity>
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                            <TouchableOpacity 
+                              key={page} 
+                              style={[styles.pageDot, currentPage === page && styles.pageDotActive]}
+                              onPress={() => handlePageChange(page)}
+                            >
+                              <Text style={[styles.pageDotText, currentPage === page && styles.pageDotTextActive]}>{page}</Text>
+                            </TouchableOpacity>
+                          ))}
+                          <TouchableOpacity 
+                            onPress={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            style={{ opacity: currentPage === totalPages ? 0.5 : 1 }}
+                          >
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </>
                   ) : (
                     <View style={styles.emptyContainer}>
@@ -413,32 +566,6 @@ const MyTuitions = () => {
                   )}
                 </ScrollView>
               </View>
-            </View>
-
-            {/* RIGHT: Thoughts Panel (ThoughtsCard reused from Student.tsx) */}
-            <View style={styles.rightPanel}>
-              <Text style={styles.rightPanelTitle}>Thoughts</Text>
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.thoughtsList}>
-                {postsLoading && posts.length === 0 && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 30 }} />}
-                {!postsLoading && posts.length === 0 && (
-                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                    <MaterialIcons name="post-add" size={40} color="#ccc" />
-                    <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No thoughts yet</Text>
-                  </View>
-                )}
-                {posts.map((post) => (
-                  <ThoughtsCard
-                    key={post.id}
-                    post={post}
-                    onLike={handleLike}
-                    onComment={openCommentsModal}
-                    onReport={(p) => { setReportType('post'); setReportItemId(p.id); setReportReason(''); setShowReportModal(true); }}
-                    getProfileImageSource={getProfileImageSource}
-                    initials={initials}
-                    resolvePostAuthor={resolvePostAuthor}
-                  />
-                ))}
-              </ScrollView>
             </View>
 
           </View>
@@ -490,68 +617,74 @@ const MyTuitions = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: COLORS.cardBackground },
-  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  rootContainer: { flex: 1, flexDirection: 'row', backgroundColor: COLORS.cardBackground },
-  mainLayout: { flex: 1, backgroundColor: COLORS.lightBackground },
-  topHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 32, paddingVertical: 20, backgroundColor: COLORS.cardBackground, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.lightBackground, borderRadius: 30, paddingHorizontal: 16, height: 44, width: Platform.OS === 'web' ? '40%' : '40%' },
-  searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, fontFamily: 'Poppins_400Regular', fontSize: 14, color: COLORS.textPrimary },
-  profileHeaderSection: { flexDirection: 'row', alignItems: 'center' },
-  bellIcon: { marginRight: 20, padding: 8, backgroundColor: COLORS.lightBackground, borderRadius: 20 },
-  notificationBadge: { position: 'absolute', top: -5, right: -5, backgroundColor: 'red', borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center' },
-  notificationText: { color: 'white', fontSize: 12, fontWeight: 'bold' },
-  headerUserName: { fontFamily: 'Poppins_500Medium', fontSize: 14, color: COLORS.textPrimary, marginRight: 12 },
-  headerAvatar: { width: 40, height: 40, borderRadius: 20 },
-  contentColumns: { flex: 1, flexDirection: 'row' },
-  centerContent: { flex: 1, paddingTop: 32, paddingHorizontal: 32, paddingBottom: 24 },
-  pageTitleContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
-  pageTitle: { fontFamily: 'Poppins_700Bold', fontSize: 24, color: COLORS.textPrimary, marginLeft: 12 },
-  gridContainerBox: { flex: 1, backgroundColor: COLORS.cardBackground, borderRadius: 20, borderWidth: 1, borderColor: '#E4ECF7', padding: 24, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 10 },
-  tuitionGrid: { paddingBottom: 20 },
-  cardsWrapper: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 16 },
-  tuitionCard: { width: '31%', minWidth: 180, marginBottom: 16, backgroundColor: COLORS.cardBackground, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden' },
-  cardImageContainer: { width: '100%', height: 180, position: 'relative' },
-  cardImage: { width: '100%', height: '100%' },
-  heartButton: { position: 'absolute', top: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 16, padding: 6 },
-  cardBody: { padding: 16 },
-  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  tagText: { color: COLORS.primary, fontFamily: 'Poppins_600SemiBold', fontSize: 10, letterSpacing: 0.5 },
-  ratingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.ratingGreen, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  ratingText: { color: '#FFFFFF', fontFamily: 'Poppins_600SemiBold', fontSize: 11, marginLeft: 4 },
-  teacherName: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.textPrimary, marginBottom: 4 },
-  teacherDesc: { fontFamily: 'Poppins_400Regular', fontSize: 11, color: COLORS.textSecondary, lineHeight: 16, marginBottom: 16 },
-  cardFooter: { alignItems: 'flex-end' },
-  reviewBtn: { backgroundColor: COLORS.ratingLight, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 },
-  reviewBtnText: { color: COLORS.textPrimary, fontFamily: 'Poppins_500Medium', fontSize: 12 },
-  paginationContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 32, gap: 8 },
-  pageDot: { width: 32, height: 32, borderRadius: 8, backgroundColor: COLORS.lightBackground, justifyContent: 'center', alignItems: 'center' },
-  pageDotActive: { backgroundColor: COLORS.textSecondary },
-  pageDotText: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.textPrimary },
-  pageDotTextActive: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: '#FFFFFF' },
-  rightPanel: { width: Platform.OS === 'web' ? '25%' : '25%', minWidth: 300, backgroundColor: COLORS.cardBackground, borderLeftWidth: 1, borderLeftColor: COLORS.border, paddingTop: 32, paddingHorizontal: 20 },
-  rightPanelTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 20, color: COLORS.primary, marginBottom: 24, textAlign: 'right' },
-  thoughtsList: { paddingBottom: 40 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },
-  loadingText: { fontSize: 16, fontFamily: 'Poppins_400Regular', color: COLORS.textSecondary, marginTop: 10 },
-  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40, marginTop: 50 },
-  emptyTitle: { fontSize: 20, fontFamily: 'Poppins_600SemiBold', color: COLORS.textPrimary, marginBottom: 10, textAlign: 'center' },
-  emptyText: { fontSize: 14, fontFamily: 'Poppins_400Regular', color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContainer: { backgroundColor: COLORS.cardBackground, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%', paddingBottom: 20 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  modalTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 18, color: COLORS.textPrimary },
-  commentsList: { paddingHorizontal: 16, paddingTop: 12 },
-  commentItem: { marginBottom: 16, padding: 12, backgroundColor: COLORS.lightBackground, borderRadius: 10 },
-  commentAuthor: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: COLORS.textPrimary, marginBottom: 4 },
-  commentContent: { fontFamily: 'Poppins_400Regular', fontSize: 13, color: COLORS.textPrimary, lineHeight: 18 },
-  commentTime: { fontFamily: 'Poppins_400Regular', fontSize: 11, color: COLORS.textSecondary, marginTop: 4 },
-  commentInputRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: COLORS.border },
-  commentInput: { flex: 1, backgroundColor: COLORS.lightBackground, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontFamily: 'Poppins_400Regular', fontSize: 14, color: COLORS.textPrimary, maxHeight: 100 },
-  commentSendBtn: { marginLeft: 10, backgroundColor: COLORS.primary, borderRadius: 20, padding: 10 },
-});
+// ─── RESPONSIVE STYLE HELPER ──────────────────────────────────────────────────────────
+const getResponsiveStyles = (screenWidth: number) => {
+  const isMobile = screenWidth < 768;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
+  const isSmallMobile = screenWidth < 375;
+
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: COLORS.cardBackground },
+    loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    rootContainer: { flex: 1, flexDirection: 'row', backgroundColor: COLORS.cardBackground },
+    mainLayout: { flex: 1, backgroundColor: COLORS.lightBackground },
+    topHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: isSmallMobile ? 12 : isMobile ? 16 : 32, paddingVertical: isSmallMobile ? 8 : isMobile ? 12 : 20, backgroundColor: COLORS.cardBackground, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+    searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.lightBackground, borderRadius: isMobile ? 20 : 30, paddingHorizontal: isSmallMobile ? 12 : 16, height: isSmallMobile ? 40 : 44, flex: 1, maxWidth: isMobile ? '50%' : '40%', marginRight: isMobile ? 8 : 12 },
+    searchIcon: { marginRight: isSmallMobile ? 8 : 10 },
+    searchInput: { flex: 1, fontFamily: 'Poppins_400Regular', fontSize: isSmallMobile ? 13 : 14, color: COLORS.textPrimary },
+    profileHeaderSection: { flexDirection: 'row', alignItems: 'center' },
+    bellIcon: { marginRight: isMobile ? 12 : 20, padding: isSmallMobile ? 6 : 8, backgroundColor: COLORS.lightBackground, borderRadius: 20 },
+    notificationBadge: { position: 'absolute', top: -5, right: -5, backgroundColor: 'red', borderRadius: 10, minWidth: isSmallMobile ? 18 : 20, height: isSmallMobile ? 18 : 20, justifyContent: 'center', alignItems: 'center' },
+    notificationText: { color: 'white', fontSize: isSmallMobile ? 10 : 12, fontWeight: 'bold' },
+    headerUserName: { fontFamily: 'Poppins_500Medium', fontSize: isSmallMobile ? 12 : isMobile ? 13 : 14, color: COLORS.textPrimary, marginRight: isMobile ? 8 : 12 },
+    headerAvatar: { width: isSmallMobile ? 36 : 40, height: isSmallMobile ? 36 : 40, borderRadius: isSmallMobile ? 18 : 20 },
+    contentColumns: { flex: 1, flexDirection: isMobile ? 'column' : 'row' },
+    centerContent: { flex: 1, paddingTop: isSmallMobile ? 12 : isMobile ? 16 : 32, paddingHorizontal: isSmallMobile ? 12 : isMobile ? 16 : 32, paddingBottom: isSmallMobile ? 16 : 24 },
+    pageTitleContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: isSmallMobile ? 16 : 24 },
+    pageTitle: { fontFamily: 'Poppins_700Bold', fontSize: isSmallMobile ? 20 : isMobile ? 22 : 24, color: COLORS.textPrimary, marginLeft: 12 },
+    gridContainerBox: { flex: 1, backgroundColor: COLORS.cardBackground, borderRadius: isMobile ? 12 : 20, borderWidth: 1, borderColor: '#E4ECF7', padding: isSmallMobile ? 8 : isMobile ? 12 : 24, ...Platform.select({ web: { boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }, default: { shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 10 } }) },
+    tuitionGrid: { paddingBottom: isSmallMobile ? 16 : 20 },
+    cardsWrapper: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: isMobile ? 'center' : 'space-between', gap: isSmallMobile ? 8 : isMobile ? 12 : 16 },
+    tuitionCard: { width: isMobile ? '100%' : isTablet ? '48%' : '31%', minWidth: isMobile ? '100%' : 180, marginBottom: isSmallMobile ? 8 : isMobile ? 12 : 16, backgroundColor: COLORS.cardBackground, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden' },
+    cardImageContainer: { width: '100%', height: isSmallMobile ? 160 : isMobile ? 180 : 200, position: 'relative' },
+    cardImage: { width: '100%', height: '100%' },
+    heartButton: { position: 'absolute', top: isSmallMobile ? 8 : 12, right: isSmallMobile ? 8 : 12, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 16, padding: isSmallMobile ? 4 : 6 },
+    cardBody: { padding: isSmallMobile ? 12 : 16 },
+    cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: isSmallMobile ? 6 : 8 },
+    tagText: { color: COLORS.primary, fontFamily: 'Poppins_600SemiBold', fontSize: isSmallMobile ? 9 : 10, letterSpacing: 0.5 },
+    ratingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.ratingGreen, paddingHorizontal: isSmallMobile ? 6 : 8, paddingVertical: isSmallMobile ? 1 : 2, borderRadius: 10 },
+    ratingText: { color: '#FFFFFF', fontFamily: 'Poppins_600SemiBold', fontSize: isSmallMobile ? 10 : 11, marginLeft: isSmallMobile ? 3 : 4 },
+    teacherName: { fontFamily: 'Poppins_600SemiBold', fontSize: isSmallMobile ? 13 : 14, color: COLORS.textPrimary, marginBottom: 4 },
+    teacherDesc: { fontFamily: 'Poppins_400Regular', fontSize: isSmallMobile ? 10 : 11, color: COLORS.textSecondary, lineHeight: isSmallMobile ? 14 : 16, marginBottom: isSmallMobile ? 12 : 16 },
+    cardFooter: { alignItems: 'flex-end' },
+    reviewBtn: { backgroundColor: COLORS.ratingLight, paddingHorizontal: isSmallMobile ? 12 : 16, paddingVertical: isSmallMobile ? 4 : 6, borderRadius: 20 },
+    reviewBtnText: { color: COLORS.textPrimary, fontFamily: 'Poppins_500Medium', fontSize: isSmallMobile ? 11 : 12 },
+    paginationContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: isSmallMobile ? 16 : isMobile ? 20 : 32, gap: isSmallMobile ? 6 : 8 },
+    pageDot: { width: isSmallMobile ? 28 : 32, height: isSmallMobile ? 28 : 32, borderRadius: 8, backgroundColor: COLORS.lightBackground, justifyContent: 'center', alignItems: 'center' },
+    pageDotActive: { backgroundColor: COLORS.textSecondary },
+    pageDotText: { fontFamily: 'Poppins_600SemiBold', fontSize: isSmallMobile ? 13 : 14, color: COLORS.textPrimary },
+    pageDotTextActive: { fontFamily: 'Poppins_600SemiBold', fontSize: isSmallMobile ? 13 : 14, color: '#FFFFFF' },
+    rightPanel: { width: isMobile ? '100%' : isTablet ? '35%' : '25%', minWidth: isMobile ? '100%' : 300, backgroundColor: COLORS.cardBackground, borderLeftWidth: isMobile ? 0 : 1, borderTopWidth: isMobile ? 1 : 0, borderLeftColor: COLORS.border, borderTopColor: COLORS.border, paddingTop: isSmallMobile ? 12 : isMobile ? 16 : 32, paddingHorizontal: isSmallMobile ? 12 : isMobile ? 16 : 20 },
+    thoughtsList: { paddingBottom: 40 },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: isSmallMobile ? 30 : 50 },
+    loadingText: { fontSize: isSmallMobile ? 14 : 16, fontFamily: 'Poppins_400Regular', color: COLORS.textSecondary, marginTop: 10 },
+    emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: isSmallMobile ? 16 : isMobile ? 20 : 40, marginTop: isSmallMobile ? 30 : 50 },
+    emptyTitle: { fontSize: isSmallMobile ? 18 : 20, fontFamily: 'Poppins_600SemiBold', color: COLORS.textPrimary, marginBottom: isSmallMobile ? 8 : 10, textAlign: 'center' },
+    emptyText: { fontSize: isSmallMobile ? 13 : 14, fontFamily: 'Poppins_400Regular', color: COLORS.textSecondary, textAlign: 'center', lineHeight: isSmallMobile ? 18 : 20 },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalContainer: { backgroundColor: COLORS.cardBackground, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%', paddingBottom: 20 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: isSmallMobile ? 16 : 20, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+    modalTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: isSmallMobile ? 16 : 18, color: COLORS.textPrimary },
+    commentsList: { paddingHorizontal: isSmallMobile ? 12 : 16, paddingTop: isSmallMobile ? 8 : 12 },
+    commentItem: { marginBottom: isSmallMobile ? 12 : 16, padding: isSmallMobile ? 10 : 12, backgroundColor: COLORS.lightBackground, borderRadius: 10 },
+    commentAuthor: { fontFamily: 'Poppins_600SemiBold', fontSize: isSmallMobile ? 12 : 13, color: COLORS.textPrimary, marginBottom: 4 },
+    commentContent: { fontFamily: 'Poppins_400Regular', fontSize: isSmallMobile ? 12 : 13, color: COLORS.textPrimary, lineHeight: isSmallMobile ? 16 : 18 },
+    commentTime: { fontFamily: 'Poppins_400Regular', fontSize: isSmallMobile ? 10 : 11, color: COLORS.textSecondary, marginTop: 4 },
+    commentInputRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: isSmallMobile ? 12 : 16, paddingTop: isSmallMobile ? 8 : 12, borderTopWidth: 1, borderTopColor: COLORS.border },
+    commentInput: { flex: 1, backgroundColor: COLORS.lightBackground, borderRadius: 20, paddingHorizontal: isSmallMobile ? 12 : 16, paddingVertical: isSmallMobile ? 8 : 10, fontFamily: 'Poppins_400Regular', fontSize: isSmallMobile ? 13 : 14, color: COLORS.textPrimary, maxHeight: 100 },
+    commentSendBtn: { marginLeft: isSmallMobile ? 8 : 10, backgroundColor: COLORS.primary, borderRadius: 20, padding: isSmallMobile ? 8 : 10 },
+  });
+};
 
 // ─── WEB-ONLY STYLES (from Student.tsx) ─────────────────────────────────────────────────────────
 const ws = StyleSheet.create({

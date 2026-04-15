@@ -369,7 +369,7 @@ const GrowThoughtsFeed: React.FC<GrowThoughtsFeedProps> = ({
       }
 
       const pickerResult = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1,
@@ -737,7 +737,6 @@ const GrowThoughtsFeed: React.FC<GrowThoughtsFeedProps> = ({
                         <Text style={styles.authorName}>{displayName}</Text>
                         <View style={styles.roleContainer}>
                           <Text style={styles.roleText}>{displayRole}</Text>
-                          <Text style={styles.timeText}> • {formatTimeAgo(post.createdAt)}</Text>
                         </View>
                       </View>
                       <TouchableOpacity>

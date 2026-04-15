@@ -11,13 +11,13 @@ import axios from 'axios';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
+    Platform,
     ActivityIndicator,
     Alert,
     Dimensions,
     Image,
     ImageBackground,
     Modal,
-    Platform,
     SafeAreaView,
     ScrollView,
     StyleSheet,
@@ -346,9 +346,10 @@ export default function Class8SubjectsScreenWrapper() {
 
   const resolvePostAuthor = (post: any) => {
     const cached = userProfileCache.get(post.author?.email) || { name: '', profilePic: '' };
-    let name = cached.name || post.author?.name || '';
-    let pic: string | null = cached.profilePic || post.author?.profile_pic || null;
-    if (!name || name === 'null' || name.includes('@')) name = post.author?.email?.split('@')[0] || 'User';
+    // Prioritize post.author.name first, then cache, then fallback
+    let name = post.author?.name || cached.name || '';
+    let pic: string | null = post.author?.profile_pic || cached.profilePic || null;
+    if (!name || name === 'null' || name.includes('@')) name = post.author?.email?.split?.('@')[0] || 'User';
     if (pic && !pic.startsWith('http') && !pic.startsWith('/')) pic = `/${pic}`;
     if (pic === '' || pic === 'null') pic = null;
     return { name, pic, role: post.author?.role || 'User' };
@@ -655,7 +656,7 @@ export default function Class8SubjectsScreenWrapper() {
                       post={post}
                       onLike={handleLike}
                       onComment={openCommentsModal}
-                      onReport={(p) => { setReportType('post'); setReportItemId(p.id); setReportReason(''); setShowReportModal(true); }}
+                      onReport={(p, reasons, comment) => { console.log('Report submitted for post:', p.id, 'Reasons:', reasons, 'Comment:', comment); }}
                       getProfileImageSource={getProfileImageSource}
                       initials={initials}
                       resolvePostAuthor={resolvePostAuthor}

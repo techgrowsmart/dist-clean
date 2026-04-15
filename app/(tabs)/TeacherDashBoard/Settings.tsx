@@ -19,6 +19,7 @@ import {
   Linking,
   Share,
   RefreshControl,
+  DimensionValue,
 } from "react-native";
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
@@ -27,7 +28,7 @@ import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from "react-native-responsive-screen";
-import { Poppins_400Regular, Poppins_600SemiBold, useFonts } from '@expo-google-fonts/poppins';
+import { Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold, useFonts } from '@expo-google-fonts/poppins';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_URL } from '../../../config';
 import { getAuthData } from '../../../utils/authStorage';
@@ -72,6 +73,13 @@ const getFontSize = (screenWidth: number, type: 'title' | 'subtitle' | 'body' | 
 };
 
 const Settings = () => {
+  // Font loading
+  const [fontsLoaded] = useFonts({
+    Poppins_400Regular,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+  });
+
   // Enhanced state management
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -115,7 +123,7 @@ const Settings = () => {
   const shimmerAnim = useRef(new Animated.Value(0)).current;
   
   // Gesture handling
-  const panGestureRef = useRef();
+  const panGestureRef = useRef<any>(null);
   const lastTap = useRef(0);
   const doubleTapDelay = 300;
   const [bankDetails, setBankDetails] = useState({
@@ -148,6 +156,9 @@ const Settings = () => {
   const isLargeDesktop = screenWidth >= 1440;
   const isUltraWide = screenWidth >= 1920;
   
+  // Styles declaration - moved here to fix block scope issue
+  const styles = useMemo(() => createStyles(screenWidth), [screenWidth]);
+  
   // Dynamic sizing functions (using helper functions)
   const getIconSize = () => {
     const { isTinyMobile, isSmallMobile, isMobile, isTablet, isDesktop, isLargeDesktop, isUltraWide } = getBreakpoints(screenWidth);
@@ -177,8 +188,15 @@ const Settings = () => {
     return getFontSize(screenWidth, type);
   };
 
-  // Create dynamic styles based on screen width
-  const styles = useMemo(() => createStyles(screenWidth), [screenWidth]);
+  const COLORS = {
+    primaryBlue: '#3B5BFE',
+    white: '#FFFFFF',
+    cardBg: '#FFFFFF',
+    border: '#E5E7EB',
+    textPrimary: '#1F2937',
+    textSecondary: '#6B7280',
+    bannerTint: '#F0F4FF',
+  };
 
   // Advanced animation and interaction handlers
   useEffect(() => {
@@ -348,6 +366,213 @@ const Settings = () => {
     }
   }, [triggerHaptic]);
 
+  // Fetch bank details function
+  const fetchBankDetails = async () => {
+    try {
+      setIsLoading(true);
+      const authData = await getAuthData();
+      
+      if (!authData?.token) {
+        console.error('No authentication data found');
+        Alert.alert('Error', 'Please login again');
+        return;
+      }
+
+      const response = await fetch(`${BASE_URL}/api/bank-details`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${authData.token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data && data.success) {
+        const bankData = data.data || {};
+        setBankDetails({
+          accountNumber: bankData.accountNumber || "",
+          ifscCode: bankData.ifscCode || "",
+          bankName: bankData.bankName || "",
+          pan: bankData.pan || "",
+          accountHolderName: bankData.accountHolderName || ""
+        });
+        setFormData({
+          accountNumber: bankData.accountNumber || "",
+          ifscCode: bankData.ifscCode || "",
+          bankName: bankData.bankName || "",
+          pan: bankData.pan || "",
+          accountHolderName: bankData.accountHolderName || ""
+        });
+      } else {
+        const emptyDetails = {
+          accountNumber: "",
+          ifscCode: "",
+          bankName: "",
+          pan: "",
+          accountHolderName: ""
+        };
+        setBankDetails(emptyDetails);
+        setFormData(emptyDetails);
+      }
+    } catch (error) {
+      console.error('Error fetching bank details:', error);
+      Alert.alert('Error', 'Failed to fetch bank details');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdate = async () => {
+    try {
+      setIsLoading(true);
+      const authData = await getAuthData();
+      
+      if (!authData || !authData.token) {
+        Alert.alert('Error', 'Authentication required');
+        return;
+      }
+
+      const response = await fetch(`${BASE_URL}/api/update-bank-details`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${authData.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          account_number: formData.accountNumber,
+          ifsc_code: formData.ifscCode,
+          bank_name: formData.bankName,
+          account_holder_name: formData.accountHolderName,
+          pan: formData.pan,
+          pincode: "000000"
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setBankDetails(formData);
+        setIsEditing(false);
+        Alert.alert('Success', 'Bank details updated successfully');
+      } else {
+        Alert.alert('Error', data.message || 'Failed to update bank details');
+      }
+    } catch (error) {
+      console.error('Error updating bank details:', error);
+      Alert.alert('Error', 'Failed to update bank details');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setFormData(bankDetails);
+    setIsEditing(false);
+  };
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleBackPress = () => {
+    router.back();
+  };
+
+  // ESC key handler for web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleBackPress();
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, []);
+
+  // Load teacher data for web header and sidebar
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const loadTeacherData = async () => {
+        try {
+          const authData = await getAuthData();
+          if (authData?.name) {
+            setTeacherName(authData.name);
+          }
+          if (authData?.profileImage) {
+            setProfileImage(authData.profileImage);
+          }
+          if (authData?.email) {
+            setUserEmail(authData.email);
+          }
+        } catch (error) {
+          console.error('Error loading teacher data:', error);
+        }
+      };
+      loadTeacherData();
+    }
+  }, []);
+
+  // Also fetch profile from API (for real data)
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const auth = await getAuthData();
+        if (!auth?.token || !auth?.email) return;
+        const res = await axios.post(`${BASE_URL}/api/userProfile`, { email: auth.email }, { headers: { Authorization: `Bearer ${auth.token}` } });
+        const data = res.data;
+        if (data) {
+          setTeacherName(data.name || teacherName);
+          setProfileImage(data.profileimage || profileImage);
+          setUserEmail(data.email || userEmail);
+        }
+      } catch (err) {
+        // ignore — graceful fallback already implemented
+      }
+    };
+    fetchProfile();
+  }, []);
+
+  // Fetch bank details on mount
+  useEffect(() => {
+    fetchBankDetails();
+  }, []);
+
+  // Handle sidebar navigation
+  const handleSidebarSelect = useCallback((item: string) => {
+    setSidebarActiveItem(item);
+    switch (item) {
+      case 'Dashboard':
+        router.push('/(tabs)/TeacherDashBoard/TutorDashboardWeb');
+        break;
+      case 'subjects':
+        router.push('/(tabs)/TeacherDashBoard/SubjectsListWeb');
+        break;
+      case 'students':
+        router.push('/(tabs)/TeacherDashBoard/StudentsEnrolled');
+        break;
+      case 'joinedDate':
+        router.push('/(tabs)/TeacherDashBoard/JoinedDateWeb');
+        break;
+      case 'Create Subject':
+        router.push('/(tabs)/TeacherDashBoard/CreateSubject');
+        break;
+      case 'Settings':
+        break;
+      default:
+        console.log('Navigate to:', item);
+    }
+  }, []);
+
   // Enhanced search functionality with amazing features
   const filteredSettings = useMemo(() => [
     { 
@@ -425,200 +650,7 @@ const Settings = () => {
   ].filter(item => 
     item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.description.toLowerCase().includes(searchQuery.toLowerCase())
-  ), [searchQuery]);
-
-  // Load teacher data for web header and sidebar
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      const loadTeacherData = async () => {
-        try {
-          const authData = await getAuthData();
-          if (authData?.name) {
-            setTeacherName(authData.name);
-          }
-          if (authData?.profileImage) {
-            setProfileImage(authData.profileImage);
-          }
-          if (authData?.email) {
-            setUserEmail(authData.email);
-          }
-        } catch (error) {
-          console.error('Error loading teacher data:', error);
-        }
-      };
-      loadTeacherData();
-    }
-  }, []);
-
-  // Also fetch profile from API (for real data)
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const auth = await getAuthData();
-        if (!auth?.token || !auth?.email) return;
-        const res = await axios.post(`${BASE_URL}/api/userProfile`, { email: auth.email }, { headers: { Authorization: `Bearer ${auth.token}` } });
-        const data = res.data;
-        if (data) {
-          setTeacherName(data.name || teacherName);
-          setProfileImage(data.profileimage || profileImage);
-          setUserEmail(data.email || userEmail);
-        }
-      } catch (err) {
-        // ignore — graceful fallback already implemented
-      }
-    };
-    fetchProfile();
-  }, []);
-
-  // Handle sidebar navigation
-  const handleSidebarSelect = (item: string) => {
-    setSidebarActiveItem(item);
-    // Handle navigation for sidebar items
-    switch (item) {
-      case 'Dashboard':
-        router.push('/(tabs)/TeacherDashBoard/TutorDashboardWeb');
-        break;
-      case 'subjects':
-        router.push('/(tabs)/TeacherDashBoard/SubjectsListWeb');
-        break;
-      case 'students':
-        router.push('/(tabs)/TeacherDashBoard/StudentsEnrolled');
-        break;
-      case 'joinedDate':
-        router.push('/(tabs)/TeacherDashBoard/JoinedDateWeb');
-        break;
-      case 'Create Subject':
-        router.push('/(tabs)/TeacherDashBoard/CreateSubject');
-        break;
-      case 'Settings':
-        // Already on this page
-        break;
-      default:
-        console.log('Navigate to:', item);
-    }
-  };
-
-  let [fontsLoaded] = useFonts({ 
-    Poppins_400Regular,
-    Poppins_600SemiBold 
-  });
-
-  useEffect(() => {
-    fetchBankDetails();
-  }, []);
-
-  const fetchBankDetails = async () => {
-    try {
-      setIsLoading(true);
-      const authData = await getAuthData();
-      
-      if (!authData?.token) {
-        console.error('No authentication data found');
-        Alert.alert('Error', 'Please login again');
-        return;
-      }
-
-      const response = await fetch(`${BASE_URL}/api/bank-details`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${authData.token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      // Check if response is ok before trying to parse JSON
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      // Clone the response before reading it
-      const responseClone = response.clone();
-      let data;
-      
-      try {
-        data = await response.json();
-      } catch (jsonError) {
-        console.error('Error parsing JSON:', jsonError);
-        throw new Error('Failed to parse server response');
-      }
-      
-      const emptyDetails = {
-        accountNumber: "",
-        ifscCode: "",
-        bankName: "",
-        pan: "",
-        accountHolderName: ""
-      };
-
-      if (data?.success) {
-        setBankDetails(data.data || emptyDetails);
-        setFormData(data.data || emptyDetails);
-      } else {
-        setBankDetails(emptyDetails);
-        setFormData(emptyDetails);
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      Alert.alert('Error', 'Failed to fetch bank details');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleUpdate = async () => {
-    try {
-      setIsLoading(true);
-      const authData = await getAuthData();
-      
-      if (!authData || !authData.token) {
-        Alert.alert('Error', 'Authentication required');
-        return;
-      }
-
-      const response = await fetch(`${BASE_URL}/api/update-bank-details`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${authData.token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          account_number: formData.accountNumber,
-          ifsc_code: formData.ifscCode,
-          bank_name: formData.bankName,
-          account_holder_name: formData.accountHolderName,
-          pan: formData.pan,
-          pincode: "000000" // You might want to get this from user
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setBankDetails(formData);
-        setIsEditing(false);
-        Alert.alert('Success', 'Bank details updated successfully');
-      } else {
-        Alert.alert('Error', data.message || 'Failed to update bank details');
-      }
-    } catch (error) {
-      console.error('Error updating bank details:', error);
-      Alert.alert('Error', 'Failed to update bank details');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setFormData(bankDetails);
-    setIsEditing(false);
-  };
-
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
+  ), [searchQuery, bankDetails.accountNumber, notifications.email, notifications.push, privacy.profileVisibility]);
 
   if (!fontsLoaded || isLoading) {
     return (
@@ -631,7 +663,7 @@ const Settings = () => {
   }
 
   // Amazing Shimmer Component for Loading States
-  const ShimmerView = ({ width, height, style }) => (
+  const ShimmerView = ({ width, height, style }: { width: DimensionValue; height: DimensionValue; style?: any }) => (
     <Animated.View
       style={[
         style,
@@ -659,8 +691,11 @@ const Settings = () => {
         {
           opacity: slideAnim,
           transform: [
-            { translateY: Animated.multiply(slideAnim, new Animated.Value(20 * (index + 1))) },
-            { scale: Animated.multiply(cardScaleAnim, new Animated.Value(1)) }
+            { translateY: slideAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [20 * (index + 1), 0]
+            }) },
+            { scale: cardScaleAnim }
           ]
         }
       ]}
@@ -718,7 +753,6 @@ const Settings = () => {
         </Animated.View>
       </TouchableOpacity>
     </Animated.View>
-  
   );
 
   // Enhanced Profile Card Component
@@ -727,7 +761,7 @@ const Settings = () => {
       styles.profileCard,
       { transform: [{ scale: cardScaleAnim }] }
     ]}>
-      <UXCard padding="lg" shadow="large" rounded="xl">
+      <UXCard padding="lg" shadow="large" rounded="lg">
         <View style={styles.profileHeader}>
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{teacherName}</Text>
@@ -866,22 +900,16 @@ const Settings = () => {
     </Animated.View>
   );
 
-  
   return (
-    // Web Layout - Enhanced with Amazing Features
     Platform.OS === 'web' ? (
-      <View style={styles.webLayout}>
-        {/* Web Header */}
-        <TeacherWebHeader 
+      <View style={styles.container}>
+        <TeacherWebHeader
           teacherName={teacherName}
           profileImage={profileImage}
-          showSearch={true}
         />
-        
-        {/* Main Content with Sidebar */}
-        <View style={styles.webContent}>
-          {/* Sidebar */}
-          <TeacherWebSidebar 
+
+        <View style={styles.contentLayout}>
+          <TeacherWebSidebar
             teacherName={teacherName}
             profileImage={profileImage}
             activeItem={sidebarActiveItem}
@@ -892,36 +920,9 @@ const Settings = () => {
             revenue="₹2.1K"
             isSpotlight={false}
           />
-          
-          {/* Main Content Area */}
-          <ScrollView 
-            style={styles.webMainContent}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-            }
-            onScroll={Animated.event(
-              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-              ({ nativeEvent }) => {
-                const offsetY = nativeEvent.contentOffset.y;
-                const opacity = Math.max(0.7, 1 - offsetY / 300);
-                Animated.timing(headerOpacity, { 
-                  toValue: opacity, 
-                  duration: 100, 
-                  useNativeDriver: true 
-                }).start();
-              }
-            )}
-          >
-            {/* Page Header */}
-            <Animated.View style={[
-              styles.pageHeader,
-              { opacity: headerOpacity }
-            ]}>
-              <Text style={styles.pageTitle}>Settings</Text>
-              <Text style={styles.pageSubtitle}>Manage your account preferences and customize your experience</Text>
-            </Animated.View>
+          <View style={styles.mainContent}>
+            <Text style={styles.pageTitle}>Settings</Text>
+            <Text style={styles.pageSubtitle}>Manage your account preferences and customize your experience</Text>
 
             {/* Profile Card */}
             <ProfileCard />
@@ -1032,7 +1033,7 @@ const Settings = () => {
                     disabled={!isEditing}
                     keyboardType="numeric"
                     secureTextEntry={true}
-                    icon={<Ionicons name="hash-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
+                    icon={<Ionicons name="cash-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
                   />
                   
                   <UXInput
@@ -1040,7 +1041,6 @@ const Settings = () => {
                     value={formData.ifscCode}
                     onChangeText={(text) => handleInputChange('ifscCode', text)}
                     disabled={!isEditing}
-                    autoCapitalize="characters"
                     icon={<Ionicons name="code-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
                   />
                   
@@ -1049,7 +1049,6 @@ const Settings = () => {
                     value={formData.pan}
                     onChangeText={(text) => handleInputChange('pan', text)}
                     disabled={!isEditing}
-                    autoCapitalize="characters"
                     secureTextEntry={true}
                     icon={<Ionicons name="document-text-outline" size={getIconSize()} color={UX_COLORS.textSecondary} />}
                   />
@@ -1078,7 +1077,7 @@ const Settings = () => {
                 />
               </View>
             )}
-          </ScrollView>
+          </View>
         </View>
       </View>
     ) : (
@@ -1100,8 +1099,13 @@ const Settings = () => {
             styles.pageHeader,
             { opacity: fadeAnim }
           ]}>
-            <Text style={styles.pageTitle}>Settings</Text>
-            <Text style={styles.pageSubtitle}>Manage your account preferences and bank details</Text>
+            <TouchableOpacity style={styles.backBtnCircle} onPress={handleBackPress}>
+              <Ionicons name="arrow-back" size={20} color="#1F2937" />
+            </TouchableOpacity>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.pageTitle}>Settings</Text>
+              <Text style={styles.pageSubtitle}>Manage your account preferences and bank details</Text>
+            </View>
           </Animated.View>
 
           {/* Personal Information Card */}
@@ -1184,7 +1188,7 @@ const Settings = () => {
                 onChangeText={(text) => handleInputChange('accountNumber', text)}
                 disabled={!isEditing}
                 keyboardType="numeric"
-                icon={<Ionicons name="hash-outline" size={20} color={UX_COLORS.textSecondary} />}
+                icon={<Ionicons name="cash-outline" size={20} color={UX_COLORS.textSecondary} />}
               />
               
               <UXInput
@@ -1192,7 +1196,6 @@ const Settings = () => {
                 value={formData.ifscCode}
                 onChangeText={(text) => handleInputChange('ifscCode', text)}
                 disabled={!isEditing}
-                autoCapitalize="characters"
                 icon={<Ionicons name="code-outline" size={20} color={UX_COLORS.textSecondary} />}
               />
               
@@ -1201,7 +1204,7 @@ const Settings = () => {
                 value={formData.pan}
                 onChangeText={(text) => handleInputChange('pan', text)}
                 disabled={!isEditing}
-                autoCapitalize="characters"
+                secureTextEntry={true}
                 icon={<Ionicons name="document-text-outline" size={20} color={UX_COLORS.textSecondary} />}
               />
             </View>
@@ -1283,7 +1286,26 @@ const createStyles = (screenWidth: number) => StyleSheet.create({
     padding: getSpacing(screenWidth, 1.5),
   },
   pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: getSpacing(screenWidth, 2),
+  },
+  backBtnCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    marginRight: getSpacing(screenWidth, 1),
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   pageTitle: {
     fontSize: getFontSize(screenWidth, 'title'),
@@ -1316,242 +1338,149 @@ const createStyles = (screenWidth: number) => StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
     color: UX_COLORS.text,
   },
-
-  // Form Styles
-  formContainer: {
-    backgroundColor: UX_COLORS.cardBg,
-    borderRadius: UX_CONSTANTS.borderRadius.lg,
-    padding: UX_CONSTANTS.spacing.lg,
-    marginBottom: UX_CONSTANTS.spacing.lg,
-    shadowColor: UX_COLORS.textSecondary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: UX_COLORS.border,
-  },
-  formHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: UX_CONSTANTS.spacing.lg,
-  },
-  formTitle: {
-    fontSize: UX_CONSTANTS.fontSize.xl,
-    fontFamily: 'Poppins_600SemiBold',
-    color: UX_COLORS.text,
-  },
-  editButton: {
-    padding: UX_CONSTANTS.spacing.sm,
-  },
-  
-  // Mobile-specific styles
-  scrollContainer: { 
-    flexGrow: 1, 
-    padding: getSpacing(screenWidth, 1.5),
-    backgroundColor: UX_COLORS.background,
-  },
-  
-  // Enhanced Profile Card Styles
-  profileCard: {
-    marginBottom: getSpacing(screenWidth, 1.5),
-    backgroundColor: UX_COLORS.cardBg,
-    borderRadius: UX_CONSTANTS.borderRadius.xl,
-    shadowColor: UX_COLORS.textSecondary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: UX_COLORS.border,
-    overflow: 'hidden',
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: getSpacing(screenWidth, 1),
-  },
-  profileInfo: {
+  mainContent: {
     flex: 1,
+    padding: 16,
   },
-  profileName: {
-    fontSize: getFontSize(screenWidth, 'title'),
-    fontFamily: 'Poppins_600SemiBold',
-    color: UX_COLORS.text,
-    marginBottom: getSpacing(screenWidth, 0.25),
-  },
-  profileEmail: {
-    fontSize: getFontSize(screenWidth, 'body'),
-    fontFamily: 'Poppins_400Regular',
-    color: UX_COLORS.textSecondary,
-  },
-  profileActions: {
-    flexDirection: 'row',
-    gap: getSpacing(screenWidth, 0.5),
-  },
-  profileActionButton: {
-    width: getSpacing(screenWidth, 3),
-    height: getSpacing(screenWidth, 3),
-    borderRadius: getSpacing(screenWidth, 1.5),
-    backgroundColor: UX_COLORS.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: UX_COLORS.primary,
-  },
-  profileStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingTop: getSpacing(screenWidth, 1),
-    borderTopWidth: 1,
-    borderTopColor: UX_COLORS.border,
-    marginTop: getSpacing(screenWidth, 1),
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: getFontSize(screenWidth, 'title'),
-    fontFamily: 'Poppins_600SemiBold',
-    color: UX_COLORS.primary,
-    marginBottom: getSpacing(screenWidth, 0.25),
-  },
-  statLabel: {
-    fontSize: getFontSize(screenWidth, 'small'),
-    fontFamily: 'Poppins_400Regular',
-    color: UX_COLORS.textSecondary,
-  },
-
-  // Enhanced Notification Styles
-  notificationGrid: {
-    gap: getSpacing(screenWidth, 1),
-  },
-  notificationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: getSpacing(screenWidth, 0.5),
-    marginBottom: getSpacing(screenWidth, 0.5),
-  },
-  notificationTitle: {
-    fontSize: getFontSize(screenWidth, 'body'),
-    fontFamily: 'Poppins_600SemiBold',
-    color: UX_COLORS.text,
+  contentLayout: {
     flex: 1,
+    flexDirection: 'row',
   },
-  notificationMeta: {
-    backgroundColor: UX_COLORS.primaryLight,
-    paddingHorizontal: getSpacing(screenWidth, 0.5),
-    paddingVertical: getSpacing(screenWidth, 0.25),
-    borderRadius: getSpacing(screenWidth, 0.5),
-  },
-  notificationStatus: {
-    fontSize: getFontSize(screenWidth, 'small'),
-    fontFamily: 'Poppins_600SemiBold',
-    color: UX_COLORS.primary,
-  },
-
-  // Quick Actions Styles
   quickActionsContainer: {
-    marginBottom: getSpacing(screenWidth, 1.5),
+    marginBottom: 24,
   },
   quickActionsTitle: {
-    fontSize: getFontSize(screenWidth, 'subtitle'),
+    fontSize: 18,
     fontFamily: 'Poppins_600SemiBold',
     color: UX_COLORS.text,
-    marginBottom: getSpacing(screenWidth, 1),
+    marginBottom: 16,
   },
   quickActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: getSpacing(screenWidth, 1),
+    gap: 12,
   },
   quickActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: getSpacing(screenWidth, 0.5),
-    padding: getSpacing(screenWidth, 1),
-    borderRadius: getSpacing(screenWidth, 1),
-    backgroundColor: UX_COLORS.cardBg,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: UX_COLORS.surface,
     borderWidth: 1,
     borderColor: UX_COLORS.border,
-    minWidth: getSpacing(screenWidth, 8),
   },
   quickActionText: {
-    fontSize: getFontSize(screenWidth, 'small'),
+    fontSize: 14,
     fontFamily: 'Poppins_400Regular',
     color: UX_COLORS.textSecondary,
+    marginLeft: 8,
   },
-
-  // Settings Categories Styles
   settingsCategoriesContainer: {
-    gap: getSpacing(screenWidth, 2),
+    gap: 24,
   },
   categoriesTitle: {
-    fontSize: getFontSize(screenWidth, 'title'),
+    fontSize: 20,
     fontFamily: 'Poppins_600SemiBold',
     color: UX_COLORS.text,
-    marginBottom: getSpacing(screenWidth, 1),
+    marginBottom: 16,
   },
   categorySection: {
-    gap: getSpacing(screenWidth, 1),
+    gap: 16,
   },
   categoryTitle: {
-    fontSize: getFontSize(screenWidth, 'subtitle'),
+    fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
     color: UX_COLORS.textSecondary,
-    marginBottom: getSpacing(screenWidth, 1),
+    marginBottom: 16,
     textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   settingsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: getSpacing(screenWidth, 1),
+    gap: 12,
   },
-
-  // Enhanced Settings Item Styles
-  settingsItemHeader: {
+  editButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: UX_COLORS.primary,
+  },
+  formGrid: {
+    gap: 16,
+  },
+  actionButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: getSpacing(screenWidth, 0.5),
+    gap: 12,
   },
-  settingsItemMeta: {
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    backgroundColor: UX_COLORS.border,
+    alignItems: 'center',
+  },
+  saveButton: {
+    flex: 2,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    backgroundColor: UX_COLORS.primary,
+    alignItems: 'center',
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    padding: 16,
+    backgroundColor: UX_COLORS.background,
+  },
+  notificationItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: getSpacing(screenWidth, 0.5),
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    backgroundColor: UX_COLORS.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: UX_COLORS.border,
+    marginBottom: 12,
   },
-  settingsItemCategory: {
-    fontSize: getFontSize(screenWidth, 'small'),
+  notificationContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  notificationTitle: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.text,
+    marginBottom: 4,
+  },
+  notificationDescription: {
+    fontSize: 14,
     fontFamily: 'Poppins_400Regular',
     color: UX_COLORS.textSecondary,
-    backgroundColor: UX_COLORS.border,
-    paddingHorizontal: getSpacing(screenWidth, 0.5),
-    paddingVertical: getSpacing(screenWidth, 0.25),
-    borderRadius: getSpacing(screenWidth, 0.25),
-    textTransform: 'uppercase',
+    lineHeight: 20,
   },
-  priorityIndicator: {
-    width: getSpacing(screenWidth, 0.5),
-    height: getSpacing(screenWidth, 0.5),
-    borderRadius: getSpacing(screenWidth, 0.25),
+  notificationMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-
-  // Refresh Button Styles
+  notificationStatus: {
+    fontSize: 12,
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.primary,
+  },
   refreshButton: {
-    padding: getSpacing(screenWidth, 0.5),
-    borderRadius: getSpacing(screenWidth, 1),
+    padding: 8,
+    borderRadius: 8,
   },
-  
-  // Premium Settings Item Styles
   premiumSettingsItem: {
-    backgroundColor: UX_COLORS.cardBg,
-    borderRadius: UX_CONSTANTS.borderRadius.lg,
-    marginBottom: UX_CONSTANTS.spacing.lg,
-    marginBottom: UX_CONSTANTS.spacing.md,
-    shadowColor: UX_COLORS.textSecondary,
+    backgroundColor: UX_COLORS.surface,
+    borderRadius: 12,
+    marginBottom: 16,
+    shadowColor: UX_COLORS.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -1563,7 +1492,7 @@ const createStyles = (screenWidth: number) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: UX_CONSTANTS.spacing.lg,
+    padding: 16,
   },
   settingsItemLeft: {
     flexDirection: 'row',
@@ -1577,24 +1506,136 @@ const createStyles = (screenWidth: number) => StyleSheet.create({
     backgroundColor: UX_COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: UX_CONSTANTS.spacing.md,
+    marginRight: 12,
   },
   settingsItemContent: {
     flex: 1,
   },
-  settingsItemTitle: {
-    fontSize: UX_CONSTANTS.fontSize.lg,
+  settingsItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  settingsItemMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  settingsItemCategory: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: UX_COLORS.textSecondary,
+    backgroundColor: UX_COLORS.border,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    textTransform: 'uppercase',
+  },
+  priorityIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  profileCard: {
+    marginBottom: 24,
+    backgroundColor: UX_COLORS.surface,
+    borderRadius: 16,
+    shadowColor: UX_COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: UX_COLORS.border,
+    overflow: 'hidden',
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 20,
     fontFamily: 'Poppins_600SemiBold',
     color: UX_COLORS.text,
     marginBottom: 4,
   },
-  settingsItemDescription: {
-    fontSize: UX_CONSTANTS.fontSize.sm,
+  profileEmail: {
+    fontSize: 16,
     fontFamily: 'Poppins_400Regular',
     color: UX_COLORS.textSecondary,
   },
+  profileActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  profileActionButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: UX_COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: UX_COLORS.primary,
+  },
+  profileStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: UX_COLORS.border,
+    marginTop: 16,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 20,
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.primary,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: UX_COLORS.textSecondary,
+  },
+  countrySelector: {
+    marginBottom: 16,
+  },
+  countryLabel: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.text,
+    marginBottom: 8,
+  },
+  notificationGrid: {
+    gap: 12,
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
   settingsItemArrow: {
-    marginLeft: UX_CONSTANTS.spacing.sm,
+    marginLeft: 12,
+  },
+  settingsItemTitle: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: UX_COLORS.text,
+  },
+  settingsItemDescription: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: UX_COLORS.textSecondary,
   },
 });
 

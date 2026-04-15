@@ -1,0 +1,259 @@
+# GROWSMART Portal - Production Configuration for portal.gogrowsmart.com
+# =====================================================================
+# Optimized for production with proper CORS, SSL, and SPA routing
+
+# Enable rewrite engine FIRST
+RewriteEngine On
+
+# ============================================
+# DISABLE BROWSER CACHE (Temporary - Remove after upload)
+# This prevents browser from caching old /portal redirects
+# ============================================
+<IfModule mod_headers.c>
+    Header always set Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+    Header always set Pragma "no-cache"
+    Header always set Expires "0"
+</IfModule>
+
+# ============================================
+# ROOT REDIRECT - portal.gogrowsmart.com/ -> /onboarding
+# ============================================
+RewriteCond %{REQUEST_URI} ^/?$
+RewriteRule ^$ /onboarding [R=301,L]
+
+# ============================================
+# MAKE /portal RETURN 404 (It doesn't exist)
+# ============================================
+RewriteCond %{REQUEST_URI} ^/portal/?$
+RewriteRule ^ - [R=404,L]
+
+# ============================================
+# FORCE HTTPS (Production)
+# ============================================
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# ============================================
+# CORS PREFLIGHT - Handle OPTIONS requests FIRST (before any rewrite)
+# ============================================
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^ - [R=204,L]
+
+# ============================================
+# TRAILING SLASH HANDLING
+# ============================================
+# Remove trailing slashes from non-directories
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)/$ /$1 [L,R=301]
+
+# ============================================
+# ROOT-LEVEL SHORTCUT ROUTES (Auth shortcuts)
+# ============================================
+# /login -> LoginScreen.html
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^login/?$ /LoginScreen.html [L]
+
+# /signup -> SignUp.html
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^signup/?$ /SignUp.html [L]
+
+# /onboarding -> onboarding.html
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^onboarding/?$ /onboarding.html [L]
+
+# ============================================
+# AUTH FOLDER ROUTES
+# ============================================
+# Handle auth/* routes - serve specific HTML files
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^auth/([^/]+)/?$ /auth/$1.html [L]
+
+# ============================================
+# (TABS) ROUTES - StudentDashBoard
+# ============================================
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^\(tabs\)/StudentDashBoard/([^/]+)/?$ /(tabs)/StudentDashBoard/$1.html [L]
+
+# StudentDashBoard index
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^\(tabs\)/StudentDashBoard/?$ /(tabs)/StudentDashBoard/index.html [L]
+
+# ============================================
+# (TABS) ROUTES - TeacherDashBoard
+# ============================================
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^\(tabs\)/TeacherDashBoard/([^/]+)/?$ /(tabs)/TeacherDashBoard/$1.html [L]
+
+# TeacherDashBoard index
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^\(tabs\)/TeacherDashBoard/?$ /(tabs)/TeacherDashBoard/index.html [L]
+
+# ============================================
+# (TABS) ROUTES - Messages
+# ============================================
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^\(tabs\)/Messages/([^/]+)/?$ /(tabs)/Messages/$1.html [L]
+
+# Messages index
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^\(tabs\)/Messages/?$ /(tabs)/Messages/index.html [L]
+
+# ============================================
+# (TABS) ROUTES - Other
+# ============================================
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^\(tabs\)/([^/]+)/?$ /(tabs)/$1.html [L]
+
+# ============================================
+# CLEAN URLS - Remove .html extensions
+# ============================================
+# Redirect /path.html to /path (external redirect)
+RewriteCond %{THE_REQUEST} ^[A-Z]{3,}\s([^.]+)\.html [NC]
+RewriteRule ^ %1 [R=301,L]
+
+# Rewrite /path to /path.html if file exists (internal rewrite)
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{DOCUMENT_ROOT}/$1.html -f
+RewriteRule ^(.+?)/?$ $1.html [L]
+
+# ============================================
+# FALLBACK - SPA INDEX.HTML
+# ============================================
+# If no file/directory exists, serve index.html (SPA fallback)
+RewriteCond %{REQUEST_URI} !^/_expo/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
+
+# ============================================
+# CORS HEADERS & SECURITY (DYNAMIC ORIGIN)
+# ============================================
+<IfModule mod_headers.c>
+    # Dynamic CORS - Allow matching origins
+    SetEnvIf Origin "^https://(www\.)?gogrowsmart\.com$" AccessControlAllowOrigin=$0
+    SetEnvIf Origin "^https://portal\.gogrowsmart\.com$" AccessControlAllowOrigin=$0
+    SetEnvIf Origin "^https://growsmartserver\.gogrowsmart\.com$" AccessControlAllowOrigin=$0
+    SetEnvIf Origin "^http://localhost(:[0-9]+)?$" AccessControlAllowOrigin=$0
+    
+    # CORS Headers - Dynamic origin when matched, wildcard otherwise
+    Header always set Access-Control-Allow-Origin %{AccessControlAllowOrigin}e env=AccessControlAllowOrigin
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Auth-Token, X-Client-Version"
+    Header always set Access-Control-Expose-Headers "Content-Length, Content-Range, X-Auth-Token, X-Total-Count"
+    Header always set Access-Control-Allow-Credentials "true"
+    Header always set Access-Control-Max-Age "86400"
+    
+    # Vary header for proper caching with CORS
+    Header always set Vary "Origin"
+    
+    # Security Headers
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(self), microphone=(self), camera=(self)"
+    
+    # HSTS - Force HTTPS (only enable when SSL is fully working)
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+</IfModule>
+
+# ============================================
+# COMPRESSION
+# ============================================
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json application/x-javascript
+</IfModule>
+
+<IfModule mod_brotli.c>
+    AddOutputFilterByType BROTLI_COMPRESS text/html text/plain text/xml text/css text/javascript application/javascript application/json
+</IfModule>
+
+# ============================================
+# CACHE CONTROL
+# ============================================
+<IfModule mod_expires.c>
+    ExpiresActive On
+    
+    # Static assets - 1 year
+    ExpiresByType text/css "access plus 1 year"
+    ExpiresByType application/javascript "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/jpg "access plus 1 year"
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/gif "access plus 1 year"
+    ExpiresByType image/svg+xml "access plus 1 year"
+    ExpiresByType image/x-icon "access plus 1 year"
+    ExpiresByType font/woff "access plus 1 year"
+    ExpiresByType font/woff2 "access plus 1 year"
+    ExpiresByType application/font-woff "access plus 1 year"
+    
+    # HTML - 1 day (for SPA updates)
+    ExpiresByType text/html "access plus 1 day"
+</IfModule>
+
+# ============================================
+# MIME TYPES
+# ============================================
+<IfModule mod_mime.c>
+    AddType application/javascript .js .mjs
+    AddType application/json .json
+    AddType application/manifest+json .webmanifest
+    AddType image/svg+xml .svg
+    AddType image/x-icon .ico
+    AddType font/woff .woff
+    AddType font/woff2 .woff2
+</IfModule>
+
+# ============================================
+# DIRECTORY & FILE PROTECTION
+# ============================================
+Options -Indexes -MultiViews
+
+# Protect sensitive files
+<FilesMatch "^\.(env|git|svn|htaccess|htpasswd)">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Hide .htaccess
+<Files .htaccess>
+    Order allow,deny
+    Deny from all
+</Files>
+
+# ============================================
+# CHARACTER ENCODING
+# ============================================
+AddDefaultCharset UTF-8
+AddCharset UTF-8 .html .css .js .json .xml
+
+# ============================================
+# CACHE-BUSTING FOR HTML FILES (Prevents browser cache issues)
+# ============================================
+<FilesMatch "\.(html|htm)$">
+    <IfModule mod_headers.c>
+        Header always set Cache-Control "no-cache, no-store, must-revalidate, max-age=0"
+        Header always set Pragma "no-cache"
+        Header always set Expires "0"
+        Header always set Vary "*"
+    </IfModule>
+</FilesMatch>
+
+# ============================================
+# ERROR PAGES (Fallback to SPA)
+# ============================================
+ErrorDocument 404 /index.html
+ErrorDocument 500 /index.html
+ErrorDocument 503 /index.html

@@ -39,16 +39,17 @@ export default function InitialScreen() {
   }, [isWeb, router]);
 
   const animateButton = (scaleAnim: Animated.Value, callback: () => void) => {
+    const useNative = Platform.OS !== 'web';
     Animated.sequence([
       Animated.timing(scaleAnim, {
         toValue: 0.95,
         duration: 100,
-        useNativeDriver: true,
+        useNativeDriver: useNative,
       }),
       Animated.timing(scaleAnim, {
         toValue: 1,
         duration: 100,
-        useNativeDriver: true,
+        useNativeDriver: useNative,
       }),
     ]).start();
     callback();
@@ -62,7 +63,7 @@ export default function InitialScreen() {
 
   const handleLogin = () => {
     animateButton(loginScale, () => {
-      router.push('/auth/LoginOptionsScreen');
+      router.push({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } });
     });
   };
 
@@ -254,11 +255,7 @@ const webStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 16,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   leftLogoText: {
     fontSize: 40,
@@ -344,11 +341,7 @@ const webStyles = StyleSheet.create({
     marginBottom: 20,
     width: '100%',
     alignItems: 'center',
-    shadowColor: '#7C4DDB',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 12,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   signupButtonText: {
     color: 'white',
@@ -427,11 +420,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    shadowColor: '#7C4DDB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   mobileLogoText: {
     fontSize: 24,
@@ -474,11 +463,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 360,
     alignItems: 'center',
-    shadowColor: '#7C4DDB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   signupButtonText: {
     color: 'white',

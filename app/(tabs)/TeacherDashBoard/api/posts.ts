@@ -2,6 +2,7 @@
 // This file handles all API calls to the backend
 
 import { BASE_URL } from '../../../../config';
+import { getAuthData } from '../../../../utils/authStorage';
 
 const API_BASE_URL = `${BASE_URL}/api`;
 
@@ -9,9 +10,8 @@ console.log('🔗 API_BASE_URL:', API_BASE_URL);
 
 // Get auth token - replace with your actual auth implementation
 const getAuthToken = async (): Promise<string> => {
-  // This should get the token from your auth context/storage
-  // For now, return a placeholder
-  return 'your-auth-token-here';
+  const auth = await getAuthData();
+  return auth?.token || '';
 };
 
 // Generic API request helper with fetch for direct connection

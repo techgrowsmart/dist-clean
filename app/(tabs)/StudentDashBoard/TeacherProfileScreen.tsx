@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -9,7 +10,6 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
-  Platform,
   SafeAreaView,
   TextInput,
 } from "react-native";
@@ -188,7 +188,7 @@ export default function TeacherProfileScreen() {
       const firstTuition = teacher.tuitions?.[0];
       if (!firstTuition) return;
 
-      const charge = firstTuition.charge || 0;
+      const charge = firstTuition.charge?.toString().replace(/[₹,]/g, '').trim() || 0;
 
       const bookingResponse = await axios.post(
         `${BASE_URL}/api/book-class`,
@@ -218,7 +218,7 @@ export default function TeacherProfileScreen() {
             teacherEmail: teacher.email,
             selectedSubject: firstTuition.subject,
             selectedClass: firstTuition.class,
-            charge: charge,
+            charge: firstTuition.charge?.toString().replace(/[₹,]/g, '').trim() || 0,
             description: teacher.introduction,
           },
         });
@@ -712,7 +712,11 @@ export default function TeacherProfileScreen() {
                   <Menubook size={wp("10.66%")} />
                   <View style={styles.classContent}>
                     <Text style={styles.classSubValue}>
-                      {teacher.category === "Skill teacher" ? `Skill: ${t.skill}` : `${t.subject} - ${t.class || t.className}`}
+                      {teacher.category === "Skill teacher"
+                        ? `Skill: ${t.skill}`
+                        : t.board === "Universities"
+                          ? `${t.subject} - ${t.university} (${t.year})`
+                          : `${t.subject} - ${t.class || t.className}`}
                     </Text>
                   </View>
                 </View>

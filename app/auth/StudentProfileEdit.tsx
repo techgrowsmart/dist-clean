@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Dimensions, ImageBackground, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { authService } from '../../services/authService';
 import { safeBack } from '../../utils/navigation';
 
 const { width, height } = Dimensions.get('window');
@@ -10,10 +11,12 @@ export default function StudentProfileEdit() {
   const params = useLocalSearchParams();
   const isWeb = Platform.OS === 'web';
   const email = params.email as string || '';
+  const signupName = params.name as string || '';
+  const signupPhone = params.phone as string || '';
   
   const [formData, setFormData] = useState({
-    name: '',
-    phoneNumber: '',
+    name: signupName || '',
+    phoneNumber: signupPhone || '',
     classYear: '10',
     profileImage: ''
   });
@@ -34,9 +37,18 @@ export default function StudentProfileEdit() {
 
     setLoading(true);
     try {
-      // Here you would update the student profile in the backend
-      // For now, just navigate to the student dashboard
-      router.replace('/(tabs)/StudentDashBoard' as any);
+      // Update student profile in the backend
+      const response = await authService.updateProfile(email, {
+        name: formData.name,
+        phoneNumber: formData.phoneNumber,
+        classYear: formData.classYear
+      });
+      
+      if (response.success) {
+        router.replace('/(tabs)/StudentDashBoard' as any);
+      } else {
+        Alert.alert('Error', response.message || 'Failed to update profile');
+      }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to update profile');
     } finally {
@@ -249,11 +261,7 @@ const webStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 16,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   leftLogoText: {
     fontSize: 40,
@@ -351,16 +359,10 @@ const webStyles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     marginTop: 20,
-    shadowColor: '#7C4DDB',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 12,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   saveButtonDisabled: {
     backgroundColor: '#9CA3AF',
-    shadowOpacity: 0,
-    elevation: 0,
   },
   saveButtonText: {
     color: 'white',
@@ -431,16 +433,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 20,
-    shadowColor: '#7C4DDB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   saveButtonDisabled: {
     backgroundColor: '#9CA3AF',
-    shadowOpacity: 0,
-    elevation: 0,
   },
   saveButtonText: {
     color: 'white',

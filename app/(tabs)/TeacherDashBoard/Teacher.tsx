@@ -3,6 +3,7 @@ import Bars from "../../../assets/svgIcons/Bars";
 import NotificationBellIcon from "../../../assets/svgIcons/NotificationBell";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
+import { apiClient } from "../../../services/apiService";
 import {
   Poppins_400Regular,
   Poppins_700Bold,
@@ -18,7 +19,8 @@ import axios from "axios";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 
-import {
+import{
+  Platform,
   Alert,
   Dimensions,
   ScrollView,
@@ -27,7 +29,6 @@ import {
   TouchableOpacity,
   View,
   Image,
-  Platform,
 } from "react-native";
 import { LineChart } from "react-native-chart-kit";
 import SidebarMenu from "./TeacherSidebar";
@@ -46,7 +47,7 @@ const CACHE_KEYS = {
   SUBJECT_COUNT: "teacher_dashboard_subject_count_cache",
 };
 
-import {
+import{
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from "react-native-responsive-screen";
@@ -83,40 +84,16 @@ interface Review {
 const InfiniteReviewScroll = ({ reviews }: { reviews: Review[] }) => {
   const scrollViewRef = React.useRef<ScrollView>(null);
   const scrollX = React.useRef(0);
-  const scrollInterval = React.useRef<NodeJS.Timeout | null>(null);
+  const scrollInterval = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const [isPaused, setIsPaused] = React.useState(false);
+  const touchActiveRef = React.useRef(false);
 
   const SCROLL_SPEED = 1.8; // You can change this value
   
   const SCROLL_INTERVAL = 36; // ~60fps for smooth animation
 
-  // Mock reviews data (only used if no real reviews are available)
-  const mockReviews = [
-    {
-      id: 'mock1',
-      title: "My Reviews",
-      rating: "⭐ ⭐ ⭐ ⭐",
-      content: "A positive teacher review typically highlights a teacher's positive qualities, effective teaching methods, and their impact on student learning",
-      isReal: false
-    },
-    {
-      id: 'mock2', 
-      title: "My Reviews",
-      rating: "⭐ ⭐ ⭐ ⭐ ⭐",
-      content: "Excellent teaching methodology and great communication skills. Students showed remarkable improvement under this teacher's guidance.",
-      isReal: false
-    },
-    {
-      id: 'mock3',
-      title: "My Reviews", 
-      rating: "⭐ ⭐ ⭐ ⭐",
-      content: "Very patient and understanding teacher who creates a positive learning environment for all students.",
-      isReal: false
-    }
-  ];
-
-  // Use the processed reviews directly (they're already combined with mock data in the parent)
-  const reviewData = reviews.length > 0 ? reviews : mockReviews;
+  // Real reviews only - no mock data
+  const reviewData = reviews;
   console.log('Displaying reviews:', reviewData.length, '(Real:', reviewData.filter(r => r.isReal).length, 'Mock:', reviewData.filter(r => !r.isReal).length, ')');
 
   // Calculate total content width for seamless looping
@@ -160,13 +137,15 @@ const InfiniteReviewScroll = ({ reviews }: { reviews: Review[] }) => {
     };
   }, [isPaused]);
 
-  const handleTouchStart = () => {
+  const handleInteractionStart = React.useCallback(() => {
+    touchActiveRef.current = true;
     setIsPaused(true);
-  };
+  }, []);
 
-  const handleTouchEnd = () => {
+  const handleInteractionEnd = React.useCallback(() => {
+    touchActiveRef.current = false;
     setIsPaused(false);
-  };
+  }, []);
 
   return (
     <View style={styles.marqueeContainer}>
@@ -178,15 +157,14 @@ const InfiniteReviewScroll = ({ reviews }: { reviews: Review[] }) => {
         scrollEventThrottle={16}
         bounces={false}
         scrollEnabled={false}
+        onTouchStart={handleInteractionStart}
+        onTouchEnd={handleInteractionEnd}
       >
         {/* Multiple duplicate sets for truly infinite looping */}
         {[...reviewData, ...reviewData, ...reviewData, ...reviewData].map((review, index) => (
-          <TouchableOpacity
+          <View
             key={`${review.id}-${index}`}
-            style={styles.reviewCard}
-            onPressIn={handleTouchStart}
-            onPressOut={handleTouchEnd}
-            activeOpacity={1}
+            style={[styles.reviewCard, { pointerEvents: "box-none" }]}
           >
             {/* Real review badge */}
             {review.isReal && (
@@ -202,7 +180,7 @@ const InfiniteReviewScroll = ({ reviews }: { reviews: Review[] }) => {
                 {review.content}
               </Text>
             </ScrollView>
-          </TouchableOpacity>
+          </View>
         ))}
       </ScrollView>
     </View>
@@ -276,20 +254,10 @@ export default function TeacherDashboard() {
       onStartShouldSetPanResponder: () => false,
       
       onMoveShouldSetPanResponder: (_, { dx, dy }) => {
-        // EXTREMELY strict criteria - almost no accidental swipes
+        if (isSwipeLocked.current) return false;
         const absDx = Math.abs(dx);
         const absDy = Math.abs(dy);
-        
-        // Very high threshold and extremely strict horizontal dominance
-        const horizontalThreshold = 40; // Increased from 25
-        const horizontalDominance = 4.0; // Increased from 2.5 (much more strict)
-        
-        // Additional check: vertical movement must be minimal
-        const maxVerticalMovement = 10; // Max 10px vertical movement allowed
-        
-        return absDx > horizontalThreshold && 
-               absDx > absDy * horizontalDominance && 
-               absDy < maxVerticalMovement;
+        return absDx > 15 && absDx > absDy * 1.5;
       },
 
       onPanResponderGrant: () => {
@@ -335,39 +303,24 @@ export default function TeacherDashboard() {
 
         let newIndex = currentScreenIndex;
         
-        // Calculate swipe threshold - make it extremely high for very deliberate swipes only
-        const swipeThreshold = width * 0.5; // Increased from 0.4 (50% of screen width!)
-        const velocityThreshold = 0.7; // Increased from 0.5 (require very fast swipe)
+        // Calculate swipe threshold - reduced for smoother experience
+        const swipeThreshold = width * 0.3; // Reduced from 0.5
+        const velocityThreshold = 0.3; // Reduced from 0.7
         
         // Only change screen if swipe is decisive enough
         const isSwipingLeft = dx < -swipeThreshold || (dx < 0 && Math.abs(vx) > velocityThreshold);
         const isSwipingRight = dx > swipeThreshold || (dx > 0 && Math.abs(vx) > velocityThreshold);
         
-        // Handle screen transitions - ONLY allow adjacent screen navigation with extra validation
+        // Handle screen transitions
         if (isSwipingLeft && currentScreenIndex < SCREEN_COUNT - 1) {
-          // Swipe left - go to next screen (only one step at a time)
-          // Additional check: ensure we're not trying to skip screens
-          if (currentScreenIndex === 0 || currentScreenIndex === 1) {
-            newIndex = currentScreenIndex + 1;
-            console.log(`👆 Swipe Left: Screen ${currentScreenIndex} → ${newIndex}`);
-          } else {
-            console.log(`🚫 Invalid Skip Attempt: Cannot go from Screen ${currentScreenIndex} further left`);
-            newIndex = currentScreenIndex;
-          }
+          newIndex = currentScreenIndex + 1;
+          console.log(`👆 Swipe Left: Screen ${currentScreenIndex} → ${newIndex}`);
         } else if (isSwipingRight && currentScreenIndex > 0) {
-          // Swipe right - go to previous screen (only one step at a time)
-          // Additional check: ensure we're not trying to skip screens
-          if (currentScreenIndex === 1 || currentScreenIndex === 2) {
-            newIndex = currentScreenIndex - 1;
-            console.log(`👇 Swipe Right: Screen ${currentScreenIndex} → ${newIndex}`);
-          } else {
-            console.log(`🚫 Invalid Skip Attempt: Cannot go from Screen ${currentScreenIndex} further right`);
-            newIndex = currentScreenIndex;
-          }
+          newIndex = currentScreenIndex - 1;
+          console.log(`👇 Swipe Right: Screen ${currentScreenIndex} → ${newIndex}`);
         } else {
-          // No valid swipe - stay on current screen
           newIndex = currentScreenIndex;
-          console.log(`🚫 Invalid Swipe: Staying on Screen ${currentScreenIndex} (TOO WEAK OR WRONG DIRECTION)`);
+          console.log(`🚫 Invalid Swipe: Staying on Screen ${currentScreenIndex}`);
         }
 
         // Ensure index is within bounds
@@ -376,12 +329,12 @@ export default function TeacherDashboard() {
         // Lock during snap animation
         isSwipeLocked.current = true;
 
-        // Animate to the new position with extremely slow, rigid animation
+        // Animate to the new position with smooth animation (matching student dashboard)
         Animated.spring(swipeAnim, {
           toValue: -width * newIndex,
           useNativeDriver: true,
-          tension: 20, // Reduced from 40 for extremely slow animation
-          friction: 30, // Increased from 20 for maximum damping (very slow)
+          tension: 80, // Increased from 20 for smoother animation
+          friction: 10, // Decreased from 30 for smoother animation
           overshootClamping: true,
         }).start(() => {
           isSwipeLocked.current = false;
@@ -396,12 +349,11 @@ export default function TeacherDashboard() {
       onPanResponderTerminate: () => {
         setIsSwipeActive(false);
         if (!isSwipeLocked.current) {
-          // If gesture is terminated, snap back to current screen with extremely slow animation
           Animated.spring(swipeAnim, {
             toValue: -width * currentScreenIndex,
             useNativeDriver: true,
-            tension: 20, // Reduced from 40 for extremely slow animation
-            friction: 30, // Increased from 20 for maximum damping
+            tension: 80,
+            friction: 10,
             overshootClamping: true,
           }).start();
         }
@@ -643,7 +595,7 @@ export default function TeacherDashboard() {
       // Create optimized API calls - SINGLE PROFILE CALL for both profile and subjects
       const apiPromises = [
         // Single profile fetch that includes both profile data and subject count
-        axios.post(`${BASE_URL}/api/userProfile`, { email }, { headers, timeout: 8000 })
+        apiClient.post('/api/teacherProfile', { email }, { headers, timeout: 8000 })
           .then(response => {
             console.log('🔍 Raw teacherProfile API response:', response.data);
             return { type: 'profile', data: response.data };
@@ -653,16 +605,38 @@ export default function TeacherDashboard() {
             return { type: 'profile', error };
           }),
         
-        // Contacts fetch
-        axios.post(`${BASE_URL}/api/contacts`, { userEmail: email, type: auth?.role }, { headers, timeout: 6000 })
-          .then(response => ({ type: 'contacts', data: response.data }))
-          .catch(error => ({ type: 'contacts', error })),
+        // Enrolled students fetch - try primary endpoint first, then fallback to contacts
+        (async () => {
+          try {
+            // First try the enrolled students endpoint
+            const response = await axios.get(`${BASE_URL}/api/teacher/enrolled-students`, {
+              headers: { 'Authorization': `Bearer ${token}` },
+              timeout: 8000
+            });
+            
+            if (response.data.success && response.data.data) {
+              console.log(`✅ Enrolled students loaded: ${response.data.data.length}`);
+              return { type: 'contacts', data: { success: true, contacts: response.data.data } };
+            }
+            throw new Error('No enrolled students data');
+          } catch (enrolledError) {
+            console.log('⚠️ Enrolled students endpoint failed, falling back to contacts...');
+            
+            // Fallback to contacts endpoint
+            try {
+              const contactsResponse = await apiClient.post('/api/contacts', { userEmail: email, type: auth?.role }, { headers, timeout: 6000 });
+              return { type: 'contacts', data: contactsResponse.data };
+            } catch (contactsError) {
+              return { type: 'contacts', error: contactsError };
+            }
+          }
+        })(),
         
         // Reviews fetch - improved error handling
         Promise.race([
-          axios.post(`${BASE_URL}/api/teacher-reviews`, { teacherEmail: email }, { headers, timeout: 8000 }),
-          axios.post(`${BASE_URL}/api/reviews/teacher`, { teacherEmail: email }, { headers, timeout: 8000 }),
-          axios.post(`${BASE_URL}/api/reviews`, { teacherEmail: email }, { headers, timeout: 8000 })
+          apiClient.post('/api/teacher-reviews', { teacherEmail: email }, { headers, timeout: 8000 }),
+          apiClient.post('/api/reviews/teacher', { teacherEmail: email }, { headers, timeout: 8000 }),
+          apiClient.post('/api/reviews', { teacherEmail: email }, { headers, timeout: 8000 })
         ]).then((response: any) => ({ type: 'reviews', data: response.data }))
           .catch((error: any) => {
             console.log('⚠️ Reviews API failed:', error.message || 'Unknown error');
@@ -715,12 +689,16 @@ export default function TeacherDashboard() {
                   let count = subjectCount; // Preserve current count as default
                   
                   if (data?.tuitions && Array.isArray(data.tuitions)) {
-                    const uniqueSubjects = new Set();
+                    // Use same unique tuition logic as MySubjectsWeb.tsx
+                    // Unique key includes: classId/skillId + subject/skill + timeFrom + timeTo + day
+                    const uniqueTuitions = new Map();
                     data.tuitions.forEach((tuition: any) => {
-                      if (tuition?.subject) uniqueSubjects.add(tuition.subject);
-                      else if (tuition?.skill) uniqueSubjects.add(tuition.skill);
+                      const key = `${tuition.classId || tuition.skillId}-${tuition.subject || tuition.skill}-${tuition.timeFrom}-${tuition.timeTo}-${tuition.day}`;
+                      if (!uniqueTuitions.has(key)) {
+                        uniqueTuitions.set(key, tuition);
+                      }
                     });
-                    count = uniqueSubjects.size;
+                    count = uniqueTuitions.size;
                     console.log('📚 Using teacherProfile tuitions array, unique subjects:', count);
                   } else {
                     console.log('⚠️ No tuitions found in teacherProfile response, preserving existing count');
@@ -777,7 +755,7 @@ export default function TeacherDashboard() {
                 if (data?.success && data.reviews) {
                   console.log(`⭐ Reviews loaded: ${data.reviews.length}`);
                   
-                  // Process reviews with better date handling
+                  // Process reviews with better date handling - real data only
                   const processedReviews = data.reviews.map((review: any) => ({
                     id: review.id,
                     title: `Review by ${review.studentName || 'Student'}`,
@@ -787,58 +765,13 @@ export default function TeacherDashboard() {
                     isReal: true // Mark as real data
                   }));
                   
-                  // Combine with mock data for seamless looping
-                  const mockReviews = [
-                    {
-                      id: 'mock1',
-                      title: "My Reviews",
-                      rating: "⭐ ⭐ ⭐ ⭐",
-                      content: "A positive teacher review typically highlights a teacher's positive qualities, effective teaching methods, and their impact on student learning",
-                      isReal: false
-                    },
-                    {
-                      id: 'mock2', 
-                      title: "My Reviews",
-                      rating: "⭐ ⭐ ⭐ ⭐ ⭐",
-                      content: "Excellent teaching methodology and great communication skills. Students showed remarkable improvement under this teacher's guidance.",
-                      isReal: false
-                    },
-                    {
-                      id: 'mock3',
-                      title: "My Reviews", 
-                      rating: "⭐ ⭐ ⭐ ⭐",
-                      content: "Very patient and understanding teacher who creates a positive learning environment for all students.",
-                      isReal: false
-                    }
-                  ];
-                  
-                  // Create display array with real reviews + mock data for seamless looping
-                  let displayReviews = [];
-                  if (processedReviews.length > 0) {
-                    // Add real reviews first
-                    displayReviews = [...processedReviews];
-                    
-                    // Add mock data to fill up to at least 3 items for smooth scrolling
-                    if (displayReviews.length < 3) {
-                      const mockNeeded = Math.max(0, 3 - displayReviews.length);
-                      displayReviews.push(...mockReviews.slice(0, mockNeeded));
-                    }
-                    
-                    // Add one more real review at the end if available
-                    if (processedReviews.length > displayReviews.length) {
-                      displayReviews.push(processedReviews[displayReviews.length]);
-                    }
-                  } else {
-                    // No real reviews, use only mock data
-                    displayReviews = mockReviews;
-                  }
-                  
-                  console.log('📝 Final display reviews:', displayReviews.length, '(Real:', processedReviews.length, 'Mock:', displayReviews.filter(r => !r.isReal).length, ')');
-                  setReviews(displayReviews);
+                  // Use real reviews only - no mock data
+                  console.log('📝 Reviews loaded:', processedReviews.length);
+                  setReviews(processedReviews);
                   
                   // Cache reviews
                   AsyncStorage.setItem('teacher_reviews_cache', JSON.stringify({
-                    reviews: displayReviews,
+                    reviews: processedReviews,
                     timestamp: Date.now()
                   })).catch(() => {});
                 }
@@ -876,8 +809,8 @@ export default function TeacherDashboard() {
       const auth = await getAuthData();
       if (!auth?.token) return;
 
-      const response = await axios.get(
-        `${BASE_URL}/api/notifications/unread-count`,
+      const response = await apiClient.get(
+        '/api/notifications/unread-count',
         {
           headers: {
             'Authorization': `Bearer ${auth.token}`,
@@ -911,6 +844,62 @@ export default function TeacherDashboard() {
     // Clean up interval on component unmount
     return () => clearInterval(interval);
   }, [userEmail, fetchUnreadCount]);
+
+  // Fetch reviews function for polling
+  const fetchReviews = useCallback(async () => {
+    try {
+      const auth = await getAuthData();
+      if (!auth?.token || !userEmail) return;
+
+      const headers = {
+        Authorization: `Bearer ${auth.token}`,
+        "Content-Type": "application/json",
+      };
+
+      // Try multiple endpoints for reviews
+      const response = await Promise.race([
+        apiClient.post('/api/teacher-reviews', { teacherEmail: userEmail }, { headers, timeout: 8000 }),
+        apiClient.post('/api/reviews/teacher', { teacherEmail: userEmail }, { headers, timeout: 8000 }),
+        apiClient.post('/api/reviews', { teacherEmail: userEmail }, { headers, timeout: 8000 })
+      ]);
+
+      if (response.data?.reviews) {
+        // Process reviews with better date handling
+        const processedReviews = response.data.reviews.map((review: any) => ({
+          id: review.id,
+          title: `Review by ${review.studentName || 'Student'}`,
+          rating: '⭐'.repeat(Math.min(Math.max(parseInt(review.rating) || 4, 1), 5)),
+          content: review.content,
+          createdAt: review.created_at,
+          isReal: true
+        }));
+
+        setReviews(processedReviews);
+        
+        // Cache reviews
+        AsyncStorage.setItem('teacher_reviews_cache', JSON.stringify({
+          reviews: processedReviews,
+          timestamp: Date.now()
+        })).catch(() => {});
+      }
+    } catch (error) {
+      console.log('⚠️ Reviews polling error:', error);
+    }
+  }, [userEmail]);
+
+  // Separate effect for reviews polling - updates every 10 seconds
+  useEffect(() => {
+    if (!userEmail) return;
+    
+    // Initial fetch
+    fetchReviews();
+    
+    // Set up polling every 10 seconds for more responsive updates
+    const interval = setInterval(fetchReviews, 10000);
+    
+    // Clean up interval on component unmount
+    return () => clearInterval(interval);
+  }, [userEmail, fetchReviews]);
 
   let [fontsLoaded] = useFonts({
     Poppins_Regular: Poppins_400Regular,
@@ -970,16 +959,7 @@ return (
   style={[
     styles.swipeContent,
     {
-      transform: [
-        { translateX: swipeAnim },
-        { scale: swipeScale },
-        { rotate: swipeRotation.interpolate({
-          inputRange: [-15, 15],
-          outputRange: ['-15deg', '15deg']
-        })}
-      ],
-      width: width * SCREEN_COUNT,
-      opacity: swipeOpacity,
+      transform: [{ translateX: swipeAnim }],
     },
   ]}
   {...panResponder.panHandlers}
@@ -1038,11 +1018,6 @@ return (
                   // Terms & Conditions and Privacy Policy are handled in the component itself
                   // Logout is handled in the component itself
                 }}
-    
-                userEmail={userEmail || ''}
-                teacherName={teacherName}
-                profileImage={profileImage}
-                leftFont={'RedHatDisplay_400Regular'}
               />
 
               <View style={styles.headerContainer}>
@@ -1220,8 +1195,8 @@ return (
                   Animated.spring(swipeAnim, {
                     toValue: 0,
                     useNativeDriver: true,
-                    tension: 20, // Reduced from 40 for extremely slow animation
-                    friction: 30, // Increased from 20 for maximum damping
+                    tension: 80,
+                    friction: 10,
                   }).start();
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 } else {
@@ -1249,8 +1224,8 @@ return (
                   Animated.spring(swipeAnim, {
                     toValue: -width,
                     useNativeDriver: true,
-                    tension: 20, // Reduced from 40 for extremely slow animation
-                    friction: 30, // Increased from 20 for maximum damping
+                    tension: 80,
+                    friction: 10,
                   }).start();
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 } else {
@@ -1278,8 +1253,8 @@ return (
                   Animated.spring(swipeAnim, {
                     toValue: -width * 2,
                     useNativeDriver: true,
-                    tension: 20, // Reduced from 40 for extremely slow animation
-                    friction: 30, // Increased from 20 for maximum damping
+                    tension: 80,
+                    friction: 10,
                   }).start();
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 } else {
@@ -1357,10 +1332,27 @@ reviewCard: {
   marginLeft: wp("2.13%"), 
   justifyContent: "space-between", 
   position: 'relative',
-  shadowColor: "#000",
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.1,
-  shadowRadius: 4,
+  ...Platform.select({
+
+    web: {
+
+      boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+    },
+
+    default: {
+
+      shadowColor: '#000',
+
+      shadowOffset: { width: 0, height: 4 },
+
+      shadowOpacity: 0.3,
+
+      shadowRadius: 8,
+
+    },
+
+  }),
   elevation: 3,
 },
   
@@ -1439,10 +1431,27 @@ statusText: {
     justifyContent: "center", 
     alignItems: "center", 
     gap: hp("0.8%"),
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 8,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.2)",
@@ -1458,10 +1467,27 @@ statusText: {
     flexDirection: "column", 
     justifyContent: "space-around", 
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 8,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.2)",
@@ -1477,10 +1503,27 @@ statusText: {
     flexDirection: "column", 
     justifyContent: "space-around", 
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 8,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.2)",
@@ -1534,10 +1577,27 @@ spotlightHeaderBadge: {
   marginLeft: wp('2.5%'),
   borderWidth: 1.5,
   borderColor: '#FFD54F',
-  shadowColor: '#FFD54F',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.3,
-  shadowRadius: 4,
+  ...Platform.select({
+
+    web: {
+
+      boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+    },
+
+    default: {
+
+      shadowColor: '#000',
+
+      shadowOffset: { width: 0, height: 4 },
+
+      shadowOpacity: 0.3,
+
+      shadowRadius: 8,
+
+    },
+
+  }),
   elevation: 4,
   overflow: 'hidden',
   position: 'relative',
@@ -1645,10 +1705,27 @@ notificationButton: {
   padding: wp("2%"),
   borderRadius: wp("2.5%"),
   backgroundColor: "transparent", 
-  shadowColor: "#000",
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.1,
-  shadowRadius: 4,
+  ...Platform.select({
+ 
+    web: {
+ 
+      boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+ 
+    },
+ 
+    default: {
+ 
+      shadowColor: '#000',
+ 
+      shadowOffset: { width: 0, height: 4 },
+ 
+      shadowOpacity: 0.3,
+ 
+      shadowRadius: 8,
+ 
+    },
+ 
+  }),
   elevation: 3,
 },
 
@@ -1835,10 +1912,27 @@ swipeOverlay: {
     width: wp('4%'),
     borderWidth: 2,
     borderColor: '#fff',
-    shadowColor: '#5f5fff',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 6,
   },
   

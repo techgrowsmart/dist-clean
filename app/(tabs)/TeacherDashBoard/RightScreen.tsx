@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -387,7 +388,7 @@ const RightScreen: React.FC = () => {
       }
 
       const pickerResult = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1,
@@ -418,46 +419,71 @@ const RightScreen: React.FC = () => {
     try {
       setLoading(true);
       
-      const formData = new FormData();
-      formData.append('content', newPostContent);
+      let response;
       
-      // Explicitly send user information to ensure correct author data
-      formData.append('authorName', currentUser.name || 'Teacher');
-      formData.append('authorEmail', currentUser.email);
-      formData.append('authorRole', currentUser.role || 'Teacher');
-      if (currentUser.profileImage) {
-        formData.append('authorProfileImage', currentUser.profileImage);
-      }
+      // Check if image is base64 (web platform) or file path (mobile)
+      const isBase64Image = selectedImage && selectedImage.startsWith('data:image');
       
-      // Add additional user data fields to ensure backend has correct info
-      formData.append('userName', currentUser.name || 'Teacher');
-      formData.append('userEmail', currentUser.email);
-      formData.append('userRole', currentUser.role || 'Teacher');
-      formData.append('userProfileImage', currentUser.profileImage || '');
-      
-      console.log('📤 Sending complete user data:', {
-        authorName: currentUser.name,
-        authorEmail: currentUser.email,
-        authorRole: currentUser.role,
-        authorProfileImage: currentUser.profileImage
-      });
-      
-      if (selectedImage) {
-        const uri = selectedImage;
-        const fileType = uri.split('.').pop();
-        formData.append('postImage', {
-          uri: uri,
-          type: `image/${fileType}`,
-          name: `post-image.${fileType}`
-        } as any);
-      }
-
-      const response = await axios.post(`${BASE_URL}/api/posts/create`, formData, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'multipart/form-data'
+      if (isBase64Image) {
+        // Send base64 image as JSON (web platform)
+        console.log('📤 Uploading post with base64 image');
+        response = await axios.post(
+          `${BASE_URL}/api/posts/create`,
+          {
+            content: newPostContent.trim(),
+            tags: '',
+            imageUri: selectedImage  // Send base64 data as JSON field
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+      } else {
+        // Create FormData for file upload (mobile platform)
+        const formData = new FormData();
+        formData.append('content', newPostContent);
+        
+        // Explicitly send user information to ensure correct author data
+        formData.append('authorName', currentUser.name || 'Teacher');
+        formData.append('authorEmail', currentUser.email);
+        formData.append('authorRole', currentUser.role || 'Teacher');
+        if (currentUser.profileImage) {
+          formData.append('authorProfileImage', currentUser.profileImage);
         }
-      });
+        
+        // Add additional user data fields to ensure backend has correct info
+        formData.append('userName', currentUser.name || 'Teacher');
+        formData.append('userEmail', currentUser.email);
+        formData.append('userRole', currentUser.role || 'Teacher');
+        formData.append('userProfileImage', currentUser.profileImage || '');
+        
+        console.log('📤 Sending complete user data (mobile):', {
+          authorName: currentUser.name,
+          authorEmail: currentUser.email,
+          authorRole: currentUser.role,
+          authorProfileImage: currentUser.profileImage
+        });
+        
+        if (selectedImage) {
+          const uri = selectedImage;
+          const fileType = uri.split('.').pop();
+          formData.append('postImage', {
+            uri: uri,
+            type: `image/${fileType}`,
+            name: `post-image.${fileType}`
+          } as any);
+        }
+
+        response = await axios.post(`${BASE_URL}/api/posts/create`, formData, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+      }
 
       console.log('📨 Create post response:', response.data); // Debug response
       
@@ -1460,10 +1486,27 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: width * 0.04,
     marginBottom: height * 0.02,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 3,
   },
   inputUserInfo: {
@@ -1497,10 +1540,27 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: width * 0.04,
     marginBottom: height * 0.02,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 3,
   },
   postHeader: {
@@ -1588,10 +1648,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 3,
   },
   hintText: {

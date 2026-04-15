@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Proxy - CORS Fix</title>
+</head>
+<body>
+    <script>
+        // Simple API proxy to bypass CORS
+        // This file acts as a proxy for your API requests
+        
+        async function proxyRequest() {
+            const url = new URL(window.location.href);
+            const targetUrl = url.searchParams.get('url');
+            const method = url.searchParams.get('method') || 'GET';
+            const headers = JSON.parse(url.searchParams.get('headers') || '{}');
+            const body = url.searchParams.get('body');
+            
+            if (!targetUrl) {
+                return new Response('Missing url parameter', { status: 400 });
+            }
+            
+            try {
+                const options = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...headers
+                    }
+                };
+                
+                if (body && method !== 'GET') {
+                    options.body = body;
+                }
+                
+                const response = await fetch(targetUrl, options);
+                const responseData = await response.text();
+                
+                return new Response(responseData, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: {
+                        'Content-Type': response.headers.get('Content-Type') || 'application/json',
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Test-User'
+                    }
+                });
+            } catch (error) {
+                return new Response(JSON.stringify({ error: error.message }), {
+                    status: 500,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+        }
+        
+        // Handle the request
+        proxyRequest().then(response => {
+            response.text().then(text => {
+                document.body.innerText = text;
+            });
+        }).catch(error => {
+            document.body.innerText = JSON.stringify({ error: error.message });
+        });
+    </script>
+</body>
+</html>

@@ -8,11 +8,12 @@ import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { doc, setDoc } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  Platform,
   ActivityIndicator, Alert, BackHandler, Image, KeyboardAvoidingView,
-  Modal, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput,
-  TouchableOpacity, View,
+  Modal, SafeAreaView, ScrollView, StyleSheet, Text, TextInput,
+  TouchableOpacity, View, Dimensions, Animated,
 } from "react-native";
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from "react-native-responsive-screen";
 import BackButton from "../../../components/BackButton";
@@ -44,6 +45,64 @@ const INDIAN_STATES = [
 const CLASS_OPTIONS = ['Class 6','Class 7','Class 8','Class 9','Class 10','Class 11','Class 12','1st Year','2nd Year','3rd Year','4th Year','5th Year'];
 const DEFAULT_PROFILE_IMAGE = "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png";
 
+const ALL_INDIA_BOARDS = [
+  // All Universities
+  { boardName: 'All Universities' },
+  // National Boards
+  { boardName: 'CBSE' },
+  { boardName: 'ICSE' },
+  { boardName: 'NIOS (National Institute of Open Schooling)' },
+  // International Boards
+  { boardName: 'IB (International Baccalaureate)' },
+  { boardName: 'IGCSE (Cambridge International)' },
+  { boardName: 'CAIE (Cambridge Assessment International Education)' },
+  // State Boards - North India
+  { boardName: 'Andhra Pradesh Board of Secondary Education (BSEAP)' },
+  { boardName: 'Assam Board of Secondary Education (SEBA)' },
+  { boardName: 'Bihar School Examination Board (BSEB)' },
+  { boardName: 'Chhattisgarh Board of Secondary Education (CGBSE)' },
+  { boardName: 'Goa Board of Secondary and Higher Secondary Education (GBSHSE)' },
+  { boardName: 'Gujarat Secondary and Higher Secondary Education Board (GSEB)' },
+  { boardName: 'Haryana Board of School Education (HBSE)' },
+  { boardName: 'Himachal Pradesh Board of School Education (HPBOSE)' },
+  { boardName: 'Jharkhand Academic Council (JAC)' },
+  { boardName: 'Karnataka Secondary Education Examination Board (KSEEB)' },
+  { boardName: 'Kerala Board of Public Examinations (KBPE)' },
+  { boardName: 'Madhya Pradesh Board of Secondary Education (MPBSE)' },
+  { boardName: 'Maharashtra State Board of Secondary and Higher Secondary Education (MSBSHSE)' },
+  { boardName: 'Manipur Board of Secondary Education (BOSEM)' },
+  { boardName: 'Meghalaya Board of School Education (MBOSE)' },
+  { boardName: 'Mizoram Board of School Education (MBSE)' },
+  { boardName: 'Nagaland Board of School Education (NBSE)' },
+  { boardName: 'Odisha Board of Secondary Education (BSE Odisha)' },
+  { boardName: 'Punjab School Education Board (PSEB)' },
+  { boardName: 'Rajasthan Board of Secondary Education (RBSE)' },
+  { boardName: 'Tamil Nadu State Board (TN Board)' },
+  { boardName: 'Telangana State Board of Intermediate Education (TSBIE)' },
+  { boardName: 'Tripura Board of Secondary Education (TBSE)' },
+  { boardName: 'Uttar Pradesh Madhyamik Shiksha Parishad (UPMSP)' },
+  { boardName: 'Uttarakhand Board of School Education (UBSE)' },
+  { boardName: 'West Bengal Board of Secondary Education (WBBSE)' },
+  { boardName: 'West Bengal Council of Higher Secondary Education (WBCHSE)' },
+  // Union Territories
+  { boardName: 'Delhi Board of Secondary Education (DBSE)' },
+  { boardName: 'Jammu and Kashmir Board of School Education (JKBOSE)' },
+  { boardName: 'Puducherry Board of Secondary Education' },
+  { boardName: 'Chandigarh Board of Secondary Education' },
+  // Open Schooling
+  { boardName: 'Rajasthan State Open School (RSOS)' },
+  { boardName: 'Madhya Pradesh State Open School (MPSOS)' },
+  { boardName: 'West Bengal Council of Rabindra Open Schooling (WBCROS)' },
+  // Additional Boards
+  { boardName: 'CISCE (Council for the Indian School Certificate Examinations)' },
+  { boardName: 'Kendriya Vidyalaya Sangathan (KV)' },
+  { boardName: 'Jawahar Navodaya Vidyalaya (JNV)' },
+  { boardName: 'Sainik Schools Society' },
+  { boardName: 'National Defence Academy (NDA)' },
+  { boardName: 'Madrasa Board' },
+  { boardName: 'Sanskrit Board' },
+];
+
 const calculateAge = (dob: string): string => {
   try {
     const [day, month, year] = dob.split('/');
@@ -57,11 +116,13 @@ const calculateAge = (dob: string): string => {
 
 export default function Profile() {
   const [errors, setErrors] = useState<FormErrors>({});
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+  const [fadeAnim] = useState(new Animated.Value(0));
   const router = useRouter();
-  const { userType } = useLocalSearchParams<{ userType: string; userEmail: string }>();
-  const [studentName, setStudentName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const { userType, email: urlEmail, name: urlName, phone: urlPhone } = useLocalSearchParams<{ userType: string; email: string; name: string; phone: string }>();
+  const [studentName, setStudentName] = useState(urlName || "");
+  const [email, setEmail] = useState(urlEmail || "");
+  const [phone, setPhone] = useState(urlPhone || "");
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [dateOfBirth, setDateofBirth] = useState("");
   const [educationBoard, setEducationBoard] = useState("");
@@ -73,21 +134,34 @@ export default function Profile() {
   const [country, setCountry] = useState("");
   const [classYear, setClassYear] = useState("");
   const [showPicker, setShowPicker] = useState(false);
-  const [boards, setBoards] = useState<Array<{ boardName: string; boardId?: string }>>([]);
+  const [boards, setBoards] = useState<Array<{ boardName: string; boardId?: string }>>(ALL_INDIA_BOARDS);
+  const [showEditForm, setShowEditForm] = useState(!!(urlName || urlEmail || urlPhone));
   const [modalVisible, setModalVisible] = useState(false);
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const navigation = useNavigation();
+
+  const handleBackPress = useCallback(() => { router.push('/(tabs)/StudentDashBoard/Student'); }, [router]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') handleBackPress(); };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [handleBackPress]);
 
   useFocusEffect(React.useCallback(() => {
     const onBack = () => {
+      if (showEditForm) { setShowEditForm(false); return true; }
       if (previewModalVisible) { setPreviewModalVisible(false); return true; }
       if (modalVisible) { setModalVisible(false); return true; }
       router.back(); return true;
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
     return () => sub.remove();
-  }, [router, previewModalVisible, modalVisible]));
+  }, [router, showEditForm, previewModalVisible, modalVisible]));
 
   const [fontsLoaded] = useFonts({ Poppins_600SemiBold, OpenSans_600SemiBold });
 
@@ -116,26 +190,79 @@ export default function Profile() {
   const fetchProfileAndBoards = async () => {
     try {
       const auth = await getAuthData();
-      if (!auth?.token) { Alert.alert("Error", "Please login again"); return; }
+      if (!auth?.token) { 
+        Alert.alert("Error", "Please login again"); 
+        setIsLoading(false);
+        return; 
+      }
       const headers = { Authorization: `Bearer ${auth.token}` };
-      const { data } = await axios.post(`${BASE_URL}/api/sudentProfile`, { email: auth.email }, { headers });
-      setStudentName(data.name || ""); setEmail(data.email || ""); setPhone(data.phone || "");
+      
+      // Fetch profile only - boards are hardcoded in ALL_INDIA_BOARDS
+      const profileResponse = await axios.post(
+        `${BASE_URL}/api/studentProfile`, 
+        { email: auth.email }, 
+        { headers }
+      );
+
+      const data = profileResponse.data;
+      // Only override URL params if backend has data
+      if (data.name) setStudentName(data.name);
+      if (data.email) setEmail(data.email);
+      if (data.phone) setPhone(data.phone);
       setProfileImage(data.profileimage || null); setDateofBirth(data.dateOfBirth || "");
       setEducationBoard(data.educationBoard || ""); setInstituteName(data.instituteName || "");
       setPreferredMedium(data.preferredMedium || ""); setFullAddress(data.fullAddress || "");
       setStateName(data.stateName || ""); setPincode(data.pincode || "");
       setCountry(data.country || ""); setClassYear(data.classYear || "");
-      try {
-        const br = await axios.post(`${BASE_URL}/api/allboards`, { category: "student" }, { headers });
-        const arr = Array.isArray(br.data) ? br.data : [];
-        setBoards(arr.map((b: any) => ({ boardName: b.boardName, boardId: b.boardId })).filter((b: any) => b.boardName));
-      } catch {
-        setBoards([{ boardName: 'CBSE' }, { boardName: 'ICSE' }, { boardName: 'State Board' }]);
-      }
-    } catch { Alert.alert("Error", "Failed to load profile. Please try again later."); }
+    } catch (error) {
+      console.error('Profile load error:', error);
+      Alert.alert("Error", "Failed to load profile. Please try again later.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  useEffect(() => { const init = async () => { await fetchProfileAndBoards(); setIsLoading(false); }; init(); }, []);
+  const isDesktop = screenWidth >= 1024;
+
+  // Platform switching fixes - Optimized
+  useEffect(() => {
+    let isMounted = true;
+    
+    const init = async () => { 
+      if (isMounted) {
+        await fetchProfileAndBoards(); 
+      }
+    };
+    
+    init();
+    
+    // Optimized animation - reduced duration
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400, // Reduced from 700ms
+      useNativeDriver: true,
+    }).start();
+    
+    const handleDimensionChange = ({ window }) => {
+      setScreenWidth(window.width);
+    };
+    
+    const sub = Dimensions.addEventListener?.('change', handleDimensionChange);
+    
+    return () => {
+      isMounted = false;
+      sub?.remove?.();
+    };
+  }, []);
+
+  // Additional effect to handle platform-specific resets - Simplified
+  useEffect(() => {
+    // Reset critical state when platform changes
+    setErrors({});
+    setShowEditForm(false);
+    setModalVisible(false);
+    setPreviewModalVisible(false);
+  }, [Platform.OS]);
 
   const getCompletionPct = () => {
     const fields = [studentName, email, dateOfBirth, phone, educationBoard, instituteName, preferredMedium, classYear];
@@ -160,7 +287,8 @@ export default function Profile() {
       const formData = new FormData();
       const filename = `profile_${Date.now()}.jpg`;
       if (Platform.OS === "web") {
-        const blob = await (await fetch(uri)).blob();
+        const response = await fetch(uri);
+        const blob = await response.blob();
         formData.append("profileimage", new File([blob], filename, { type: blob.type }));
       } else {
         formData.append("profileimage", { uri, name: filename, type: 'image/jpeg' } as any);
@@ -175,22 +303,97 @@ export default function Profile() {
   };
 
   const handleSave = async () => {
-    if (!validateForm()) { Alert.alert("Missing Fields", "Please fill in all required fields."); return; }
+    if (!validateForm()) {
+      Alert.alert("Missing Fields", "Please fill in all required fields.");
+      return;
+    }
+
+    setIsSaving(true);
+
     try {
-      if (profileImage && (profileImage.startsWith("file://") || profileImage.startsWith("blob:"))) {
-        const imageUrl = await uploadImageToS3AndUpdateProfile(profileImage);
-        await setDoc(doc(db, "users", email), { name: studentName, email, phone, profileImage: imageUrl });
-        await AsyncStorage.multiSet([["studentName", studentName], ["email", email], ["phone", phone]]);
-        router.push({ pathname: "/(tabs)/StudentDashBoard/Student", params: { userType: userType || "student", userEmail: email, studentName, phone } });
+      const auth = await getAuthData();
+      if (!auth?.token) {
+        setIsSaving(false);
+        Alert.alert("Error", "Authentication required. Please login again.");
         return;
       }
-      await setDoc(doc(db, "users", email), { name: studentName, email, phone });
-      const auth = await getAuthData();
-      const obj = { email, name: studentName, dateofBirth: dateOfBirth, educationBoard, instituteName, classYear, preferredMedium, phone_number: phone, fullAddress, stateName, pincode, country };
-      await axios.post(`${BASE_URL}/api/updateStudentProfile`, obj, { headers: { Authorization: `Bearer ${(auth as any).token}` } });
-      await AsyncStorage.multiSet([["studentName", studentName], ["email", email], ["phone", phone]]);
-      router.push({ pathname: "/(tabs)/StudentDashBoard/Student", params: { userType: userType || "student", userEmail: email, studentName, phone } });
-    } catch (e) { console.error("Save error:", e); }
+
+      let finalImageUrl = profileImage;
+
+      // Case 1: New profile image uploaded
+      if (profileImage && (profileImage.startsWith("file://") || profileImage.startsWith("blob:"))) {
+        finalImageUrl = await uploadImageToS3AndUpdateProfile(profileImage);
+        if (!finalImageUrl) {
+          setIsSaving(false);
+          Alert.alert("Error", "Failed to upload profile image. Please try again.");
+          return;
+        }
+      }
+
+      // Update Firebase (best effort)
+      try {
+        await setDoc(doc(db, "users", email), {
+          name: studentName,
+          email,
+          phone,
+          profileImage: finalImageUrl
+        }, { merge: true });
+      } catch (firestoreError) {
+        console.error("Firebase write error:", firestoreError);
+        // Continue even if Firebase fails - backend is the source of truth
+      }
+
+      // Save all profile data to backend
+      const obj = {
+        email,
+        name: studentName,
+        dateofBirth: dateOfBirth,
+        educationBoard,
+        instituteName,
+        classYear,
+        preferredMedium,
+        phone: phone,
+        fullAddress,
+        stateName,
+        pincode,
+        country,
+        profileimage: finalImageUrl // Include the profile image URL
+      };
+
+      console.log("Saving profile data:", obj);
+
+      const response = await axios.post(`${BASE_URL}/api/updateStudentProfile`, obj, {
+        headers: { Authorization: `Bearer ${auth.token}` }
+      });
+
+      console.log("Save response status:", response.status);
+      console.log("Save response data:", response.data);
+
+      // Accept any successful status code (200-299)
+      if (response.status >= 200 && response.status < 300) {
+        await AsyncStorage.multiSet([
+          ["studentName", studentName],
+          ["email", email],
+          ["phone", phone],
+          ["profileImage", finalImageUrl || ""]
+        ]);
+        setIsSaving(false);
+        // Show success message before navigating
+        Alert.alert("Success", "Profile saved successfully!", [
+          { text: "OK", onPress: () => router.push({ pathname: "/(tabs)/StudentDashBoard/Student", params: { userType: userType || "student", userEmail: email, studentName, phone } }) }
+        ]);
+      } else {
+        setIsSaving(false);
+        Alert.alert("Error", "Failed to save profile. Please try again.");
+      }
+    } catch (e: any) {
+      console.error("Save error:", e);
+      console.error("Error response:", e.response?.data);
+      console.error("Error status:", e.response?.status);
+      setIsSaving(false);
+      const errorMessage = e.response?.data?.message || e.response?.data?.error || "An error occurred while saving. Please check your connection and try again.";
+      Alert.alert("Error", errorMessage);
+    }
   };
 
   const handleImagePicker = () => setModalVisible(true);
@@ -235,12 +438,12 @@ export default function Profile() {
   if (Platform.OS === 'web') {
     const pct = getCompletionPct();
 
-    // ── Web Preview ──────────────────────────────────────────────────────────
-    if (previewModalVisible) {
+    // ── Web Preview (Default View) ─────────────────────────────────────────────
+    if (!showEditForm) {
       return (
         <View style={webPreview.overlay}>
           {/* Bengali character background */}
-          <View style={webPreview.patternLayer} pointerEvents="none">
+          <View style={[webPreview.patternLayer, { pointerEvents: 'none' }]}>
             {Array.from({ length: 14 }).map((_, row) => (
               <View key={row} style={webPreview.patternRow}>
                 {Array.from({ length: 22 }).map((_, col) => (
@@ -254,9 +457,17 @@ export default function Profile() {
 
           {/* Main white card */}
           <View style={webPreview.card}>
-            <TouchableOpacity style={webPreview.closeBtn} onPress={() => setPreviewModalVisible(false)}>
-              <Text style={webPreview.closeBtnTxt}>×</Text>
-            </TouchableOpacity>
+            <View style={webPreview.cardHeader}>
+              <TouchableOpacity style={webPreview.closeBtn} onPress={() => router.back()}>
+                <Text style={webPreview.closeBtnTxt}>×</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={webPreview.editBtn} 
+                onPress={() => setShowEditForm(true)}
+              >
+                <FontAwesome name="pencil" size={16} color="#5f5fff" />
+              </TouchableOpacity>
+            </View>
 
             <View style={webPreview.cardBody}>
               {/* LEFT */}
@@ -335,7 +546,16 @@ export default function Profile() {
               </View>
             </View>
           </View>
-          {ImagePickerModal}
+
+          {/* Edit Profile Button */}
+          <View style={[webPreview.footer, { paddingTop: 20 }]}>
+            <TouchableOpacity 
+              style={webEdit.saveBtn} 
+              onPress={() => setShowEditForm(true)}
+            >
+              <Text style={webEdit.saveBtnTxt}>Edit Profile</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       );
     }
@@ -397,13 +617,11 @@ export default function Profile() {
               <View style={webEdit.formRow}>
                 <View style={webEdit.formField}>
                   <Text style={webEdit.fieldLabel}>FULL NAME <Text style={webEdit.req}>*</Text></Text>
-                  <TextInput style={[webEdit.input, errors.studentName ? webEdit.inputErr : null]} value={studentName} onChangeText={setStudentName} placeholder="Ayano Nana" placeholderTextColor="#c4c4c4" />
-                  {errors.studentName ? <Text style={webEdit.errTxt}>{errors.studentName}</Text> : null}
+                  <TextInput style={[webEdit.input, webEdit.inputDisabled]} value={studentName} editable={false} placeholder="Ayano Nana" placeholderTextColor="#c4c4c4" />
                 </View>
                 <View style={webEdit.formField}>
                   <Text style={webEdit.fieldLabel}>EMAIL <Text style={webEdit.req}>*</Text></Text>
-                  <TextInput style={[webEdit.input, errors.email ? webEdit.inputErr : null]} value={email} onChangeText={setEmail} placeholder="ayanonana@gmail.com" keyboardType="email-address" placeholderTextColor="#c4c4c4" />
-                  {errors.email ? <Text style={webEdit.errTxt}>{errors.email}</Text> : null}
+                  <TextInput style={[webEdit.input, webEdit.inputDisabled]} value={email} editable={false} placeholder="ayanonana@gmail.com" keyboardType="email-address" placeholderTextColor="#c4c4c4" />
                 </View>
               </View>
 
@@ -427,10 +645,32 @@ export default function Profile() {
                 <View style={webEdit.formField}>
                   <Text style={webEdit.fieldLabel}>EDUCATION BOARD <Text style={webEdit.req}>*</Text></Text>
                   <View style={[webEdit.input, webEdit.pickerWrap, errors.educationBoard ? webEdit.inputErr : null]}>
-                    <Picker selectedValue={educationBoard} onValueChange={setEducationBoard} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
-                      <Picker.Item label="Select Board" value="" />
-                      {boards.map((b, i) => <Picker.Item key={i} label={b.boardName} value={b.boardName} />)}
-                    </Picker>
+                    {Platform.OS === 'web' ? (
+                      <select
+                        value={educationBoard}
+                        onChange={(e) => setEducationBoard(e.target.value)}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          border: 'none',
+                          background: 'transparent',
+                          fontSize: 13.5,
+                          color: educationBoard ? '#111827' : '#9ca3af',
+                          outline: 'none',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="">Select Board</option>
+                        {boards.map((b, i) => (
+                          <option key={i} value={b.boardName}>{b.boardName}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Picker selectedValue={educationBoard} onValueChange={setEducationBoard} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
+                        <Picker.Item label="Select Board" value="" />
+                        {boards.map((b, i) => <Picker.Item key={i} label={b.boardName} value={b.boardName} />)}
+                      </Picker>
+                    )}
                   </View>
                   {errors.educationBoard ? <Text style={webEdit.errTxt}>{errors.educationBoard}</Text> : null}
                 </View>
@@ -445,22 +685,66 @@ export default function Profile() {
                 <View style={webEdit.formField}>
                   <Text style={webEdit.fieldLabel}>CLASS/ YEAR <Text style={webEdit.req}>*</Text></Text>
                   <View style={[webEdit.input, webEdit.pickerWrap, errors.classYear ? webEdit.inputErr : null]}>
-                    <Picker selectedValue={classYear} onValueChange={setClassYear} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
-                      <Picker.Item label="#" value="" />
-                      {CLASS_OPTIONS.map((c, i) => <Picker.Item key={i} label={c} value={c} />)}
-                    </Picker>
+                    {Platform.OS === 'web' ? (
+                      <select
+                        value={classYear}
+                        onChange={(e) => setClassYear(e.target.value)}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          border: 'none',
+                          background: 'transparent',
+                          fontSize: 13.5,
+                          color: classYear ? '#111827' : '#9ca3af',
+                          outline: 'none',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="">Select Class/Year</option>
+                        {CLASS_OPTIONS.map((c, i) => (
+                          <option key={i} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Picker selectedValue={classYear} onValueChange={setClassYear} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
+                        <Picker.Item label="#" value="" />
+                        {CLASS_OPTIONS.map((c, i) => <Picker.Item key={i} label={c} value={c} />)}
+                      </Picker>
+                    )}
                   </View>
                   {errors.classYear ? <Text style={webEdit.errTxt}>{errors.classYear}</Text> : null}
                 </View>
                 <View style={webEdit.formField}>
                   <Text style={webEdit.fieldLabel}>PREFERRED MEDIUM <Text style={webEdit.req}>*</Text></Text>
                   <View style={[webEdit.input, webEdit.pickerWrap, errors.preferredMedium ? webEdit.inputErr : null]}>
-                    <Picker selectedValue={preferredMedium} onValueChange={setPreferredMedium} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
-                      <Picker.Item label="ENGLISH/ BENGALI/ TAMIL" value="" />
-                      <Picker.Item label="English" value="English" />
-                      <Picker.Item label="Bengali" value="Bengali" />
-                      <Picker.Item label="Hindi" value="Hindi" />
-                    </Picker>
+                    {Platform.OS === 'web' ? (
+                      <select
+                        value={preferredMedium}
+                        onChange={(e) => setPreferredMedium(e.target.value)}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          border: 'none',
+                          background: 'transparent',
+                          fontSize: 13.5,
+                          color: preferredMedium ? '#111827' : '#9ca3af',
+                          outline: 'none',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="">Select Medium</option>
+                        <option value="English">English</option>
+                        <option value="Bengali">Bengali</option>
+                        <option value="Hindi">Hindi</option>
+                      </select>
+                    ) : (
+                      <Picker selectedValue={preferredMedium} onValueChange={setPreferredMedium} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
+                        <Picker.Item label="ENGLISH/ BENGALI/ TAMIL" value="" />
+                        <Picker.Item label="English" value="English" />
+                        <Picker.Item label="Bengali" value="Bengali" />
+                        <Picker.Item label="Hindi" value="Hindi" />
+                      </Picker>
+                    )}
                   </View>
                   {errors.preferredMedium ? <Text style={webEdit.errTxt}>{errors.preferredMedium}</Text> : null}
                 </View>
@@ -475,10 +759,32 @@ export default function Profile() {
                 <View style={webEdit.formField}>
                   <Text style={webEdit.fieldLabel}>STATE</Text>
                   <View style={[webEdit.input, webEdit.pickerWrap]}>
-                    <Picker selectedValue={stateName} onValueChange={setStateName} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
-                      <Picker.Item label="Select State/UT" value="" />
-                      {INDIAN_STATES.map((s, i) => <Picker.Item key={i} label={s} value={s} />)}
-                    </Picker>
+                    {Platform.OS === 'web' ? (
+                      <select
+                        value={stateName}
+                        onChange={(e) => setStateName(e.target.value)}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          border: 'none',
+                          background: 'transparent',
+                          fontSize: 13.5,
+                          color: stateName ? '#111827' : '#9ca3af',
+                          outline: 'none',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="">Select State/UT</option>
+                        {INDIAN_STATES.map((s, i) => (
+                          <option key={i} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Picker selectedValue={stateName} onValueChange={setStateName} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
+                        <Picker.Item label="Select State/UT" value="" />
+                        {INDIAN_STATES.map((s, i) => <Picker.Item key={i} label={s} value={s} />)}
+                      </Picker>
+                    )}
                   </View>
                 </View>
                 <View style={webEdit.formField}>
@@ -491,9 +797,28 @@ export default function Profile() {
               <View style={webEdit.formRowFull}>
                 <Text style={webEdit.fieldLabel}>COUNTRY</Text>
                 <View style={[webEdit.input, webEdit.pickerWrap]}>
-                  <Picker selectedValue={country || 'India'} onValueChange={setCountry} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
-                    <Picker.Item label="India" value="India" />
-                  </Picker>
+                  {Platform.OS === 'web' ? (
+                    <select
+                      value={country || 'India'}
+                      onChange={(e) => setCountry(e.target.value)}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        border: 'none',
+                        background: 'transparent',
+                        fontSize: 13.5,
+                        color: '#111827',
+                        outline: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <option value="India">India</option>
+                    </select>
+                  ) : (
+                    <Picker selectedValue={country || 'India'} onValueChange={setCountry} style={webEdit.pickerInner} dropdownIconColor="#5f5fff">
+                      <Picker.Item label="India" value="India" />
+                    </Picker>
+                  )}
                 </View>
               </View>
             </View>
@@ -501,11 +826,11 @@ export default function Profile() {
 
           {/* Action Buttons */}
           <View style={webEdit.actionRow}>
-            <TouchableOpacity style={webEdit.previewBtn} onPress={() => setPreviewModalVisible(true)}>
-              <Text style={webEdit.previewBtnTxt}>Preview Profile</Text>
+            <TouchableOpacity style={webEdit.previewBtn} onPress={() => setShowEditForm(false)} disabled={isSaving}>
+              <Text style={webEdit.previewBtnTxt}>Back to Preview</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={webEdit.saveBtn} onPress={handleSave}>
-              <Text style={webEdit.saveBtnTxt}>Save Changes</Text>
+            <TouchableOpacity style={[webEdit.saveBtn, isSaving && { opacity: 0.7 }]} onPress={handleSave} disabled={isSaving}>
+              <Text style={webEdit.saveBtnTxt}>{isSaving ? 'Saving...' : 'Save Changes'}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -539,12 +864,10 @@ export default function Profile() {
             </View>
 
             <Text style={styles.label}>Full Name <Text style={styles.asterisk}>*</Text></Text>
-            <TextInput style={styles.input} value={studentName} onChangeText={setStudentName} placeholder="Enter your name" placeholderTextColor="#afb3c1" />
-            {errors.studentName && <Text style={styles.errorText}>{errors.studentName}</Text>}
+            <TextInput style={[styles.input, styles.inputDisabled]} value={studentName} editable={false} placeholder="Enter your name" placeholderTextColor="#afb3c1" />
 
             <Text style={styles.label}>Email <Text style={styles.asterisk}>*</Text></Text>
-            <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Enter your email" keyboardType="email-address" placeholderTextColor="#afb3c1" />
-            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+            <TextInput style={[styles.input, styles.inputDisabled]} value={email} editable={false} placeholder="Enter your email" keyboardType="email-address" placeholderTextColor="#afb3c1" />
 
             <Text style={styles.label}>Date of Birth <Text style={styles.asterisk}>*</Text></Text>
             <TouchableOpacity onPress={() => setShowPicker(true)}>
@@ -613,8 +936,12 @@ export default function Profile() {
             </View>
 
             <View style={styles.buttonRow}>
-              <TouchableOpacity style={styles.button} onPress={handleSave}><Text style={styles.buttonTxt}>Save</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.button} onPress={() => setPreviewModalVisible(true)}><Text style={styles.buttonTxt}>Preview</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.button, isSaving && { opacity: 0.7 }]} onPress={handleSave} disabled={isSaving}>
+                <Text style={styles.buttonTxt}>{isSaving ? 'Saving...' : 'Save'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.button} onPress={() => setPreviewModalVisible(true)} disabled={isSaving}>
+                <Text style={styles.buttonTxt}>Preview</Text>
+              </TouchableOpacity>
             </View>
           </ScrollView>
         ) : (
@@ -665,49 +992,54 @@ export default function Profile() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  MOBILE STYLES  (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
+const { width: screenWidth } = Dimensions.get('window');
+const isSmallMobile = screenWidth < 375;
+const isMediumMobile = screenWidth >= 375 && screenWidth < 768;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   inputError: { borderColor: "red", borderWidth: 1 },
-  errorText: { color: "red", fontSize: wp("3%"), marginBottom: 6, marginTop: -6 },
-  contentContainer: { paddingVertical: 10, paddingHorizontal: 16, paddingBottom: 20 },
-  upload: { flex: 1, alignItems: "center", justifyContent: "center", gap: wp("1.3%"), flexDirection: "row", width: 98, height: 40 },
-  imageContainer: { alignItems: "center", marginBottom: hp("1.345%"), justifyContent: "center" },
-  profileImage: { height: wp("37.33%"), width: wp("37.33%"), borderRadius: wp("50%") },
-  uploadBtn: { marginTop: 8, backgroundColor: "#5f5fff", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 5 },
-  header: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 16, marginBottom: 10, backgroundColor: "#f5f5f5", width: "100%" },
-  headerTitle: { fontSize: wp("6%"), fontWeight: "300", lineHeight: hp("8.36%"), color: "#21242d", fontFamily: "Poppins_600SemiBold", includeFontPadding: false, textAlignVertical: "center" },
-  uploadBtnText: { color: "#fff", fontWeight: "500" },
-  label: { fontSize: wp("3.2%"), fontWeight: "700", marginTop: hp("1.1%"), color: "#353945", lineHeight: hp("1.61%") },
-  input: { width: wp("87.2%"), height: hp("6.46%"), backgroundColor: "rgba(255,255,255,0)", borderRadius: wp("24%"), paddingHorizontal: wp("2.13%"), marginTop: hp("0.504%"), marginBottom: hp("2.01%"), borderWidth: wp("0.53%"), borderColor: "#e4e6ea", fontSize: wp("4.27%"), lineHeight: hp("3.23%"), color: "#000000", paddingVertical: Platform.OS === "ios" ? hp("1%") : 0 },
-  buttonRow: { flexDirection: "row", justifyContent: "space-between", marginTop: hp("2.69%") },
-  button: { backgroundColor: "#5f5fff", padding: 8, borderRadius: 50, flex: 1, alignItems: "center", justifyContent: "center", marginRight: 10, width: wp("37.06%"), height: hp("4.84%") },
-  buttonTxt: { color: "#fff", textAlign: "center", fontSize: wp("4.8%"), lineHeight: hp("2%") },
-  centeredView: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.5)" },
-  modalView: { backgroundColor: "#fff", padding: 20, borderRadius: 10, alignItems: "center", width: "90%" },
-  modalBts: { width: "90%", height: 60, backgroundColor: "#5f5fff", marginBottom: 20, alignItems: "center", justifyContent: "center" },
-  modelTxt: { fontSize: 16, lineHeight: 21, color: "#ffffff", fontWeight: "600" },
-  scrollContentContainer: { paddingVertical: 10, paddingHorizontal: 16, paddingBottom: Platform.OS === "android" ? hp("10%") : hp("5%") },
+  inputDisabled: { backgroundColor: '#f0f0f0', color: '#888' },
+  errorText: { color: "red", fontSize: isSmallMobile ? wp("2.8%") : wp("3%"), marginBottom: isSmallMobile ? 4 : 6, marginTop: isSmallMobile ? -4 : -6 },
+  contentContainer: { paddingVertical: isSmallMobile ? 8 : 10, paddingHorizontal: isSmallMobile ? 12 : 16, paddingBottom: isSmallMobile ? 16 : 20 },
+  upload: { flex: 1, alignItems: "center", justifyContent: "center", gap: isSmallMobile ? wp("1%") : wp("1.3%"), flexDirection: "row", width: isSmallMobile ? 88 : 98, height: isSmallMobile ? 36 : 40 },
+  imageContainer: { alignItems: "center", marginBottom: isSmallMobile ? hp("1%") : hp("1.345%"), justifyContent: "center" },
+  profileImage: { height: isSmallMobile ? wp("35%") : wp("37.33%"), width: isSmallMobile ? wp("35%") : wp("37.33%"), borderRadius: wp("50%") },
+  uploadBtn: { marginTop: isSmallMobile ? 6 : 8, backgroundColor: "#5f5fff", paddingHorizontal: isSmallMobile ? 10 : 12, paddingVertical: isSmallMobile ? 5 : 6, borderRadius: 5 },
+  header: { flexDirection: "row", alignItems: "center", paddingVertical: isSmallMobile ? 8 : 10, paddingHorizontal: isSmallMobile ? 12 : 16, marginBottom: isSmallMobile ? 8 : 10, backgroundColor: "#f5f5f5", width: "100%" },
+  headerTitle: { fontSize: isSmallMobile ? wp("5.5%") : wp("6%"), fontWeight: "300", lineHeight: isSmallMobile ? hp("7.5%") : hp("8.36%"), color: "#21242d", fontFamily: "Poppins_600SemiBold", includeFontPadding: false, textAlignVertical: "center" },
+  uploadBtnText: { color: "#fff", fontWeight: "500", fontSize: isSmallMobile ? 13 : 14 },
+  label: { fontSize: isSmallMobile ? wp("3%") : wp("3.2%"), fontWeight: "700", marginTop: isSmallMobile ? hp("0.9%") : hp("1.1%"), color: "#353945", lineHeight: isSmallMobile ? hp("1.4%") : hp("1.61%") },
+  input: { width: isSmallMobile ? wp("85%") : wp("87.2%"), height: isSmallMobile ? hp("6%") : hp("6.46%"), backgroundColor: "rgba(255,255,255,0)", borderRadius: wp("24%"), paddingHorizontal: isSmallMobile ? wp("2%") : wp("2.13%"), marginTop: isSmallMobile ? hp("0.4%") : hp("0.504%"), marginBottom: isSmallMobile ? hp("1.8%") : hp("2.01%"), borderWidth: wp("0.53%"), borderColor: "#e4e6ea", fontSize: isSmallMobile ? wp("4%") : wp("4.27%"), lineHeight: isSmallMobile ? hp("3%") : hp("3.23%"), color: "#000000", paddingVertical: Platform.OS === "ios" ? hp("1%") : 0 },
+  buttonRow: { flexDirection: "row", justifyContent: "space-between", marginTop: isSmallMobile ? hp("2.3%") : hp("2.69%") },
+  button: { backgroundColor: "#5f5fff", padding: isSmallMobile ? 6 : 8, borderRadius: 50, flex: 1, alignItems: "center", justifyContent: "center", marginRight: isSmallMobile ? 8 : 10, width: isSmallMobile ? wp("35%") : wp("37.06%"), height: isSmallMobile ? hp("4.5%") : hp("4.84%") },
+  buttonTxt: { color: "#fff", textAlign: "center", fontSize: isSmallMobile ? wp("4.5%") : wp("4.8%"), lineHeight: isSmallMobile ? hp("1.8%") : hp("2%") },
+  centeredView: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: "rgba(0,0,0,0.5)" },
+  modalView: { backgroundColor: "#fff", padding: isSmallMobile ? 16 : 20, borderRadius: isSmallMobile ? 8 : 10, alignItems: "center", width: "90%" },
+  modalBts: { width: "90%", height: isSmallMobile ? 55 : 60, backgroundColor: "#5f5fff", marginBottom: isSmallMobile ? 16 : 20, alignItems: "center", justifyContent: "center" },
+  modelTxt: { fontSize: isSmallMobile ? 15 : 16, lineHeight: isSmallMobile ? 20 : 21, color: "#ffffff", fontWeight: "600" },
+  scrollContentContainer: { paddingVertical: isSmallMobile ? 8 : 10, paddingHorizontal: isSmallMobile ? 12 : 16, paddingBottom: Platform.OS === "android" ? hp("10%") : hp("5%") },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' },
-  loadingText: { marginTop: 10, color: '#666', fontSize: wp('4%') },
+  loadingText: { marginTop: 10, color: '#666', fontSize: isSmallMobile ? wp("3.8%") : wp('4%') },
   asterisk: { color: '#ff0000' },
   previewMainContainer: { flex: 1, backgroundColor: "#5f5fff" },
-  previewTopSection: { backgroundColor: "#5f5fff", alignItems: "center", paddingTop: hp("3%"), paddingBottom: hp("2.5%"), position: "relative" },
-  crossPreviewButton: { position: "absolute", top: hp("1%"), left: wp("5%"), zIndex: 10, height: wp("8%"), width: wp("8%"), alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.3)", borderRadius: wp("4%") },
-  editPreviewButton: { position: "absolute", top: hp("1%"), right: wp("5%"), zIndex: 10, height: wp("8%"), width: wp("8%"), alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.3)", borderRadius: wp("4%") },
-  previewHeaderText: { color: "#ffffff", fontSize: wp("3%"), fontWeight: "600", letterSpacing: 1.5, marginBottom: hp("1%"), fontFamily: "Poppins_600SemiBold" },
-  profileImagePreview: { height: wp("35%"), width: wp("35%"), borderRadius: wp("50%"), borderWidth: 3, borderColor: "rgba(255,255,255,0.3)", marginBottom: hp("1.5%") },
-  studentName: { color: "#ffffff", fontSize: wp("5.5%"), fontWeight: "600", fontFamily: "Poppins_600SemiBold", marginTop: hp("0.8%"), textAlign: "center", paddingHorizontal: wp("10%") },
-  previewCardsContainer: { paddingHorizontal: wp("6%"), paddingTop: hp("2%"), paddingBottom: hp("2%"), flex: 1 },
-  previewCardRow: { flexDirection: "row", justifyContent: "space-between", gap: wp("2.5%") },
-  previewCard: { flex: 1, backgroundColor: "#ffffff", borderRadius: wp("3%"), padding: wp("4%"), alignItems: "center", justifyContent: "center", minHeight: hp("14%"), maxHeight: hp("16%") },
-  previewCardLabel: { color: "#7a7a7a", fontSize: wp("3%"), fontWeight: "600", marginTop: hp("0.5%"), marginBottom: hp("0.3%"), fontFamily: "Poppins_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
-  previewCardValue: { color: "#000000", fontSize: wp("8%"), fontWeight: "bold", fontFamily: "Poppins_600SemiBold" },
-  previewCardSuperscript: { color: "#000000", fontSize: wp("3.5%"), fontWeight: "600", fontFamily: "Poppins_600SemiBold" },
-  previewCardValueSmall: { color: "#000000", fontSize: wp("3.5%"), fontWeight: "600", textAlign: "center", fontFamily: "Poppins_600SemiBold" },
-  previewFullWidthCard: { backgroundColor: "#e8e8ff", borderRadius: wp("3%"), padding: wp("4%"), flexDirection: "row", alignItems: "center", gap: wp("3%"), minHeight: hp("10%"), maxHeight: hp("12%"), marginTop: hp("1.5%") },
+  previewTopSection: { backgroundColor: "#5f5fff", alignItems: "center", paddingTop: isSmallMobile ? hp("2.5%") : hp("3%"), paddingBottom: isSmallMobile ? hp("2%") : hp("2.5%"), position: "relative" },
+  crossPreviewButton: { position: "absolute", top: hp("1%"), left: isSmallMobile ? wp("4%") : wp("5%"), zIndex: 10, height: isSmallMobile ? wp("7%") : wp("8%"), width: isSmallMobile ? wp("7%") : wp("8%"), alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.3)", borderRadius: wp("4%") },
+  editPreviewButton: { position: "absolute", top: hp("1%"), right: isSmallMobile ? wp("4%") : wp("5%"), zIndex: 10, height: isSmallMobile ? wp("7%") : wp("8%"), width: isSmallMobile ? wp("7%") : wp("8%"), alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.3)", borderRadius: wp("4%") },
+  previewHeaderText: { color: "#ffffff", fontSize: isSmallMobile ? wp("2.8%") : wp("3%"), fontWeight: "600", letterSpacing: 1.5, marginBottom: hp("1%"), fontFamily: "Poppins_600SemiBold" },
+  profileImagePreview: { height: isSmallMobile ? wp("32%") : wp("35%"), width: isSmallMobile ? wp("32%") : wp("35%"), borderRadius: wp("50%"), borderWidth: 3, borderColor: "rgba(255,255,255,0.3)", marginBottom: isSmallMobile ? hp("1.2%") : hp("1.5%") },
+  studentName: { color: "#ffffff", fontSize: isSmallMobile ? wp("5%") : wp("5.5%"), fontWeight: "600", fontFamily: "Poppins_600SemiBold", marginTop: hp("0.8%"), textAlign: "center", paddingHorizontal: isSmallMobile ? wp("8%") : wp("10%") },
+  previewCardsContainer: { paddingHorizontal: isSmallMobile ? wp("5%") : wp("6%"), paddingTop: hp("2%"), paddingBottom: hp("2%"), flex: 1 },
+  previewCardRow: { flexDirection: "row", justifyContent: "space-between", gap: isSmallMobile ? wp("2%") : wp("2.5%") },
+  previewCard: { flex: 1, backgroundColor: "#ffffff", borderRadius: wp("3%"), padding: isSmallMobile ? wp("3.5%") : wp("4%"), alignItems: "center", justifyContent: "center", minHeight: isSmallMobile ? hp("12%") : hp("14%"), maxHeight: isSmallMobile ? hp("14%") : hp("16%") },
+  previewCardLabel: { color: "#7a7a7a", fontSize: isSmallMobile ? wp("2.8%") : wp("3%"), fontWeight: "600", marginTop: hp("0.5%"), marginBottom: hp("0.3%"), fontFamily: "Poppins_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
+  previewCardValue: { color: "#000000", fontSize: isSmallMobile ? wp("7%") : wp("8%"), fontWeight: "bold", fontFamily: "Poppins_600SemiBold" },
+  previewCardSuperscript: { color: "#000000", fontSize: isSmallMobile ? wp("3.2%") : wp("3.5%"), fontWeight: "600", fontFamily: "Poppins_600SemiBold" },
+  previewCardValueSmall: { color: "#000000", fontSize: isSmallMobile ? wp("3.2%") : wp("3.5%"), fontWeight: "600", textAlign: "center", fontFamily: "Poppins_600SemiBold" },
+  previewFullWidthCard: { backgroundColor: "#e8e8ff", borderRadius: wp("3%"), padding: isSmallMobile ? wp("3.5%") : wp("4%"), flexDirection: "row", alignItems: "center", gap: isSmallMobile ? wp("2.5%") : wp("3%"), minHeight: isSmallMobile ? hp("9%") : hp("10%"), maxHeight: isSmallMobile ? hp("11%") : hp("12%"), marginTop: hp("1.5%") },
   previewFullWidthCardText: { flex: 1 },
-  previewFullWidthCardLabel: { color: "#7a7a7a", fontSize: wp("3%"), fontWeight: "600", marginBottom: hp("0.3%"), fontFamily: "Poppins_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
-  previewFullWidthCardValue: { color: "#000000", fontSize: wp("3.5%"), fontWeight: "500", fontFamily: "Poppins_600SemiBold" },
+  previewFullWidthCardLabel: { color: "#7a7a7a", fontSize: isSmallMobile ? wp("2.8%") : wp("3%"), fontWeight: "600", marginBottom: hp("0.3%"), fontFamily: "Poppins_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
+  previewFullWidthCardValue: { color: "#000000", fontSize: isSmallMobile ? wp("3.2%") : wp("3.5%"), fontWeight: "500", fontFamily: "Poppins_600SemiBold" },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -744,6 +1076,7 @@ const webEdit = StyleSheet.create({
   req: { color: '#ef4444' },
   input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13.5, backgroundColor: '#fff', color: '#111827', height: 42 },
   inputErr: { borderColor: '#ef4444' },
+  inputDisabled: { backgroundColor: '#f3f4f6', color: '#6b7280', borderColor: '#d1d5db' },
   errTxt: { fontSize: 11, color: '#ef4444', marginTop: 3 },
   pickerWrap: { padding: 0, paddingHorizontal: 0, overflow: 'hidden', justifyContent: 'center' },
   pickerInner: { height: 42, color: '#111827', fontSize: 13.5, borderWidth: 0, backgroundColor: 'transparent' },
@@ -763,7 +1096,9 @@ const webPreview = StyleSheet.create({
   patternRow: { flexDirection: 'row', flexWrap: 'nowrap' },
   patternChar: { color: '#fff', fontSize: 22, fontWeight: '700', width: 36, textAlign: 'center', lineHeight: 38 },
   card: { backgroundColor: '#fff', borderRadius: 20, width: '88%', maxWidth: 960, shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 28, shadowOffset: { width: 0, height: 10 }, elevation: 20, overflow: 'hidden' },
-  closeBtn: { position: 'absolute', top: 16, right: 20, zIndex: 20, width: 32, height: 32, borderRadius: 16, backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center' },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
+  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center' },
+  editBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f0f4ff', alignItems: 'center', justifyContent: 'center' },
   closeBtnTxt: { fontSize: 22, color: '#555', lineHeight: 28, marginTop: -2 },
   cardBody: { flexDirection: 'row', padding: 32, paddingTop: 40, gap: 32 },
   leftCol: { width: '36%', alignItems: 'center' },

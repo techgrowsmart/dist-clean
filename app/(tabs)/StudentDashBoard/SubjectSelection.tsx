@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
+  Platform,
   View,
   Text,
   FlatList,
@@ -9,7 +10,6 @@ import {
   Dimensions,
   ScrollView,
   ActivityIndicator,
-  Platform,
   SafeAreaView,
   Alert,
   Modal,
@@ -29,8 +29,10 @@ import { Montserrat_400Regular } from '@expo-google-fonts/montserrat';
 import Sidebar from "./Sidebar";
 import WebSidebar from "../../../components/ui/WebSidebar";
 import WebNavbar from "../../../components/ui/WebNavbar";
+import ResponsiveSidebar from "../../../components/ui/ResponsiveSidebar";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
+import { safeBack } from "../../../utils/navigation";
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
@@ -136,8 +138,8 @@ export default function SubjectSelection({
 
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
-  const [activeMenu, setActiveMenu] = useState("Subject Selection");
-  const [sidebarActiveItem, setSidebarActiveItem] = useState("Subject Selection");
+  const [activeMenu, setActiveMenu] = useState("Home");
+  const [sidebarActiveItem, setSidebarActiveItem] = useState("Home");
   const [unreadCount, setUnreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [studentName, setStudentName] = useState("");
@@ -148,6 +150,27 @@ export default function SubjectSelection({
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [userProfileCache, setUserProfileCache] = useState<Map<string, { name: string; profilePic: string }>>(new Map());
   const [showCommentsModal, setShowCommentsModal] = useState(false);
+
+  const handleBackPress = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      safeBack(router, '/(tabs)/StudentDashBoard/ClassSelection');
+    }
+  };
+
+  // ESC key handler for web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleBackPress();
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [onBack]);
   const [selectedPost, setSelectedPost] = useState<any | null>(null);
   const [postComments, setPostComments] = useState<any[]>([]);
   const [commentText, setCommentText] = useState('');
@@ -157,10 +180,20 @@ export default function SubjectSelection({
   const [reportReason, setReportReason] = useState('');
   
   // Get data from props or route params
-  const finalBoardId = propBoardId || (localParams.boardId as string) || '';
+  // Support both regular board flow and university flow
+  const finalBoardId = propBoardId || (localParams.boardId as string) || (localParams.universityId as string) || '';
   const finalClassId = propClassId || (localParams.classId as string) || '';
-  const finalBoardName = propBoardName || (localParams.boardName as string) || '';
+  const finalBoardName = propBoardName || (localParams.boardName as string) || (localParams.universityName as string) || '';
   const finalClassName = propClassName || (localParams.className as string) || '';
+  
+  // Extract university-specific parameters
+  const universityId = localParams.universityId as string;
+  const universityName = localParams.universityName as string;
+  const year = localParams.year as string;
+  const yearIndex = localParams.yearIndex as string;
+  
+  // Check if this is a university flow
+  const isUniversityFlow = localParams.isUniversities === 'true' || localParams.isUniversity === 'true' || universityId !== undefined;
   
   // Fallback to selectedClass prop if main props are undefined
   const fallbackClassId = selectedClass?.classId || '';
@@ -170,6 +203,16 @@ export default function SubjectSelection({
   const effectiveClassId = finalClassId || fallbackClassId;
   const effectiveBoardName = finalBoardName || '';
   const effectiveClassName = finalClassName || fallbackClassName;
+  
+  // For universities, extract the yearId from the classId
+  // ClassSelection creates IDs like: ${universityId}_year_${yearIndex}
+  // Backend expects just the yearId
+  const effectiveYearId = isUniversityFlow && effectiveClassId.includes('_year_') 
+    ? effectiveClassId.split('_year_')[1] 
+    : effectiveClassId;
+  
+  // For universities, use universityId instead of boardId for API calls
+  const effectiveUniversityId = isUniversityFlow ? (universityId || finalBoardId) : effectiveBoardId;
   
   console.log('🔍 SubjectSelection Props Debug:', {
     propBoardId,
@@ -198,19 +241,23 @@ export default function SubjectSelection({
 
   useEffect(() => {
     const fetchSubjects = async () => {
-      console.log('🔍 SubjectSelection params:', { 
-        effectiveBoardId, 
-        effectiveClassId, 
-        effectiveBoardName, 
-        effectiveClassName 
+      console.log('🔍 SubjectSelection params:', {
+        effectiveBoardId,
+        effectiveClassId,
+        effectiveYearId,
+        effectiveBoardName,
+        effectiveClassName,
+        isUniversityFlow,
+        universityId,
+        year
       });
-      
+
       if (!effectiveBoardId || !effectiveClassId) {
-        console.error('❌ Missing boardId or classId');
+        console.error('❌ Missing boardId/universityId or classId/yearId');
         setLoading(false);
         return;
       }
-      
+
       try {
         setLoading(true);
         const auth = await getAuthData();
@@ -223,30 +270,39 @@ export default function SubjectSelection({
           Authorization: `Bearer ${auth.token}`,
           "Content-Type": "application/json",
         };
-        
-        console.log('📡 Making API request to:', `${BASE_URL}/api/boardId/classes`);
-        console.log('📤 Request body:', { boardId: effectiveBoardId, classId: effectiveClassId });
-        
-        const res = await axios.post(
-          `${BASE_URL}/api/boardId/classes`,
-          { boardId: effectiveBoardId, classId: effectiveClassId },
-          { headers }
-        );
-        
+
+        let res;
+        if (isUniversityFlow) {
+          // University flow: use university-specific endpoint
+          const url = `${BASE_URL}/api/universities/${effectiveUniversityId}/years/${effectiveYearId}/subjects`;
+          console.log('📡 Making UNIVERSITY API request to:', url);
+          console.log('📤 Using universityId:', effectiveUniversityId, 'yearId:', effectiveYearId);
+          res = await axios.post(url, {}, { headers });
+        } else {
+          // Regular board flow
+          console.log('📡 Making BOARD API request to:', `${BASE_URL}/api/boardId/classes`);
+          console.log('📤 Request body:', { boardId: effectiveBoardId, classId: effectiveClassId });
+          res = await axios.post(
+            `${BASE_URL}/api/boardId/classes`,
+            { boardId: effectiveBoardId, classId: effectiveClassId },
+            { headers }
+          );
+        }
+
         console.log('📚 Backend subjects response:', res.data);
-        
+
         // Ensure we have subjects array and properly map the data
         const subjectsArray = res.data.subjects || [];
         console.log('🎯 Raw subjects array:', subjectsArray);
-        
+
         const subjectsWithCount = subjectsArray.map((subject: any) => ({
           id: subject.id || '',
           name: subject.name || '',
           teacherCount: subject.teacherCount || 0
         }));
-        
+
         console.log('✅ Final subjects with teacher counts:', subjectsWithCount);
-        
+
         setSubjectList(subjectsWithCount);
       } catch (err : any) {
         console.error("❌ Failed to fetch subjects:", err.message);
@@ -262,7 +318,7 @@ export default function SubjectSelection({
     };
 
     fetchSubjects();
-  }, [effectiveBoardId, effectiveClassId, effectiveBoardName, effectiveClassName]);
+  }, [effectiveBoardId, effectiveClassId, effectiveBoardName, effectiveClassName, isUniversityFlow]);
 
   // ── Load user role ──
   useEffect(() => {
@@ -329,8 +385,9 @@ export default function SubjectSelection({
 
   const resolvePostAuthor = (post: any) => {
     const cached = userProfileCache.get(post.author?.email) || { name: '', profilePic: '' };
-    let name = cached.name || post.author?.name || '';
-    let pic: string | null = cached.profilePic || post.author?.profile_pic || null;
+    // Prioritize post.author.name first, then cache, then fallback
+    let name = post.author?.name || cached.name || '';
+    let pic: string | null = post.author?.profile_pic || cached.profilePic || null;
     if (!name || name === 'null' || name.includes('@')) name = post.author?.email?.split('@')[0] || 'User';
     if (pic && !pic.startsWith('http') && !pic.startsWith('/')) pic = `/${pic}`;
     if (pic === '' || pic === 'null') pic = null;
@@ -487,59 +544,13 @@ export default function SubjectSelection({
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* ── WEB HEADER - Full Width ── */}
-      {isDesktop && (
-        <WebNavbar
-          studentName={studentName}
-          profileImage={profileImage}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-        />
-      )}
-
-      <View style={styles.rootContainer}>
-
-        {/* ── MOBILE TOP NAVBAR ── */}
-        {!isDesktop && (
-          <View style={styles.topHeader}>
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color={COLORS.textSecondary} style={styles.searchIcon} />
-              <TextInput placeholder="Type in search" placeholderTextColor={COLORS.textSecondary} style={styles.searchInput as any} value={searchQuery} onChangeText={setSearchQuery} />
-            </View>
-            <View style={styles.profileHeaderSection}>
-              <TouchableOpacity style={styles.bellIcon} onPress={() => router.push("/(tabs)/StudentDashBoard/StudentNotification")}>
-                <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
-                {unreadCount > 0 && (
-                  <View style={styles.notificationBadge}><Text style={styles.notificationText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>
-                )}
-              </TouchableOpacity>
-              <Text style={styles.headerUserName}>{studentName || 'Student'}</Text>
-              <Image source={profileImage ? { uri: profileImage } : require("../../../assets/images/Profile.png")} style={styles.headerAvatar} />
-            </View>
-          </View>
-        )}
-
-        {/* ── LEFT SIDEBAR (WebSidebar component — desktop only, no duplicate) ── */}
-        {isDesktop && (
-          <WebSidebar
-            activeItem={sidebarActiveItem}
-            onItemPress={handleSidebarItemPress}
-            userEmail={userEmail || "student@example.com"}
-            studentName={studentName || "Student"}
-            profileImage={profileImage}
-          />
-        )}
-
-        {/* ── LEFT SIDEBAR (reused component) ── */}
-        <Sidebar
-          activeMenu={activeMenu}
-          onItemPress={handleSidebarItemPress}
-          studentName={studentName}
-          profileImage={profileImage}
-          userEmail={userEmail}
-          userRole={userRole}
-        />
-
+      <ResponsiveSidebar
+        activeItem={sidebarActiveItem}
+        onItemPress={handleSidebarItemPress}
+        userEmail={userEmail || ""}
+        studentName={studentName || "Student"}
+        profileImage={profileImage}
+      >
         {/* ── MAIN AREA ── */}
         <View style={styles.mainLayout}>
 
@@ -559,7 +570,7 @@ export default function SubjectSelection({
                     
                     {/* Navigation Title Header */}
                     <View style={styles.pageNavHeader}>
-                      <TouchableOpacity style={styles.backButton} onPress={onBack || (() => router.back())}>
+                      <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
                         <Ionicons name="arrow-back" size={20} color={COLORS.textPrimary} />
                       </TouchableOpacity>
                       <Text style={styles.pageTitle}>{effectiveBoardName} | {effectiveClassName} - Subjects</Text>
@@ -571,7 +582,7 @@ export default function SubjectSelection({
                       {/* Subject Grid with Real Data */}
                       <View style={styles.gridContainer}>
                         {subjectList.length > 0 ? (
-                          subjectList.map((subject) => (
+                          paginatedData.map((subject) => (
                             <SubjectCard 
                               key={subject.id} 
                               item={{ 
@@ -586,13 +597,26 @@ export default function SubjectSelection({
                                   onSubjectSelect(subject.name);
                                 } else {
                                   // Navigate to next screen or handle selection when accessed as standalone route
+                                  // Pass all context params to ensure proper navigation back/forth
+                                  const params: any = {
+                                    boardName: effectiveBoardName,
+                                    boardId: effectiveBoardId,
+                                    selectedClass: effectiveClassName,
+                                    classId: effectiveClassId,
+                                    selectedSubject: subject.name,
+                                    subjectId: subject.id,
+                                  };
+                                  // Add university flag for university flow
+                                  if (isUniversityFlow) {
+                                    params.isUniversity = 'true';
+                                    params.universityId = universityId || effectiveBoardId;
+                                    params.universityName = universityName || effectiveBoardName;
+                                    params.yearId = effectiveYearId;
+                                    params.yearName = effectiveClassName;
+                                  }
                                   router.push({
                                     pathname: "/(tabs)/StudentDashBoard/TeachersList",
-                                    params: {
-                                      boardName: effectiveBoardName,
-                                      selectedClass: effectiveClassName,
-                                      selectedSubject: subject.name,
-                                    },
+                                    params,
                                   } as any);
                                 }
                               }}
@@ -648,7 +672,7 @@ export default function SubjectSelection({
                     
                     {/* Navigation Title Header */}
                     <View style={styles.pageNavHeader}>
-                      <TouchableOpacity style={styles.backButton} onPress={onBack || (() => router.back())}>
+                      <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
                         <Ionicons name="arrow-back" size={20} color={COLORS.textPrimary} />
                       </TouchableOpacity>
                       <Text style={styles.pageTitle}>{effectiveBoardName} | {effectiveClassName} - Subjects</Text>
@@ -700,13 +724,28 @@ export default function SubjectSelection({
                               onSubjectSelect(item.name);
                             } else {
                               // Navigate to next screen or handle selection when accessed as standalone route
+                              // Pass all context params to ensure proper navigation back/forth
+                              const params: any = {
+                                boardName: effectiveBoardName,
+                                boardId: effectiveBoardId,
+                                selectedClass: effectiveClassName,
+                                classId: effectiveClassId,
+                                selectedSubject: item.name,
+                                subjectId: item.id,
+                              };
+                              // Add university flag for university flow
+                              if (isUniversityFlow) {
+                                params.isUniversities = 'true';
+                                params.universityId = universityId || effectiveBoardId;
+                                params.universityName = universityName || effectiveBoardName;
+                                params.yearId = effectiveYearId;
+                                params.yearName = effectiveClassName;
+                                params.year = year;
+                                params.yearIndex = yearIndex;
+                              }
                               router.push({
                                 pathname: "/(tabs)/StudentDashBoard/TeachersList",
-                                params: {
-                                  boardName: effectiveBoardName,
-                                  selectedClass: effectiveClassName,
-                                  selectedSubject: item.name,
-                                },
+                                params,
                               } as any);
                             }
                           }}
@@ -736,36 +775,9 @@ export default function SubjectSelection({
                 </View>
               )}
             </View>
-
-            {/* RIGHT: Thoughts Panel (ThoughtsCard reused from Student.tsx) */}
-            <View style={styles.rightPanel}>
-              <Text style={styles.rightPanelTitle}>Thoughts</Text>
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.thoughtsList}>
-                {postsLoading && posts.length === 0 && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 30 }} />}
-                {!postsLoading && posts.length === 0 && (
-                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                    <MaterialIcons name="post-add" size={40} color="#ccc" />
-                    <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No thoughts yet</Text>
-                  </View>
-                )}
-                {posts.map((post) => (
-                  <ThoughtsCard
-                    key={post.id}
-                    post={post}
-                    onLike={handleLike}
-                    onComment={openCommentsModal}
-                    onReport={(p) => { setReportType('post'); setReportItemId(p.id); setReportReason(''); setShowReportModal(true); }}
-                    getProfileImageSource={getProfileImageSource}
-                    initials={initials}
-                    resolvePostAuthor={resolvePostAuthor}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-
           </View>
         </View>
-      </View>
+      </ResponsiveSidebar>
 
       {/* ── Comments Modal ── */}
       <Modal visible={showCommentsModal} animationType="slide" transparent onRequestClose={() => setShowCommentsModal(false)}>
@@ -834,7 +846,20 @@ const styles = StyleSheet.create({
   gridContainerBox: { flex: 1, backgroundColor: COLORS.cardBackground, borderRadius: 20, borderWidth: 1, borderColor: '#E4ECF7', padding: 24, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 10 },
   subjectSelectionScroll: { paddingBottom: 20 },
   pageNavHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  backButton: { marginRight: 12, padding: 8, backgroundColor: COLORS.lightBackground, borderRadius: 8 },
+  backButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: COLORS.cardBackground,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    marginRight: 12,
+  },
   totalCountContainer: { marginBottom: 20 },
   totalCount: { fontFamily: 'Poppins_500Medium', fontSize: 16, color: COLORS.textSecondary },
   card: { backgroundColor: COLORS.cardBackground, borderRadius: 12, padding: 16, marginBottom: 16, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, shadowColor: 'rgba(0,0,0,0.05)', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 4 },

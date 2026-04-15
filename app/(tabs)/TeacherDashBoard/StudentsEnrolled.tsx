@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, RefreshControl, Platform, Dimensions } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, RefreshControl, Platform, Dimensions, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { getAuthData } from '../../../utils/authStorage';
 import axios from 'axios';
 import { BASE_URL } from '../../../config';
-import { TeacherThoughtsBackground } from '../../../components/ui/TeacherThoughtsCard';
+import TeacherThoughtsCard, { TeacherThoughtsBackground } from '../../../components/ui/TeacherThoughtsCard';
+import TeacherPostComposer from '../../../components/ui/TeacherPostComposer';
+import TeacherWebHeader from '../../../components/ui/TeacherWebHeader';
+import TeacherWebSidebar from '../../../components/ui/TeacherWebSidebar';
 import { UXButton, UXCard, UXLoading, UXBadge, UX_COLORS, UX_CONSTANTS } from '../../../components/ux/UXComponents';
 import {
   useFonts,
@@ -14,8 +17,6 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import WebHeader from '../../../components/ui/TeacherWebHeader';
-import WebSidebar from '../../../components/ui/TeacherWebSidebar';
 
 
 // Global Design Tokens
@@ -50,9 +51,287 @@ const StudentsEnrolled = () => {
   const [sidebarActiveItem, setSidebarActiveItem] = useState("My Students");
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [isWeb, setIsWeb] = useState(Platform.OS === 'web');
-  const [isMobile, setIsMobile] = useState(Dimensions.get('window').width < 768);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Responsive state
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+  const [screenHeight, setScreenHeight] = useState(Dimensions.get('window').height);
+  const isMobile = screenWidth < 768;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
+  const isDesktop = screenWidth >= 1024;
+  const isSmallMobile = screenWidth < 480;
+  
+  // Dynamic font sizes
+  const getFontSize = (mobile: number, tablet: number, desktop: number) => {
+    if (isSmallMobile) return mobile * 0.9;
+    if (isMobile) return mobile;
+    if (isTablet) return tablet;
+    return desktop;
+  };
+  
+  // Dynamic spacing
+  const getSpacing = (mobile: number, tablet: number, desktop: number) => {
+    if (isSmallMobile) return mobile * 0.8;
+    if (isMobile) return mobile;
+    if (isTablet) return tablet;
+    return desktop;
+  };
+  
+  // Thoughts state
+  const [posts, setPosts] = useState<any[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [userProfileCache, setUserProfileCache] = useState<Map<string, { name: string; profilePic: string }>>(new Map());
+  
+  // Thoughts panel – collapsed by default on mobile / native
+  const [isThoughtsCollapsed, setIsThoughtsCollapsed] = useState(
+    Platform.OS !== 'web' || screenWidth < 768
+  );
+  
+  // ── Thoughts panel – shown on web desktop only ─────────────────────────────
+  const showThoughtsPanel = Platform.OS === 'web' && !isMobile;
 
-  // Fetch enrolled students
+  // Fetch user profile using the same API as RightScreen
+  const fetchUserProfile = async (token: string, email: string) => {
+    try {
+      console.log('🔍 Fetching user profile from AstraDB for:', email);
+      
+      // Check cache first
+      if (userProfileCache.has(email)) {
+        console.log('✅ Using cached profile for:', email);
+        return userProfileCache.get(email)!;
+      }
+      
+      // Try AstraDB test table first for real user data (same as RightScreen)
+      const response = await axios.post(`${BASE_URL}/api/userProfile`, { 
+        email: email,
+        source: 'astraDB'
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.data) {
+        // Try different possible field names for profile picture (same as RightScreen)
+        const profilePic = response.data.profileimage || response.data.profilePic || response.data.profilepic || response.data.profile_image;
+        
+        // Try different possible field names for user name (same as RightScreen)
+        const userName = response.data.name || response.data.userName || response.data.fullname || response.data.fullName || response.data.displayName;
+        
+        console.log('✅ User profile from AstraDB:', { name: userName, profilePic: profilePic });
+        
+        if (profilePic || userName) {
+          // Ensure we have a proper URL format for profile image
+          let finalProfilePic = profilePic;
+          if (finalProfilePic && !finalProfilePic.startsWith('http') && !finalProfilePic.startsWith('/')) {
+            finalProfilePic = `/${finalProfilePic}`;
+          }
+          
+          const profileData = { name: userName || 'Unknown User', profilePic: finalProfilePic || '' };
+          
+          // Cache the result
+          setUserProfileCache(prev => new Map(prev.set(email, profileData)));
+          
+          return profileData;
+        } else {
+          console.log('⚠️ No profile image or name found in response');
+        }
+      }
+    } catch (error) {
+      console.log('❌ Profile fetch error:', error);
+      // Don't show alert for profile image fetch error as it's not critical
+    }
+    
+    return { name: 'Unknown User', profilePic: '' };
+  };
+  
+  // Enhanced function to fetch and cache multiple user profiles (same as RightScreen)
+  const fetchUserProfilesForPosts = async (posts: any[], token: string) => {
+    const uniqueEmails = [...new Set(posts.map(post => post.author.email))];
+    
+    const profilePromises = uniqueEmails.map(async (email) => {
+      if (!userProfileCache.has(email)) {
+        return await fetchUserProfile(token, email);
+      }
+      return null;
+    });
+    
+    await Promise.all(profilePromises);
+  };
+
+  // Profile image helper (same as RightScreen)
+  const getProfileImageSource = (profilePic?: string) => {
+    if (!profilePic) { 
+      return null; // Will show initials instead
+    }
+    
+    // Handle different profile image formats
+    if (typeof profilePic === 'string') {
+      // If it's already a full URL (http/https/file)
+      if (profilePic.startsWith('http') || profilePic.startsWith('file://')) {
+        return { uri: profilePic };
+      }
+      
+      // If it's a relative path starting with /
+      if (profilePic.startsWith('/')) {
+        return { uri: `${BASE_URL}${profilePic}` };
+      }
+      
+      // If it's a relative path without leading /
+      if (profilePic.includes('uploads/') || profilePic.includes('images/')) {
+        return { uri: `${BASE_URL}/${profilePic}` };
+      }
+      
+      // Default case - treat as relative path
+      return { uri: `${BASE_URL}/${profilePic}` };
+    }
+    
+    return null;
+  };
+
+  // Helper functions for thoughts display
+  const initials = (name: string) => {
+    return name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : 'U';
+  };
+
+  const resolvePostAuthor = (post: any) => {
+    if (!post) {
+      return {
+        name: teacherName || 'Unknown Teacher',
+        pic: profileImage,
+        role: 'teacher'
+      };
+    }
+    
+    const email = post.author?.email;
+    if (!email) return { name: 'Unknown User', pic: null, role: 'Unknown' };
+    
+    const userProfile = userProfileCache.get(email) || { name: 'Unknown User', profilePic: '' };
+    const name = userProfile.name || post.author?.name || 'Unknown User';
+    const pic: string | null = userProfile.profilePic || post.author?.profile_pic || null;
+    const role = post.author?.role || 'teacher';
+    
+    return { name, pic, role };
+  };
+
+  // Fetch posts for Thoughts section (same structure as RightScreen)
+  const fetchPosts = async (token: string) => {
+    try {
+      console.log('🔄 Fetching posts with token:', token ? 'Token exists' : 'No token');
+      console.log('🌐 BASE_URL:', BASE_URL);
+      
+      setPostsLoading(true);
+      const response = await axios.get(`${BASE_URL}/api/posts/all`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      console.log('📥 Posts response:', response.data);
+      
+      if (response.data?.success && Array.isArray(response.data.data)) {
+        // Fetch comments for each post (same as RightScreen)
+        const postsWithComments = await Promise.all(
+          response.data.data.map(async (post: any) => {
+            try {
+              const commentsResponse = await axios.get(`${BASE_URL}/api/posts/${post.id}/comments`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              
+              const comments = commentsResponse.data.success ? commentsResponse.data.data : [];
+              
+              return {
+                ...post,
+                postImage: post.postImage && !post.postImage.startsWith('http')
+                  ? `${BASE_URL}${post.postImage.startsWith('/') ? '' : '/'}${post.postImage}`
+                  : post.postImage,
+                createdAt: post.createdAt, // Keep original format for TeacherThoughtsCard
+                isLiked: post.isLiked || false,
+                comments: comments.map((comment: any) => ({
+                  ...comment,
+                  createdAt: comment.createdAt,
+                  isLiked: false
+                }))
+              };
+            } catch (error) {
+              console.error('Error fetching comments for post:', post.id, error);
+              return {
+                ...post,
+                postImage: post.postImage && !post.postImage.startsWith('http')
+                  ? `${BASE_URL}${post.postImage.startsWith('/') ? '' : '/'}${post.postImage}`
+                  : post.postImage,
+                createdAt: post.createdAt,
+                isLiked: post.isLiked || false,
+                comments: []
+              };
+            }
+          })
+        );
+        
+        // Fetch user profiles for all post authors (same as RightScreen)
+        await fetchUserProfilesForPosts(postsWithComments, token);
+        
+        setPosts(postsWithComments);
+      } else {
+        setPosts([]);
+      }
+      setPostsLoading(false);
+    } catch (error: any) {
+      console.error('❌ Error fetching posts:', error);
+      console.error('❌ Error response:', error.response?.data);
+      console.error('❌ Error status:', error.response?.status);
+      setPosts([]);
+      setPostsLoading(false);
+    }
+  };
+  
+  // Handle post creation
+  const handleCreatePost = async (content: string) => {
+    if (!authToken || !auth?.email) return;
+    
+    try {
+      const response = await axios.post(`${BASE_URL}/api/posts/create`, {
+        content,
+        authorEmail: auth.email,
+        authorName: teacherName,
+        postType: 'teacher'
+      }, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.data.success) {
+        await fetchPosts(authToken);
+      }
+    } catch (error) {
+      console.error('Error creating post:', error);
+    }
+  };
+  
+  // Back handler
+  const handleBackPress = () => {
+    router.back();
+  };
+
+  // ESC key handler for web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleBackPress();
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, []);
+
+  // Fetch enrolled students using the same API as ConnectWeb
   const fetchStudents = async () => {
     try {
       const authData = await getAuthData();
@@ -61,48 +340,68 @@ const StudentsEnrolled = () => {
         setAuth(authData);
         setTeacherName(authData.name || '');
         setProfileImage(authData.profileImage || null);
-        
-        // Try multiple endpoints for student data
+
         let studentData = [];
-        
+
         try {
-          // First try the enrolled students endpoint
-          const response = await axios.get(`${BASE_URL}/api/teacher/enrolled-students`, {
-            headers: { 'Authorization': `Bearer ${authData.token}` }
-          });
-          
-          if (response.data.success && response.data.data) {
-            studentData = response.data.data;
+          // Use the same API endpoint as ConnectWeb - /api/firebase-contacts
+          const response = await axios.post(
+            `${BASE_URL}/api/firebase-contacts`,
+            { userEmail: authData.email, type: 'teacher' },
+            {
+              headers: {
+                'Authorization': `Bearer ${authData.token}`,
+                'Content-Type': 'application/json'
+              },
+              timeout: 10000
+            }
+          );
+
+          if (response.data?.success && response.data?.contacts) {
+            // Map contacts to student format
+            studentData = response.data.contacts.map((contact: any) => ({
+              id: contact.id || contact._id || contact.email || Math.random().toString(36),
+              name: contact.studentName || contact.contactName || contact.name || 'Unknown Student',
+              email: contact.studentEmail || contact.contactEmail || contact.email || '',
+              profile_pic: contact.studentProfilePic || contact.contactProfilePic || contact.profilePic || contact.profile_pic || '',
+              enrolled_date: contact.enrolledDate || contact.enrolled_date || contact.createdAt || contact.timestamp || new Date().toISOString(),
+              status: contact.status || 'active',
+              className: contact.className || contact.classname || contact.class || '',
+              subject: contact.subject || contact.subjectName || ''
+            }));
           }
-        } catch (error) {
-          console.log('Enrolled students endpoint failed, trying contacts endpoint...');
-          
+        } catch (firebaseError) {
+          console.log('Firebase contacts endpoint failed, trying fallback...', firebaseError);
+
           try {
-            // Fallback to contacts endpoint (which was used in dashboard)
-            const contactsResponse = await axios.post(
-              `${BASE_URL}/api/contacts`,
-              { userEmail: authData.email, type: authData.role },
-              { headers: { 'Authorization': `Bearer ${authData.token}`, 'Content-Type': 'application/json' } }
-            );
-            
-            if (contactsResponse.data.success && contactsResponse.data.contacts) {
-              studentData = contactsResponse.data.contacts.map((contact: any) => ({
-                id: contact.id,
-                name: contact.studentName || contact.name,
-                email: contact.studentEmail || contact.email,
-                profile_pic: contact.studentProfilePic || contact.profilePic || contact.profile_pic,
-                enrolled_date: contact.enrolled_date || contact.createdAt || new Date().toISOString(),
-                status: contact.status || 'active'
+            // Fallback: try the enrolled students endpoint
+            const response = await axios.get(`${BASE_URL}/api/teacher/enrolled-students`, {
+              headers: { 'Authorization': `Bearer ${authData.token}` }
+            });
+
+            if (response.data?.success && response.data?.data) {
+              studentData = response.data.data.map((student: any) => ({
+                id: student.id || student._id || student.email || Math.random().toString(36),
+                name: student.name || student.studentName || student.fullName || student.userName || 'Unknown Student',
+                email: student.email || student.studentEmail || '',
+                profile_pic: student.profile_pic || student.profilePic || student.profileimage || student.studentProfilePic || '',
+                enrolled_date: student.enrolled_date || student.enrolledDate || student.createdAt || student.joinDate || new Date().toISOString(),
+                status: student.status || 'active'
               }));
             }
-          } catch (contactsError) {
-            console.log('Contacts endpoint also failed, using mock data');
-            // Use mock data for demonstration
+          } catch (fallbackError) {
+            console.log('Fallback endpoint also failed:', fallbackError);
             studentData = [];
           }
         }
-        
+
+        console.log('Students loaded:', studentData.length, studentData);
         setStudents(studentData);
+        
+        // Also fetch posts if authenticated
+        if (authData?.token) {
+          await fetchPosts(authData.token);
+        }
       }
     } catch (error) {
       console.error('Error in fetchStudents:', error);
@@ -123,7 +422,8 @@ const StudentsEnrolled = () => {
     
     // Listen for dimension changes
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
-      setIsMobile(window.width < 768);
+      setScreenWidth(window.width);
+      setScreenHeight(window.height);
     });
     
     return () => subscription.remove();
@@ -182,120 +482,280 @@ const StudentsEnrolled = () => {
     );
   }
 
+  // Filter students based on search query
+  const filteredStudents = students.filter(student =>
+    student.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    student.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <View style={styles.container}>
-      {isWeb && (
-        <WebHeader 
+      {/* ── Top header ── */}
+      <TeacherWebHeader teacherName={teacherName} profileImage={profileImage} />
+
+      {/* ── Body: sidebar + content area ── */}
+      <View style={styles.contentLayout}>
+        <TeacherWebSidebar
           teacherName={teacherName}
           profileImage={profileImage}
+          activeItem={sidebarActiveItem}
+          onItemPress={handleSelect}
+          userEmail={auth?.email || ''}
+          studentCount={students.length}
+          subjectCount={0}
         />
-      )}
-      
-      <View style={styles.contentLayout}>
-        {isWeb && (
-          <WebSidebar 
-            teacherName={teacherName}
-            profileImage={profileImage}
-            activeItem={sidebarActiveItem}
-            onItemPress={handleSelect}
-            userEmail={auth?.email || ''}
-          />
-        )}
-        
-        <View style={[styles.mainWrapper, isWeb && styles.webMainWrapper]}>
-          <TeacherThoughtsBackground>
-            <ScrollView 
-              style={styles.contentContainer}
-              refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-              }
-              showsVerticalScrollIndicator={false}
-            >
+
+        {/* ── Main wrapper: center + right panel in a ROW ── */}
+        <View style={styles.mainWrapper}>
+
+          {/* ── Content Columns ── */}
+          <View style={styles.contentColumns}>
+
+            {/* ── CENTER: scrollable content ── */}
+            <View style={styles.centerContent}>
+              <ScrollView 
+                style={styles.mainScroll} 
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+              >
               {/* Page Header */}
-              <View style={styles.pageHeader}>
-                <View>
-                  <Text style={styles.pageTitle} selectable={false}>Enrolled Students</Text>
-                  <Text style={styles.pageSubtitle} selectable={false}>
-                    Manage and view your enrolled students
-                  </Text>
-                </View>
-                {students.length > 0 && (
-                  <View style={styles.statsBadge}>
-                    <Text style={styles.statsBadgeText}>{students.length} Students</Text>
+              <View style={[
+                styles.pageHeader,
+                isMobile && styles.pageHeaderMobile,
+                isSmallMobile && styles.pageHeaderSmallMobile
+              ]}>
+                <View style={styles.pageHeaderLeft}>
+                  <TouchableOpacity
+                    style={styles.backBtn}
+                    onPress={handleBackPress}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="arrow-back" size={24} color={COLORS.textDark} />
+                  </TouchableOpacity>
+                  <View style={styles.pageHeaderContent}>
+                    <Text style={[
+                      styles.pageTitle,
+                      isMobile && styles.pageTitleMobile,
+                      isSmallMobile && styles.pageTitleSmallMobile
+                    ]} selectable={false}>Enrolled Students</Text>
+                    <Text style={[
+                      styles.pageSubtitle,
+                      isMobile && styles.pageSubtitleMobile
+                    ]} selectable={false}>
+                      Manage and view your enrolled students
+                    </Text>
                   </View>
-                )}
+                </View>
+                <View style={[
+                  styles.statsBadge,
+                  isMobile && styles.statsBadgeMobile
+                ]}>
+                  <Text style={[
+                    styles.statsBadgeText,
+                    isMobile && styles.statsBadgeTextMobile
+                  ]}>{students.length} Students</Text>
+                </View>
               </View>
+
+              {/* Mobile Search Bar */}
+              {isMobile && (
+                <View style={styles.mobileSearchContainer}>
+                  <View style={styles.mobileSearchBar}>
+                    <Ionicons name="search" size={20} color={COLORS.textSecondary} style={{ marginRight: 10 }} />
+                    <TextInput
+                      style={styles.mobileSearchInput}
+                      placeholder="Search students"
+                      placeholderTextColor={COLORS.textSecondary}
+                      value={searchQuery}
+                      onChangeText={setSearchQuery}
+                    />
+                  </View>
+                </View>
+              )}
 
               {loading ? (
                 <View style={styles.loaderContainer}>
                   <ActivityIndicator size="large" color={COLORS.primaryBlue} />
                   <Text style={styles.loadingText} selectable={false}>Loading students...</Text>
                 </View>
-              ) : students.length > 0 ? (
-                /* Students List */
-                <View style={styles.studentsContainer}>
-                  {students.map((student, index) => (
-                    <StudentCard key={student.id || index} student={student} isMobile={isMobile} />
-                  ))}
-                </View>
+              ) : filteredStudents.length > 0 ? (
+                /* Students List - Grid for Mobile, List for Web */
+                isMobile ? (
+                  <FlatList
+                    data={filteredStudents}
+                    keyExtractor={(item, index) => `${item.id || item.email || item.name}-${index}`}
+                    renderItem={({ item }) => (
+                      <MobileStudentCard student={item} screenWidth={screenWidth} />
+                    )}
+                    numColumns={2}
+                    columnWrapperStyle={styles.mobileGridRow}
+                    contentContainerStyle={styles.mobileGridContainer}
+                    showsVerticalScrollIndicator={false}
+                  />
+                ) : (
+                  <View style={styles.studentsContainer}>
+                    {students.map((student, index) => (
+                      <StudentCard key={student.id || index} student={student} isMobile={isMobile} />
+                    ))}
+                  </View>
+                )
               ) : (
                 /* Empty State */
-                <View style={styles.emptyContainer}>
-                  <View style={styles.emptyIconContainer}>
-                    <View style={styles.emptyIconBackground}>
-                      <Ionicons name="people-outline" size={64} color={COLORS.textSecondary} />
-                      <View style={styles.emptyIconOverlay}>
-                        <Ionicons name="link-outline" size={20} color={COLORS.primaryBlue} />
+                <View style={[
+                  styles.emptyContainer,
+                  isMobile && styles.emptyContainerMobile
+                ]}>
+                  <View style={[
+                    styles.emptyIconContainer,
+                    isMobile && styles.emptyIconContainerMobile
+                  ]}>
+                    <View style={[
+                      styles.emptyIconBackground,
+                      isMobile && styles.emptyIconBackgroundMobile
+                    ]}>
+                      <Ionicons 
+                        name="people-outline" 
+                        size={isMobile ? 48 : 64} 
+                        color={COLORS.textSecondary} 
+                      />
+                      <View style={[
+                        styles.emptyIconOverlay,
+                        isMobile && styles.emptyIconOverlayMobile
+                      ]}>
+                        <Ionicons 
+                          name="link-outline" 
+                          size={isMobile ? 16 : 20} 
+                          color={COLORS.primaryBlue} 
+                        />
                       </View>
                     </View>
                   </View>
                   
-                  <Text style={styles.emptyTitle} selectable={false}>No students found</Text>
-                  <Text style={styles.emptyDescription} selectable={false}>
+                  <Text style={[
+                    styles.emptyTitle,
+                    isMobile && styles.emptyTitleMobile
+                  ]} selectable={false}>No students found</Text>
+                  <Text style={[
+                    styles.emptyDescription,
+                    isMobile && styles.emptyDescriptionMobile
+                  ]} selectable={false}>
                     You haven't enrolled any students yet. Start by sharing your course or subject link.
                   </Text>
-                  
-                  <TouchableOpacity style={styles.shareButton}>
-                    <Ionicons name="share-outline" size={20} color={COLORS.white} style={{ marginRight: 8 }} />
-                    <Text style={styles.shareButtonText} selectable={false}>Share Subject</Text>
-                  </TouchableOpacity>
                 </View>
               )}
-            </ScrollView>
-          </TeacherThoughtsBackground>
+                </ScrollView>
+              </View>
+
+            </View>
+
+
+          </View>
         </View>
       </View>
+  );
+};
+
+// --- Mobile Student Card (Grid Style) ---
+const MobileStudentCard = ({ student, screenWidth }: { student: any; screenWidth: number }) => {
+  const CARD_WIDTH = (screenWidth - 45) / 2;
+
+  // Get profile pic from various possible field names
+  const profilePic = student.profile_pic || student.profilePic || student.profileImage || '';
+
+  // Construct proper image URL
+  const getImageUrl = (pic: string) => {
+    if (!pic) return DEFAULT_STUDENT_PIC;
+    if (pic.startsWith('http')) return pic;
+    if (pic.startsWith('/')) return `${BASE_URL}${pic}`;
+    return `${BASE_URL}/${pic}`;
+  };
+
+  return (
+    <View style={[styles.mobileStudentCard, { width: CARD_WIDTH }]}>
+      <Image
+        source={{ uri: getImageUrl(profilePic) }}
+        style={styles.mobileStudentImage}
+        resizeMode="cover"
+        defaultSource={{ uri: DEFAULT_STUDENT_PIC }}
+      />
+      <Text style={styles.mobileStudentName} numberOfLines={2}>
+        {student.name || 'Unknown Student'}
+      </Text>
+      {(student.className || student.subject) && (
+        <Text style={styles.mobileStudentSubject} numberOfLines={1}>
+          {student.className}{student.className && student.subject ? ' - ' : ''}{student.subject}
+        </Text>
+      )}
     </View>
   );
 };
 
+// Default student profile image
+const DEFAULT_STUDENT_PIC = 'https://cdn-icons-png.flaticon.com/512/4140/4140048.png';
+
 // --- Student Card Component ---
 const StudentCard = ({ student, isMobile }: { student: any; isMobile: boolean }) => {
+  const router = useRouter();
+
+  // Get profile pic from various possible field names
+  const profilePic = student.profile_pic || student.profilePic || student.profileImage || '';
+
+  // Construct proper image URL
+  const getImageUrl = (pic: string) => {
+    if (!pic) return DEFAULT_STUDENT_PIC;
+    if (pic.startsWith('http')) return pic;
+    if (pic.startsWith('/')) return `${BASE_URL}${pic}`;
+    return `${BASE_URL}/${pic}`;
+  };
+
+  // Handle view profile - navigate to student profile
+  const handleViewProfile = () => {
+    // Navigate to student profile or show modal with student details
+    router.push({
+      pathname: '/StudentProfile',
+      params: {
+        email: student.email,
+        name: student.name,
+        profilePic: profilePic,
+        className: student.className || '',
+        subject: student.subject || '',
+        enrolledDate: student.enrolled_date || ''
+      }
+    });
+  };
+
+  // Handle message - navigate to ConnectWeb with this student selected
+  const handleMessage = () => {
+    router.push({
+      pathname: '/TeacherDashBoard/ConnectWeb',
+      params: {
+        selectedStudentEmail: student.email,
+        selectedStudentName: student.name
+      }
+    });
+  };
+
   return (
     <View style={[styles.studentCard, isMobile && styles.studentCardMobile]}>
       <View style={styles.studentInfo}>
         <View style={styles.avatarContainer}>
-          {student.profile_pic ? (
-            <Image 
-              source={{ 
-                uri: student.profile_pic.startsWith('http') 
-                  ? student.profile_pic 
-                  : `${BASE_URL}/${student.profile_pic}` 
-              }} 
-              style={styles.avatar} 
-            />
-          ) : (
-            <View style={[styles.avatar, styles.avatarFallback]}>
-              <Text style={styles.avatarText}>
-                {student.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-              </Text>
-            </View>
-          )}
+          <Image
+            source={{ uri: getImageUrl(profilePic) }}
+            style={styles.avatar}
+            defaultSource={{ uri: DEFAULT_STUDENT_PIC }}
+          />
         </View>
-        
+
         <View style={styles.studentDetails}>
           <Text style={styles.studentName} selectable={false}>{student.name}</Text>
           <Text style={styles.studentEmail} selectable={false}>{student.email}</Text>
+          {(student.className || student.subject) && (
+            <Text style={styles.classSubject} selectable={false}>
+              {student.className}{student.className && student.subject ? ' - ' : ''}{student.subject}
+            </Text>
+          )}
           <View style={styles.studentMeta}>
             <Text style={styles.enrolledDate} selectable={false}>
               Enrolled: {new Date(student.enrolled_date || student.createdAt).toLocaleDateString()}
@@ -308,13 +768,9 @@ const StudentCard = ({ student, isMobile }: { student: any; isMobile: boolean })
           </View>
         </View>
       </View>
-      
+
       <View style={styles.studentActions}>
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="person-outline" size={16} color={COLORS.white} style={{ marginRight: 6 }} />
-          <Text style={styles.actionButtonText} selectable={false}>View Profile</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionButton, styles.messageButton]}>
+        <TouchableOpacity style={[styles.actionButton, styles.messageButton]} onPress={handleMessage}>
           <Ionicons name="chatbubble-outline" size={16} color={COLORS.primaryBlue} />
         </TouchableOpacity>
       </View>
@@ -336,6 +792,22 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
   },
+  webContentLayout: {
+    flexDirection: 'row',
+  },
+  mobileContentLayout: {
+    flexDirection: 'column',
+  },
+  mainContent: {
+    flex: 1,
+  },
+  webMainContent: {
+    flex: 1,
+    marginRight: 24,
+  },
+  mobileMainContent: {
+    flex: 1,
+  },
   mainWrapper: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -343,6 +815,7 @@ const styles = StyleSheet.create({
   webMainWrapper: {
     marginLeft: 280,
   },
+  // Responsive Page Header
   pageHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -353,16 +826,61 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
     backgroundColor: COLORS.cardBg,
   },
+  pageHeaderMobile: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  pageHeaderSmallMobile: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  pageHeaderContent: {
+    flex: 1,
+  },
+  pageHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    flex: 1,
+  },
+  backBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   pageTitle: {
     fontSize: 28,
     fontFamily: 'Poppins_700Bold',
     color: COLORS.textDark,
     marginBottom: 4,
   },
+  pageTitleMobile: {
+    fontSize: 24,
+    marginBottom: 2,
+  },
+  pageTitleSmallMobile: {
+    fontSize: 20,
+    marginBottom: 2,
+  },
   pageSubtitle: {
     fontSize: 16,
     fontFamily: 'Poppins_400Regular',
     color: COLORS.textSecondary,
+  },
+  pageSubtitleMobile: {
+    fontSize: 14,
   },
   statsBadge: {
     backgroundColor: COLORS.primaryBlue,
@@ -370,10 +888,18 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 20,
   },
+  statsBadgeMobile: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
+  },
   statsBadgeText: {
     fontSize: 12,
     fontFamily: 'Poppins_600SemiBold',
     color: COLORS.white,
+  },
+  statsBadgeTextMobile: {
+    fontSize: 11,
   },
   contentContainer: {
     flex: 1,
@@ -403,10 +929,17 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+    }),
     elevation: 3,
   },
   studentCardMobile: {
@@ -449,6 +982,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
     color: COLORS.textSecondary,
+    marginBottom: 4,
+  },
+  classSubject: {
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    color: COLORS.primaryBlue,
     marginBottom: 8,
   },
   studentMeta: {
@@ -503,7 +1042,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: COLORS.white,
   },
-  // Empty State Styles
+  // Responsive Empty State
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -511,8 +1050,15 @@ const styles = StyleSheet.create({
     paddingVertical: 80,
     paddingHorizontal: 40,
   },
+  emptyContainerMobile: {
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
   emptyIconContainer: {
     marginBottom: 32,
+  },
+  emptyIconContainerMobile: {
+    marginBottom: 24,
   },
   emptyIconBackground: {
     width: 120,
@@ -522,6 +1068,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+  },
+  emptyIconBackgroundMobile: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
   },
   emptyIconOverlay: {
     position: 'absolute',
@@ -536,12 +1087,23 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: COLORS.primaryBlue,
   },
+  emptyIconOverlayMobile: {
+    top: 6,
+    right: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+  },
   emptyTitle: {
     fontSize: 24,
     fontFamily: 'Poppins_600SemiBold',
     color: COLORS.textDark,
     marginBottom: 12,
     textAlign: 'center',
+  },
+  emptyTitleMobile: {
+    fontSize: 20,
+    marginBottom: 8,
   },
   emptyDescription: {
     fontSize: 16,
@@ -551,6 +1113,12 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     lineHeight: 24,
     maxWidth: 400,
+  },
+  emptyDescriptionMobile: {
+    fontSize: 14,
+    marginBottom: 24,
+    lineHeight: 20,
+    maxWidth: 300,
   },
   shareButton: {
     backgroundColor: COLORS.primaryBlue,
@@ -565,10 +1133,70 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  shareButtonMobile: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
   shareButtonText: {
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
     color: COLORS.white,
+  },
+  shareButtonTextMobile: {
+    fontSize: 14,
+  },
+  // Thoughts Section Styles
+  thoughtsSection: {
+    width: 380,
+    minWidth: 320,
+    maxWidth: 420,
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  thoughtsSectionTitle: {
+    fontSize: 18,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textDark,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  thoughtsScrollView: {
+    flex: 1,
+    maxHeight: '100%',
+  },
+  thoughtsList: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  thoughtsLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  thoughtsLoadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textSecondary,
+  },
+  thoughtsEmptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  thoughtsEmptyText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textSecondary,
   },
   // Legacy styles (keeping for compatibility)
   emptyText: {
@@ -576,6 +1204,156 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     color: COLORS.textSecondary,
     textAlign: 'center',
+  },
+
+  // Dashboard layout styles (matching TutorDashboardWeb)
+  contentColumns: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  centerContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  mainScroll: {
+    flex: 1,
+  },
+  rightPanel: {
+    width: 380,
+    marginLeft: 20,
+    paddingLeft: 20,
+    borderLeftWidth: 1,
+    borderLeftColor: COLORS.border,
+  },
+  rightPanelCollapsed: {
+    width: 52,
+    paddingHorizontal: 8,
+  },
+  rightPanelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  rightPanelTitleContainer: {
+    flex: 1,
+  },
+  rightPanelTitle: {
+    fontSize: 18,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textDark,
+  },
+  collapseBtn: {
+    padding: 6,
+    borderRadius: 8,
+  },
+
+  // ── Mobile thoughts panel (inline, below main content) ───────────────────
+  mobileThoughtsPanel: {
+    backgroundColor: '#FAFBFC',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+
+  // ── Thoughts feed ─────────────────────────────────────────────────────────
+  composerWrapper: {
+    marginBottom: 16,
+  },
+  postWrapper: {
+    marginBottom: 4,
+  },
+  emptyState: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 48,
+  },
+  emptyStateTitle: {
+    fontSize: 16,
+    fontFamily: 'Poppins_500Medium',
+    color: COLORS.textDark,
+    marginTop: 14,
+    marginBottom: 6,
+  },
+  emptyStateText: {
+    fontSize: 13,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+
+  // ── Mobile Grid Styles ────────────────────────────────────────────────────
+  mobileSearchContainer: {
+    paddingHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  mobileSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 48,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  mobileSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textDark,
+  },
+  mobileGridContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  mobileGridRow: {
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  mobileStudentCard: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+    }),
+    elevation: 2,
+  },
+  mobileStudentImage: {
+    width: '100%',
+    aspectRatio: 3/4,
+    borderRadius: 8,
+    marginBottom: 10,
+    backgroundColor: COLORS.border,
+  },
+  mobileStudentName: {
+    fontSize: 14,
+    fontFamily: 'Poppins_500Medium',
+    color: COLORS.textDark,
+    textAlign: 'left',
+  },
+  mobileStudentSubject: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.primaryBlue,
+    textAlign: 'left',
+    marginTop: 2,
   },
 });
 

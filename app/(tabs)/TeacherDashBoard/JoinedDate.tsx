@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { getAuthData } from '../../../utils/authStorage';
 import axios from 'axios';
@@ -41,6 +41,7 @@ const JoinedDate = () => {
   const [loading, setLoading] = useState(true);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [teacherName, setTeacherName] = useState('');
+  const [teacherEmail, setTeacherEmail] = useState('');
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [sidebarActiveItem, setSidebarActiveItem] = useState("Joined Date");
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -53,7 +54,8 @@ const JoinedDate = () => {
         if (auth?.token) {
           setAuthToken(auth.token);
           setTeacherName(auth.name || '');
-          setProfileImage(auth.profilePic || null);
+          setTeacherEmail(auth.email || '');
+          setProfileImage(auth.profileImage || null);
           
           const response = await axios.get(`${BASE_URL}/api/teacher/profile`, {
             headers: { 'Authorization': `Bearer ${auth.token}` }
@@ -126,20 +128,17 @@ const JoinedDate = () => {
   return (
     <View style={styles.container}>
       <TeacherWebHeader 
-        name={teacherName}
+        teacherName={teacherName}
         profileImage={profileImage}
-        activeMenu={activeMenu}
-        onMenuPress={handleMenuPress}
       />
       
       <View style={styles.contentLayout}>
         <TeacherWebSidebar
-          name={teacherName}
+          teacherName={teacherName}
           profileImage={profileImage}
           activeItem={sidebarActiveItem}
-          activeMenu={activeMenu}
-          onSelect={handleSelect}
-          menuItems={menuItems}
+          userEmail={teacherEmail}
+          onItemPress={handleSelect}
         />
         
         <View style={styles.mainWrapper}>
@@ -267,10 +266,27 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 3,
   },
   timelineTitle: {

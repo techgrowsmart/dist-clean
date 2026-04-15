@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -10,7 +11,6 @@ import {
   TextInput,
   Dimensions,
   SafeAreaView,
-  Platform,
 } from 'react-native';
 import {
   Poppins_400Regular,

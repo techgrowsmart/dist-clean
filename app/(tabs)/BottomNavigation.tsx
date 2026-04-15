@@ -26,31 +26,32 @@ const BottomNavigation = ({ userType }: { userType: "student" | "teacher" }) => 
 
   // Animation function for star when favorite is added
   const animateStarAddition = () => {
+    const useNative = Platform.OS !== 'web';
     Animated.sequence([
       // Quick scale up
       Animated.timing(starScale, {
         toValue: 1.4,
         duration: 100, // Reduced from 200ms
-        useNativeDriver: true,
+        useNativeDriver: useNative,
       }),
       // Quick spring back
       Animated.spring(starScale, {
         toValue: 1,
         friction: 4, // Increased for faster bounce
         tension: 100, // Increased for quicker response
-        useNativeDriver: true,
+        useNativeDriver: useNative,
       }),
       // Very quick flash
       Animated.sequence([
         Animated.timing(starOpacity, {
           toValue: 0.5,
           duration: 50, // Reduced from 100ms
-          useNativeDriver: true,
+          useNativeDriver: useNative,
         }),
         Animated.timing(starOpacity, {
           toValue: 1,
           duration: 50, // Reduced from 100ms
-          useNativeDriver: true,
+          useNativeDriver: useNative,
         }),
       ]),
     ]).start();

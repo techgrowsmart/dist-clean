@@ -10,12 +10,14 @@ import {
   Dimensions,
   FlatList,
   Image,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Ionicons } from '@expo/vector-icons';
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import { isTablet } from "../../../utils/devices";
 const { width } = Dimensions.get("window");
@@ -25,6 +27,27 @@ const MyTeacher = ({ onBack }) => {
   const [allTeachers, setAllTeachers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+
+  const handleBackPress = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      router.back();
+    }
+  };
+
+  // ESC key handler for web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleBackPress();
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [onBack]);
 
   useEffect(() => {
     const fetchTeachers = async () => {
@@ -188,7 +211,9 @@ const MyTeacher = ({ onBack }) => {
      
     <View style={styles.header}>
         <View style={styles.back}>
-          <BackButton size={24} color="#000" onPress={onBack} style={styles.backButton} />
+          <TouchableOpacity style={styles.backBtnCircle} onPress={handleBackPress}>
+            <Ionicons name="arrow-back" size={20} color="#000" />
+          </TouchableOpacity>
           <Text style={styles.title}>My Teachers</Text>
         </View>
         <Text style={styles.totalCount}>{allTeachers.length} Found</Text>
@@ -220,20 +245,6 @@ const styles = StyleSheet.create({
         backgroundColor: "#fff",
         paddingHorizontal: 16,
         paddingTop: 20,
-        paddingBottom: 120, 
-      },
-    
-      
-      header: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginBottom: hp(isTablet ? '1.8%' : '2.15%'),
-        justifyContent: "space-between",
-      },
-      backButton: { 
-        width: wp(isTablet ? '10%' : '12.8%'),
-        height: wp(isTablet ? '10%' : '12.8%'),
-        alignItems: "center",
         justifyContent: "center",
         borderRadius: wp(isTablet ? '5%' : '6.4%'),
         padding: wp("1.04%"),
@@ -243,6 +254,19 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "flex-start",
+      },
+      backBtnCircle: {
+        width: 46,
+        height: 46,
+        borderRadius: 23,
+        backgroundColor: '#FFFFFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 4,
       },
       title: {
         fontSize: wp(isTablet ? '3.6%' : '4.27%'),

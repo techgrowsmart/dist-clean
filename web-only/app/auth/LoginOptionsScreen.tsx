@@ -224,10 +224,27 @@ const webStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 16,
   },
   leftLogoText: {

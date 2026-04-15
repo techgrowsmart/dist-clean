@@ -10,7 +10,7 @@ import {
   Image,
   Platform,
   Keyboard,
-  TouchableWithoutFeedback,
+  Pressable,
   KeyboardAvoidingView,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -19,7 +19,7 @@ import { BASE_URL } from '../../config';
 import { storeAuthData } from "../../utils/authStorage";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import { Feather } from "@expo/vector-icons";
-import {
+import { 
   WorkSans_400Regular,
   WorkSans_500Medium,
   WorkSans_600SemiBold,
@@ -178,8 +178,7 @@ export default function VerifyOTP() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? hp('5%') : hp('2%')}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.innerContainer}>
+      <Pressable onPress={Keyboard.dismiss} style={styles.innerContainer}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Feather name="arrow-left" size={wp("8%")} color="#727070" />
           </TouchableOpacity>
@@ -228,8 +227,7 @@ export default function VerifyOTP() {
               Didn't get OTP? Resend in <Text style={styles.timerHighlight}>{String(Math.floor(timer / 60)).padStart(2, "0")}:{String(timer % 60).padStart(2, "0")}</Text>
             </Text>
           )}
-        </View>
-      </TouchableWithoutFeedback>
+        </Pressable>
     </KeyboardAvoidingView>
   );
 }

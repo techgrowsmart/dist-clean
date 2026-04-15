@@ -2,28 +2,25 @@ import React from "react";
 import { TouchableOpacity, View, StyleSheet } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 
-const CustomCheckbox = ({ value, onValueChange, size = 24 }) => {
+const CustomCheckbox = ({ value, onValueChange, size = 24, disabled = false }) => {
   return (
-    <TouchableOpacity 
-      onPress={onValueChange}
+    <TouchableOpacity
+      onPress={!disabled ? onValueChange : undefined}
+      activeOpacity={disabled ? 1 : 0.7}
       style={[
         styles.checkbox,
-        { 
-          width: size, 
-          height: size, 
-          borderRadius: size / 8, // Rectangular with slight rounding
-          borderColor: "#5f5fff",
-          backgroundColor: value ? "#5f5fff" : "transparent"
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 8,
+          borderColor: disabled ? "#ccc" : "#5f5fff",
+          backgroundColor: value ? (disabled ? "#ccc" : "#5f5fff") : "transparent",
+          opacity: disabled ? 0.5 : 1
         }
       ]}
     >
       {value && (
-        // <Ionicons 
-        //   name="checkmark" 
-        //   size={size * 0.8} // Slightly larger
-        //   color="#4CAF50" // Green check mark
-        // />
-        <FontAwesome name="check" size={size * 0.8} color="#88ea8bff" />
+        <FontAwesome name="check" size={size * 0.8} color={disabled ? "#888" : "#88ea8bff"} />
       )}
     </TouchableOpacity>
   );

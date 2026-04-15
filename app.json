@@ -29,6 +29,22 @@
       "edgeToEdgeEnabled": true,
       "package": "com.gogrowsmart.app.mobile",
       "versionCode": 14,
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "gogrowsmart",
+              "host": "*"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "plugins": [
         "expo-notifications",
         "expo-notifications"
@@ -37,7 +53,7 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
+      "output": "server",
       "favicon": "./assets/images/growsmart-icon.png",
       "excludedPlatforms": ["ios", "android"]
     },
@@ -73,7 +89,10 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {},
+      "router": {
+        "ssr": false,
+        "prefetch": false
+      },
       "eas": {
         "projectId": "05fec7d8-c438-4568-a18d-cd8eceefe083"
       },

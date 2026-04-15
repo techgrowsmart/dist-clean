@@ -12,110 +12,27 @@ import {
   FlatList,
   Dimensions,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { FontAwesome, Ionicons, AntDesign } from '@expo/vector-icons';
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import { Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold, useFonts } from '@expo-google-fonts/poppins';
 import { BASE_URL } from '../../../config';
 import BackButton from "../../../components/BackButton";
 
-const { width } = Dimensions.get("window");
-
-// Mock data for skill teachers
-const mockTeachers = [
-  {
-    id: 1,
-    name: 'Sarah Johnson',
-    email: 'sarah.j@example.com',
-    profilePic: require('../../../assets/images/Profile.png'),
-    specialty: 'Piano Expert',
-    experience: '8+ years',
-    rating: 4.8,
-    reviews: 127,
-    price: '$45/hr',
-    description: 'Professional piano instructor with classical training',
-    languages: ['English', 'Spanish'],
-    availability: 'Weekdays, Weekends'
-  },
-  {
-    id: 2,
-    name: 'Michael Chen',
-    email: 'michael.c@example.com',
-    profilePic: require('../../../assets/images/Profile.png'),
-    specialty: 'Guitar Master',
-    experience: '10+ years',
-    rating: 4.9,
-    reviews: 203,
-    price: '$50/hr',
-    description: 'Rock and classical guitar virtuoso',
-    languages: ['English', 'Mandarin'],
-    availability: 'Weekdays'
-  },
-  {
-    id: 3,
-    name: 'Emma Williams',
-    email: 'emma.w@example.com',
-    profilePic: require('../../../assets/images/Profile.png'),
-    specialty: 'Vocal Coach',
-    experience: '6+ years',
-    rating: 4.7,
-    reviews: 89,
-    price: '$40/hr',
-    description: 'Professional vocal trainer for all genres',
-    languages: ['English'],
-    availability: 'Flexible'
-  },
-  {
-    id: 4,
-    name: 'David Kumar',
-    email: 'david.k@example.com',
-    profilePic: require('../../../assets/images/Profile.png'),
-    specialty: 'Drum Instructor',
-    experience: '12+ years',
-    rating: 4.9,
-    reviews: 156,
-    price: '$55/hr',
-    description: 'Expert drummer with performance experience',
-    languages: ['English', 'Hindi'],
-    availability: 'Weekends'
-  },
-  {
-    id: 5,
-    name: 'Lisa Martinez',
-    email: 'lisa.m@example.com',
-    profilePic: require('../../../assets/images/Profile.png'),
-    specialty: 'Dance Choreographer',
-    experience: '7+ years',
-    rating: 4.6,
-    reviews: 94,
-    price: '$48/hr',
-    description: 'Contemporary and ballet dance instructor',
-    languages: ['English', 'Spanish'],
-    availability: 'Evenings'
-  },
-  {
-    id: 6,
-    name: 'James Wilson',
-    email: 'james.w@example.com',
-    profilePic: require('../../../assets/images/Profile.png'),
-    specialty: 'Art Teacher',
-    experience: '9+ years',
-    rating: 4.8,
-    reviews: 142,
-    price: '$42/hr',
-    description: 'Digital and traditional art specialist',
-    languages: ['English'],
-    availability: 'Weekdays'
-  }
-];
-
-export default function SkillTeachers({ onBack, selectedSkill, allSpotlightSkillTeachers = [], allPopularSkillTeachers = [] }: {
-  onBack: () => void;
-  selectedSkill: string;
+export default function SkillTeachers({ onBack, selectedSkill: propSelectedSkill, allSpotlightSkillTeachers = [], allPopularSkillTeachers = [] }: {
+  onBack?: () => void;
+  selectedSkill?: string;
   allSpotlightSkillTeachers?: any[];
   allPopularSkillTeachers?: any[];
 }) {
+ 
   const router = useRouter();
+  const params = useLocalSearchParams();
+  
+  // Get props from either direct props or router params
+  const selectedSkill = propSelectedSkill || params.selectedSkill as string;
+  const showAllSkills = params.showAllSkills === 'true';
+  const { width } = Dimensions.get("window");
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_600SemiBold,
@@ -125,20 +42,77 @@ export default function SkillTeachers({ onBack, selectedSkill, allSpotlightSkill
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [likedTeachers, setLikedTeachers] = useState<{[key: string]: boolean}>({});
-  const [filteredTeachers, setFilteredTeachers] = useState(mockTeachers);
+  const [filteredTeachers, setFilteredTeachers] = useState<any[]>([]);
+  const [teachersPerPage, setTeachersPerPage] = useState(4);
+  const [allSkillTeachers, setAllSkillTeachers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const teachersPerPage = Platform.OS === 'web' ? 6 : 4;
+  useEffect(() => {
+    setTeachersPerPage(Platform.OS === 'web' ? 6 : 4);
+  }, []);
+
+  // Fetch all skill teachers when showAllSkills is true
+  useEffect(() => {
+    if (showAllSkills) {
+      fetchAllSkillTeachers();
+    }
+  }, [showAllSkills]);
+
+  const fetchAllSkillTeachers = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${BASE_URL}/api/teachers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          category: 'Skill teacher'
+        }),
+      });
+      const data = await response.json();
+      if (data.success && data.data) {
+        setAllSkillTeachers(data.data);
+        setFilteredTeachers(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching all skill teachers:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // Initialize filteredTeachers with the appropriate teacher data
+    if (showAllSkills) {
+      setFilteredTeachers(allSkillTeachers);
+    } else {
+      const allTeachers = [...allSpotlightSkillTeachers, ...allPopularSkillTeachers];
+      setFilteredTeachers(allTeachers);
+    }
+  }, [allSpotlightSkillTeachers, allPopularSkillTeachers, allSkillTeachers, showAllSkills]);
+
+  useEffect(() => {
+    // Filter teachers based on search query
+    const sourceTeachers = showAllSkills ? allSkillTeachers : [...allSpotlightSkillTeachers, ...allPopularSkillTeachers];
+    if (searchQuery.trim() === '') {
+      setFilteredTeachers(sourceTeachers);
+    } else {
+      const filtered = sourceTeachers.filter(teacher =>
+        teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        teacher.specialty.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (teacher.skills && teacher.skills.some((skill: string) => skill.toLowerCase().includes(searchQuery.toLowerCase())))
+      );
+      setFilteredTeachers(filtered);
+    }
+    setCurrentPage(1); // Reset to first page when searching
+  }, [searchQuery, allSpotlightSkillTeachers, allPopularSkillTeachers, allSkillTeachers, showAllSkills]);
+
   const totalPages = Math.ceil(filteredTeachers.length / teachersPerPage);
   const startIndex = (currentPage - 1) * teachersPerPage;
   const currentTeachers = filteredTeachers.slice(startIndex, startIndex + teachersPerPage);
 
-  useEffect(() => {
-    const filtered = mockTeachers.filter(teacher => 
-      teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      teacher.specialty.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-    setFilteredTeachers(filtered);
-  }, [searchQuery]);
+
 
   const handleLike = (teacherId: number) => {
     setLikedTeachers(prev => ({
@@ -498,11 +472,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 20,
     padding: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   webTeacherInfo: {
     padding: 15,
@@ -715,9 +685,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
     elevation: 3,
   },
   mobileTeacherInfo: {

@@ -78,11 +78,12 @@ const SidebarMenu = ({
     try {
       await clearAllStorage();
       
+      // Navigate directly to EmailInputScreen with login type
+      const targetPath = '/auth/EmailInputScreen?type=login';
       if (Platform.OS === "web") {
-        // Force redirect to login page on web
-        window.location.href = '/login';
+        window.location.href = targetPath;
       } else {
-        router.replace("/(tabs)/LoginScreen");
+        router.replace({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } });
       }
       
       Toast.show({
@@ -103,10 +104,11 @@ const SidebarMenu = ({
         visibilityTime: 3000,
       });
       // Still try to navigate even if storage clear fails
+      const targetPath = '/auth/EmailInputScreen?type=login';
       if (Platform.OS === "web") {
-        window.location.href = '/login';
+        window.location.href = targetPath;
       } else {
-        router.replace("/(tabs)/LoginScreen");
+        router.replace({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } });
       }
       onClose();
     } finally {
@@ -211,10 +213,27 @@ const SidebarMenu = ({
                 backgroundColor: isLoggingOut ? "#9CA3AF" : "#EF4444", 
                 justifyContent: "center", 
                 alignItems: "center", 
-                shadowColor: "#000", 
-                shadowOffset: { width: 0, height: 4 }, 
-                shadowOpacity: 0.1, 
-                shadowRadius: 8, 
+                ...Platform.select({
+ 
+                  web: {
+ 
+                    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+ 
+                  },
+ 
+                  default: {
+ 
+                    shadowColor: '#000',
+ 
+                    shadowOffset: { width: 0, height: 4 },
+ 
+                    shadowOpacity: 0.3,
+ 
+                    shadowRadius: 8,
+ 
+                  },
+ 
+                }), 
                 elevation: 4 
               }} 
               onPress={confirmLogout}

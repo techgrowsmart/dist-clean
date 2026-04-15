@@ -1,472 +1,625 @@
-import { FontAwesome } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
-import { Dimensions, Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { BASE_URL } from '../../config';
+// TeacherThoughtsCard.tsx
+import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import {
+  ActivityIndicator,
+  Dimensions,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import TeacherPostComposer from './TeacherPostComposer';
+import UnifiedThoughtsCard, { UnifiedThoughtsBackground, UnifiedPost } from './UnifiedThoughtsCard';
 
-interface TeacherPost {
-  id: string;
-  author: { email: string; name: string; role: string; profile_pic: string };
-  content: string;
-  likes: number;
-  comments?: any[];
-  createdAt: string;
-  tags?: string[];
-  postImage?: string;
-  postImages?: string[];
-  isLiked?: boolean;
-}
+// Colors constant (mirroring from TeacherDashboard)
+const COLORS = {
+  background: '#F5F7FB',
+  cardBg: '#FFFFFF',
+  primaryBlue: '#3B5BFE',
+  gradientBlueStart: '#4F6EF7',
+  gradientBlueEnd: '#3B5BFE',
+  border: '#E5E7EB',
+  textDark: '#111827',
+  textSecondary: '#6B7280',
+  textPrimary: '#1a1a1a',
+  white: '#FFFFFF',
+  bannerTint: '#EEF2FF',
+};
 
 interface TeacherThoughtsCardProps {
-  post?: TeacherPost;
-  onLike?: (postId: string) => void;
-  onComment?: (post: TeacherPost) => void;
-  onReport?: (post: TeacherPost) => void;
-  getProfileImageSource?: (profilePic?: string) => { uri: string } | null;
-  initials?: (name: string) => string;
-  resolvePostAuthor?: (post: TeacherPost) => { name: string; pic: string | null; role: string };
-  ws?: any;
-  userProfileCache?: Map<string, { name: string; profilePic: string }>;
+  // Data props
+  posts: UnifiedPost[];
+  postsLoading: boolean;
+  userProfileCache: Map<string, { name: string; profilePic: string }>;
+  currentUserEmail?: string;
+  
+  // Helper functions
+  getProfileImageSource: (profilePic?: string) => { uri: string } | null;
+  initials: (name: string) => string;
+  resolvePostAuthor: (post: UnifiedPost) => { name: string; pic: string | null; role: string };
+  
+  // Actions
+  handleCreatePost: (content: string, imageUri?: string | null) => Promise<void>;
+  handleDeletePost?: (postId: string) => Promise<void>;
+  handleLike?: (postId: string) => Promise<void>;
+  setPosts: React.Dispatch<React.SetStateAction<UnifiedPost[]>>;
+  onComment: (post: UnifiedPost) => void;
+  onProfileClick?: (author: { email: string; name: string; profilePic: string | null }) => void;
+  
+  // UI control props
+  isMobile?: boolean;
+  showThoughtsPanel?: boolean;
+  isThoughtsCollapsed?: boolean;
+  setIsThoughtsCollapsed?: React.Dispatch<React.SetStateAction<boolean>>;
+
+  // Tooltip state from parent (to render at root level and avoid clipping)
+  showTooltip?: boolean;
+  setShowTooltip?: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-interface TeacherThoughtsBackgroundProps {
-  children: React.ReactNode;
-}
-
-export const TeacherThoughtsBackground: React.FC<TeacherThoughtsBackgroundProps> = ({ children }) => (
-  <View style={bg.root}>
-    <View style={bg.patternLayer} pointerEvents="none">
-      {Array.from({ length: 120 }).map((_, i) => <Text key={i} style={bg.tile}>💭</Text>)}
-    </View>
-    {children}
-  </View>
-);
-
-const bg = StyleSheet.create({
-  root: { flex: 1, backgroundColor: 'transparent' },
-  patternLayer: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', flexWrap: 'wrap', opacity: 0, zIndex: 0 },
-  tile: { fontSize: 22, width: 40, height: 40, textAlign: 'center', color: '#3a5bbf' },
-});
-
-const TeacherThoughtsCard: React.FC<TeacherThoughtsCardProps> = ({ 
-  post, 
-  onLike, 
-  onComment, 
-  onReport, 
-  getProfileImageSource, 
-  initials, 
-  resolvePostAuthor,
-  ws,
-  userProfileCache
-}) => {
-  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
-  const [isHovered, setIsHovered] = useState(false);
-
-  // Track screen dimensions for responsiveness
-  useEffect(() => {
-    const updateDimensions = () => {
-      setScreenWidth(Dimensions.get('window').width);
-    };
-
-    const subscription = Dimensions.addEventListener('change', updateDimensions);
-    return () => subscription?.remove();
-  }, []);
-
-  // Responsive breakpoints
-  const isMobile = screenWidth < 768;
-  const isTablet = screenWidth >= 768 && screenWidth < 1024;
-  const isDesktop = screenWidth >= 1024;
-
-  // Dynamic sizing based on screen width
-  const cardWidth = isMobile ? '95%' : isTablet ? '90%' : '100%';
-  const maxWidth = isDesktop ? 400 : isTablet ? 350 : 300;
-  const avatarSize = isMobile ? 44 : isTablet ? 48 : 52;
-  const fontSize = {
-    small: isMobile ? 13 : 14,
-    medium: isMobile ? 14 : 15,
-    large: isMobile ? 16 : 18,
-  };
-  const spacing = {
-    small: isMobile ? 6 : 8,
-    medium: isMobile ? 10 : 12,
-    large: isMobile ? 14 : 16,
-  };
-  const defaultGetProfileImageSource = (profilePic?: string) => {
-  if (!profilePic || profilePic === '' || profilePic === 'null' || profilePic === 'undefined' || profilePic.trim() === '') return null;
-  if (profilePic.startsWith('http') || profilePic.startsWith('file://')) return { uri: profilePic };
-  // Handle profile image path
-  if (!profilePic.startsWith('/')) {
-    profilePic = `/${profilePic}`;
-  }
-  const clean = profilePic.startsWith('/') ? profilePic.substring(1) : profilePic;
-  return { uri: `${BASE_URL}/${clean}` };
-};
-  
-  const defaultInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  };
-  
-  const defaultResolvePostAuthor = (post?: TeacherPost) => {
-  if (!post) return { name: 'Unknown Teacher', pic: null, role: 'teacher' };
-
-  // Use cached profile data like student's version
-  const cached = userProfileCache?.get(post.author?.email) || { name: '', profilePic: '' };
-  let name = cached.name || post.author?.name || '';
-  let pic: string | null = cached.profilePic || post.author?.profile_pic || null;
-  const role = post.author?.role || 'teacher';
-
-  // Handle email fallback for name
-  if (!name || name === 'null' || name.includes('@')) {
-    name = post.author?.email?.split('@')[0] || 'Unknown Teacher';
-    // Clean up the name (remove dots, capitalize)
-    name = name.split('.').map(part => 
-      part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
-    ).join(' ');
-  }
-
-  // Handle profile image path
-  if (pic && !pic.startsWith('http') && !pic.startsWith('/')) {
-    pic = `/${pic}`;
-  }
-  if (pic === '' || pic === 'null') {
-    pic = null;
-  }
-
-  return { name, pic, role };
-};
-
-  const defaultOnLike = (postId: string) => console.log('Like teacher post:', postId);
-  const defaultOnComment = (post?: TeacherPost) => console.log('Comment on teacher post:', post);
-  const defaultOnReport = (post?: TeacherPost) => console.log('Report teacher post:', post);
-
-  // Use resolved post for author data - posts come directly from API, no nested structure
-  const { name, pic, role } = resolvePostAuthor && post 
-    ? resolvePostAuthor(post) 
-    : defaultResolvePostAuthor(post);
-  
-  // Get the actual content and other fields directly from post
-  const content = post?.content || '';
-  const images: string[] = post?.postImages?.length 
-    ? post.postImages 
-    : post?.postImage 
-      ? [post.postImage] 
-      : [];
-  const commentCount = post?.comments?.length ?? 0;
-  const likes = post?.likes ?? 0;
-  const isLiked = post?.isLiked ?? false;
-  const createdAt = post?.createdAt || 'Just now';
-  const postId = post?.id || '';
-
-  // If no post provided, show loading state instead of mock data
-  if (!post) {
-    return (
-      <View style={[s.card, s.loadingCard]}>
-        <View style={s.loadingContent}>
-          <View style={[s.avatar, s.loadingAvatar]} />
-          <View style={s.loadingTextContainer}>
-            <View style={[s.loadingText, s.loadingTitle]} />
-            <View style={[s.loadingText, s.loadingSubtitle]} />
-          </View>
-        </View>
-        <View style={[s.loadingText, s.loadingContent]} />
-        <View style={[s.loadingText, s.loadingContent, s.loadingContentShort]} />
-      </View>
-    );
-  }
-
-  const imgSrc = getProfileImageSource ? getProfileImageSource(pic || undefined) : defaultGetProfileImageSource(pic || undefined);
-
-  const renderImages = () => {
-    if (!images.length) return null;
-    if (images.length <= 2) {
-      return (
-        <View style={s.imgGrid}>
-          {images.map((uri, i) => <Image key={i} source={{ uri }} style={[s.imgGridItem, images.length === 1 && s.imgFull]} resizeMode="cover" />)}
-        </View>
-      );
-    }
-    return (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.imgStrip} contentContainerStyle={s.imgStripContent}>
-        {images.map((uri, i) => <Image key={i} source={{ uri }} style={s.imgStripItem} resizeMode="cover" />)}
-      </ScrollView>
-    );
-  };
+// Mobile version - thin vertical line that expands
+const MobileThoughtsPanel: React.FC<TeacherThoughtsCardProps> = (props) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const {
+    posts,
+    postsLoading,
+    userProfileCache,
+    currentUserEmail,
+    getProfileImageSource,
+    initials,
+    resolvePostAuthor,
+    handleCreatePost,
+    handleDeletePost,
+    handleLike,
+    setPosts,
+    onComment,
+    onProfileClick,
+    showTooltip,
+    setShowTooltip,
+  } = props;
 
   return (
-    <View style={[s.card, { width: cardWidth, maxWidth: maxWidth, alignSelf: 'center' }]}>
-      <View style={s.header}>
-        {imgSrc
-          ? <Image source={imgSrc} style={[s.avatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]} />
-          : <View style={[s.avatarFallback, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}><Text style={[s.avatarTxt, { fontSize: avatarSize / 3 }]}>{initials ? initials(name) : defaultInitials(name)}</Text></View>}
-        <View style={s.headerText}>
-          <Text style={[s.authorName, { fontSize: fontSize.medium }]} numberOfLines={1}>{name}<Text style={[s.authorRole, { fontSize: fontSize.small }]}> | {role}</Text></Text>
-          <Text style={[s.timeText, { fontSize: fontSize.small - 1, marginTop: spacing.small / 2 }]}>{createdAt}</Text>
+    <View style={mobileStyles.container}>
+      {/* Thin vertical line when collapsed */}
+      {!isExpanded && (
+        <TouchableOpacity
+          style={mobileStyles.line}
+          onPress={() => setIsExpanded(true)}
+          activeOpacity={0.7}
+        >
+          <View style={mobileStyles.lineInner} />
+          <Ionicons name="chatbubble" size={14} color="#3B5BFE" style={{ marginTop: 8 }} />
+        </TouchableOpacity>
+      )}
+
+      {/* Expanded panel */}
+      {isExpanded && (
+        <View style={mobileStyles.expanded}>
+          <View style={mobileStyles.header}>
+            <View style={mobileStyles.headerLeft}>
+              <Text style={mobileStyles.title} selectable={false}>GrowThoughts</Text>
+            </View>
+
+            {/* Info icon with tooltip */}
+            <View style={panelStyles.headerRightSection}>
+              <TouchableOpacity
+                style={panelStyles.infoIconContainer}
+                onPress={() => {
+                  if (setShowTooltip) {
+                    setShowTooltip(!showTooltip);
+                    if (!showTooltip) {
+                      setTimeout(() => setShowTooltip(false), 4000);
+                    }
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="information-circle-outline" size={20} color="#6B7280" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={mobileStyles.close}
+                onPress={() => setIsExpanded(false)}
+              >
+                <Ionicons name="close" size={20} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={mobileStyles.composer}>
+            <TeacherPostComposer
+              onCreatePost={handleCreatePost}
+              placeholder="Share your thoughts..."
+            />
+          </View>
+
+          <ScrollView style={mobileStyles.scroll} showsVerticalScrollIndicator={false}>
+            {postsLoading && posts.length === 0 && (
+              <View style={panelStyles.loadingContainer}>
+                <ActivityIndicator color={COLORS.primaryBlue} size="large" />
+                <Text style={panelStyles.loadingText} selectable={false}>
+                  Loading thoughts...
+                </Text>
+              </View>
+            )}
+            {!postsLoading && posts.length === 0 && (
+              <View style={panelStyles.emptyState}>
+                <Ionicons name="chatbubble-outline" size={40} color={COLORS.textSecondary} />
+                <Text style={panelStyles.emptyStateTitle} selectable={false}>No thoughts yet</Text>
+                <Text style={panelStyles.emptyStateText} selectable={false}>
+                  Be the first to share your thoughts!
+                </Text>
+              </View>
+            )}
+            {posts.map((post) => (
+              <View key={post.id} style={panelStyles.postWrapper}>
+                <UnifiedThoughtsCard
+                  post={post}
+                  userProfileCache={userProfileCache}
+                  currentUserEmail={currentUserEmail}
+                  getProfileImageSource={getProfileImageSource}
+                  initials={initials}
+                  resolvePostAuthor={resolvePostAuthor}
+                  isTeacherContext={true}
+                  onLike={handleLike || ((id: string) => setPosts((ps: any[]) => ps.map(p =>
+                    p.id === id
+                      ? { ...p, isLiked: !p.isLiked, likes: p.isLiked ? p.likes - 1 : p.likes + 1 }
+                      : p
+                  )))}
+                  onComment={onComment}
+                  onDelete={handleDeletePost}
+                  onReport={() => {}}
+                  onProfileClick={onProfileClick}
+                />
+              </View>
+            ))}
+          </ScrollView>
         </View>
-        <TouchableOpacity 
-          onPress={() => onReport ? onReport(post) : defaultOnReport(post)} 
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          style={Platform.OS === 'web' ? {
-            transform: [{ scale: isHovered ? 1.1 : 1 }],
-          } : {}}
-          {...(Platform.OS === 'web' && {
-            onMouseEnter: () => setIsHovered(true),
-            onMouseLeave: () => setIsHovered(false),
-          })}
-        >
-          <Text style={[s.dots, { fontSize: isMobile ? 16 : 18 }]}>•••</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={[s.body, { fontSize: fontSize.medium, lineHeight: fontSize.medium * 1.5, marginBottom: spacing.medium }]}>{content}</Text>
-      {renderImages()}
-
-      <View style={s.footer}>
-        <TouchableOpacity 
-          style={[s.actionBtn, { paddingVertical: spacing.small, paddingHorizontal: spacing.medium }]} 
-          onPress={() => onLike ? onLike(postId) : defaultOnLike(postId)}
-        >
-          <FontAwesome name={isLiked ? 'thumbs-up' : 'thumbs-o-up'} size={isMobile ? 12 : 14} color="#4A7BF7" />
-          <Text style={[s.actionTxt, isLiked && s.actionTxtActive, { fontSize: fontSize.small, marginLeft: spacing.small / 2 }]}> Like</Text>
-          {likes > 0 && <View style={[s.countPill, { marginLeft: spacing.small }]}><Text style={[s.countTxt, { fontSize: fontSize.small - 1 }]}>{likes}</Text></View>}
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[s.actionBtn, { paddingVertical: spacing.small, paddingHorizontal: spacing.medium }]} 
-          onPress={() => onComment ? onComment(post) : defaultOnComment(post)}
-        >
-          <FontAwesome name="comment-o" size={isMobile ? 12 : 14} color="#4A7BF7" />
-          <Text style={[s.actionTxt, s.thoughtsText, { fontSize: fontSize.small, marginLeft: spacing.small / 2 }]}> Thoughts</Text>
-          {commentCount > 0 && <View style={[s.countPill, { marginLeft: spacing.small }]}><Text style={[s.countTxt, { fontSize: fontSize.small - 1 }]}>{commentCount}</Text></View>}
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[s.actionBtn, { paddingVertical: spacing.small, paddingHorizontal: spacing.medium }]}
-        >
-          <FontAwesome name="share" size={isMobile ? 12 : 14} color="#555" />
-          <Text style={[s.actionTxt, { fontSize: fontSize.small, marginLeft: spacing.small / 2 }]}> Share</Text>
-        </TouchableOpacity>
-      </View>
+      )}
     </View>
   );
 };
 
-const s = StyleSheet.create({
-  card: { 
-    backgroundColor: '#FFFFFF', 
-    borderRadius: 16, 
-    marginHorizontal: 8, 
-    marginVertical: 8, 
-    paddingTop: 20, 
-    paddingHorizontal: 20, 
-    paddingBottom: 0, 
-    shadowColor: Platform.OS === 'ios' ? '#000000' : '#000000',
-    shadowOffset: Platform.OS === 'ios' ? { width: 0, height: 4 } : { width: 0, height: 6 },
-    shadowOpacity: Platform.OS === 'ios' ? 0.08 : 0.12,
-    shadowRadius: Platform.OS === 'ios' ? 12 : 16,
-    elevation: Platform.OS === 'android' ? 12 : 6,
-    // Enhanced border and background
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.04)',
-    // Transform for hover effect
-    transform: [{ scale: 1 }],
-  },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  avatar: { 
-    marginRight: 14,
-    // Enhanced avatar shadow
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    // Responsive avatar will be set dynamically
-  },
-  avatarFallback: { 
-    backgroundColor: '#4A7BF7', 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    marginRight: 14,
-    // Enhanced avatar shadow
-    shadowColor: '#4A7BF7',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
-    // Responsive size will be set dynamically
-  },
-  avatarTxt: { 
-    color: '#fff', 
-    fontWeight: '700', 
-    fontFamily: 'Poppins_700Bold',
-    // Enhanced text shadow for web only
-    ...(Platform.OS === 'web' && { textShadow: '0 1px 2px rgba(0, 0, 0, 0.2)' }),
-    // Responsive font size will be set dynamically
-  },
-  headerText: { flex: 1 },
-  authorName: { 
-    fontWeight: '700', 
-    color: '#1a1a1a', 
-    fontFamily: 'Poppins_600SemiBold',
-    // Enhanced text styling
-    letterSpacing: -0.2,
-    // Responsive font size will be set dynamically
-  },
-  authorRole: { 
-    fontWeight: '500', 
-    color: '#6B7280', 
-    fontFamily: 'Poppins_500Medium',
-    // Enhanced role styling
-    letterSpacing: 0.1,
-    // Responsive font size will be set dynamically
-  },
-  timeText: { 
-    color: '#aaa', 
-    fontFamily: 'RedHatDisplay_400Regular',
-    // Responsive font size will be set dynamically
-  },
-  dots: { 
-    color: '#bbb', 
-    paddingLeft: 8, 
-    letterSpacing: 2,
-    // Responsive font size will be set dynamically
-  },
-  body: { 
-    color: '#222', 
-    fontFamily: 'RedHatDisplay_400Regular',
-    // Responsive font size and line height will be set dynamically
-  },
-  imgGrid: { 
-    flexDirection: 'row', 
-    gap: 6, 
-    marginBottom: 14, 
-    borderRadius: 10, 
-    overflow: 'hidden',
-    // Responsive image grid
-    gap: Platform.OS === 'web' ? 8 : 6,
-  },
-  imgGridItem: { 
-    flex: 1, 
-    borderRadius: 10,
-    // Responsive height
-    height: Platform.OS === 'web' ? 180 : 200,
-  },
-  imgFull: { 
-    // Responsive height
-    height: Platform.OS === 'web' ? 220 : 240,
-  },
-  imgStrip: { marginBottom: 14 },
-  imgStripContent: { gap: 6, paddingRight: 4 },
-  imgStripItem: { 
-    borderRadius: 10,
-    // Responsive size
-    width: Platform.OS === 'web' ? 90 : 100,
-    height: Platform.OS === 'web' ? 110 : 120,
-  },
-  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 10, gap: 4 },
-  tag: { backgroundColor: '#eef2ff', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  tagTxt: { fontSize: 11, color: '#4A7BF7', fontFamily: 'RedHatDisplay_400Regular' },
-  footer: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    borderTopWidth: 1, 
-    borderTopColor: 'rgba(0, 0, 0, 0.06)', 
-    paddingHorizontal: 4,
-    // Enhanced responsive footer
-    paddingVertical: Platform.OS === 'web' ? 18 : 16,
-    gap: Platform.OS === 'web' ? 4 : 2,
-  },
-  actionBtn: { 
-    flex: 1, 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    // Enhanced button styling
-    backgroundColor: 'rgba(74, 123, 247, 0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(74, 123, 247, 0.1)',
-    // Responsive button padding will be set dynamically
-  },
-  actionTxt: { 
-    color: '#4B5563', 
-    fontFamily: 'Poppins_500Medium',
-    // Enhanced text styling
-    letterSpacing: -0.1,
-    // Responsive font size will be set dynamically
-  },
-  actionTxtActive: { 
-    color: '#4A7BF7',
-    fontFamily: 'Poppins_600SemiBold',
-  },
-  thoughtsText: { 
-    color: '#4A7BF7', 
-    fontWeight: '600', 
-    fontFamily: 'Poppins_600SemiBold',
-    // Enhanced thoughts text
-    letterSpacing: -0.1,
-  },
-  countPill: { 
-    backgroundColor: 'rgba(74, 123, 247, 0.1)', 
-    borderRadius: 12, 
-    paddingHorizontal: 8, 
-    paddingVertical: 2, 
-    minWidth: 24, 
-    alignItems: 'center',
-    // Enhanced pill styling
-    borderWidth: 1,
-    borderColor: 'rgba(74, 123, 247, 0.2)',
-    // Responsive pill
-    paddingHorizontal: Platform.OS === 'web' ? 10 : 8,
-    minWidth: Platform.OS === 'web' ? 28 : 24,
-  },
-  countTxt: { 
-    color: '#4A7BF7', 
-    fontWeight: '600', 
-    fontFamily: 'Poppins_600SemiBold',
-    // Enhanced count text
-    letterSpacing: -0.1,
-    // Responsive font size will be set dynamically
-  },
-  // Loading state styles
-  loadingCard: {
-    opacity: 0.6,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  loadingContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  loadingAvatar: {
-    backgroundColor: '#e5e7eb',
-    marginRight: 14,
-  },
-  loadingTextContainer: {
+// Desktop version - full panel with collapse functionality
+const DesktopThoughtsPanel: React.FC<TeacherThoughtsCardProps> = (props) => {
+  const {
+    posts,
+    postsLoading,
+    userProfileCache,
+    currentUserEmail,
+    getProfileImageSource,
+    initials,
+    resolvePostAuthor,
+    handleCreatePost,
+    handleDeletePost,
+    handleLike,
+    setPosts,
+    onComment,
+    onProfileClick,
+    isThoughtsCollapsed = false,
+    setIsThoughtsCollapsed = () => {},
+    showTooltip,
+    setShowTooltip,
+  } = props;
+
+  return (
+    <View style={[
+      desktopStyles.panel,
+      isThoughtsCollapsed && desktopStyles.panelCollapsed,
+    ]}>
+      <View style={desktopStyles.header}>
+        <View style={desktopStyles.titleContainer}>
+          {!isThoughtsCollapsed && (
+            <View style={desktopStyles.titleWithIcon}>
+              <Text style={desktopStyles.title} selectable={false}>GrowThoughts</Text>
+            </View>
+          )}
+        </View>
+        
+        {!isThoughtsCollapsed && (
+          <View style={desktopStyles.headerRight}>
+            {/* Info icon with tooltip */}
+            <TouchableOpacity
+              style={panelStyles.infoIconContainer}
+              onPress={() => {
+                if (setShowTooltip) {
+                  setShowTooltip(!showTooltip);
+                  if (!showTooltip) {
+                    setTimeout(() => setShowTooltip(false), 4000);
+                  }
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="information-circle-outline" size={20} color="#6B7280" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={desktopStyles.collapseBtn}
+              onPress={() => setIsThoughtsCollapsed((p: boolean) => !p)}
+            >
+              <Ionicons
+                name={isThoughtsCollapsed ? 'chevron-forward' : 'chevron-back'}
+                size={16}
+                color={COLORS.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
+        )}
+        
+        {isThoughtsCollapsed && (
+          <TouchableOpacity
+            style={desktopStyles.collapseBtn}
+            onPress={() => setIsThoughtsCollapsed((p: boolean) => !p)}
+          >
+            <Ionicons
+              name={isThoughtsCollapsed ? 'chevron-forward' : 'chevron-back'}
+              size={16}
+              color={COLORS.textSecondary}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {!isThoughtsCollapsed && (
+        <>
+          <View style={desktopStyles.composerWrapper}>
+            <TeacherPostComposer
+              onCreatePost={handleCreatePost}
+              placeholder="Share your thoughts..."
+            />
+          </View>
+
+          <UnifiedThoughtsBackground>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={panelStyles.list}
+              style={panelStyles.scrollView}
+            >
+              {postsLoading && posts.length === 0 && (
+                <View style={panelStyles.loadingContainer}>
+                  <ActivityIndicator color={COLORS.primaryBlue} size="large" />
+                  <Text style={panelStyles.loadingText} selectable={false}>
+                    Loading thoughts...
+                  </Text>
+                </View>
+              )}
+
+              {!postsLoading && posts.length === 0 && (
+                <View style={panelStyles.emptyState}>
+                  <Ionicons name="chatbubble-outline" size={48} color={COLORS.textSecondary} />
+                  <Text style={panelStyles.emptyStateTitle} selectable={false}>No thoughts yet</Text>
+                  <Text style={panelStyles.emptyStateText} selectable={false}>
+                    Be the first to share your thoughts!
+                  </Text>
+                </View>
+              )}
+
+              {posts.map((post) => (
+                <View key={post.id} style={panelStyles.postWrapper}>
+                  <UnifiedThoughtsCard
+                    post={post}
+                    userProfileCache={userProfileCache}
+                    currentUserEmail={currentUserEmail}
+                    getProfileImageSource={getProfileImageSource}
+                    initials={initials}
+                    resolvePostAuthor={resolvePostAuthor}
+                    isTeacherContext={true}
+                    onLike={handleLike || ((id: string) =>
+                      setPosts((ps) =>
+                        ps.map((p) =>
+                          p.id === id
+                            ? { ...p, isLiked: !p.isLiked, likes: p.isLiked ? p.likes - 1 : p.likes + 1 }
+                            : p
+                        )
+                      )
+                    )}
+                    onComment={onComment}
+                    onDelete={handleDeletePost}
+                    onReport={() => {}}
+                    onProfileClick={onProfileClick}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+          </UnifiedThoughtsBackground>
+        </>
+      )}
+    </View>
+  );
+};
+
+// Main component - chooses between mobile and desktop
+const TeacherThoughtsCard: React.FC<TeacherThoughtsCardProps> = (props) => {
+  const { isMobile, showThoughtsPanel } = props;
+
+  // Mobile: show the mobile panel (vertical line that expands) on all platforms
+  if (isMobile) {
+    return <MobileThoughtsPanel {...props} />;
+  }
+
+  // Desktop: show the full panel only if showThoughtsPanel is true
+  if (showThoughtsPanel) {
+    return <DesktopThoughtsPanel {...props} />;
+  }
+
+  return null;
+};
+
+// Shared styles for both mobile and desktop
+const panelStyles = StyleSheet.create({
+  scrollView: {
     flex: 1,
   },
+  list: {
+    paddingBottom: 24,
+    gap: 8,
+  },
+  postWrapper: {
+    marginBottom: 4,
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
   loadingText: {
-    backgroundColor: '#e5e7eb',
-    borderRadius: 4,
-    height: 12,
-    marginBottom: 8,
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textSecondary,
+    marginTop: 10,
+    textAlign: 'center',
   },
-  loadingTitle: {
-    width: '60%',
-    height: 16,
+  emptyState: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 48,
   },
-  loadingSubtitle: {
-    width: '40%',
-    height: 12,
+  emptyStateTitle: {
+    fontSize: 16,
+    fontFamily: 'Poppins_500Medium',
+    color: COLORS.textDark,
+    marginTop: 14,
+    marginBottom: 6,
   },
-  loadingContent: {
-    width: '100%',
-    height: 12,
-    marginBottom: 8,
+  emptyStateText: {
+    fontSize: 13,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: 16,
   },
-  loadingContentShort: {
-    width: '70%',
+  headerRightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    // ✅ FIX: allow tooltip to overflow without being clipped
+    overflow: 'visible',
+    zIndex: 9999,
+  },
+  infoIconContainer: {
+    position: 'relative',
+    padding: 4,
+    // ✅ FIX: lift above cards and allow child tooltip to overflow
+    zIndex: 9999,
+    overflow: 'visible',
+  },
+  tooltip: {
+    position: 'absolute',
+    bottom: 32,
+    right: -50,
+    backgroundColor: '#1F2937',
+    borderRadius: 8,
+    padding: 10,
+    width: 220,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 100,
+    zIndex: 99999,
+  },
+  tooltipPanelLevel: {
+    position: Platform.OS === 'web' ? 'fixed' : 'absolute',
+    top: Platform.OS === 'web' ? 60 : 50,
+    right: Platform.OS === 'web' ? 20 : 16,
+    backgroundColor: '#1F2937',
+    borderRadius: 8,
+    padding: 10,
+    width: 220,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 100,
+    zIndex: 99999,
+  },
+  tooltipDesktop: {
+    position: 'absolute',
+    bottom: 32,
+    right: -50,
+    backgroundColor: '#1F2937',
+    borderRadius: 8,
+    padding: 10,
+    width: 220,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 100,
+    zIndex: 99999,
+  },
+  tooltipText: {
+    fontSize: 12,
+    color: '#fff',
+    fontFamily: 'Poppins_400Regular',
+    lineHeight: 16,
+  },
+  tooltipArrow: {
+    position: 'absolute',
+    bottom: -6,
+    right: 56,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#1F2937',
+  },
+  tooltipArrowDesktop: {
+    position: 'absolute',
+    bottom: -6,
+    right: 56,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#1F2937',
   },
 });
 
+// Mobile-specific styles
+const mobileStyles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 100,
+  },
+  line: {
+    width: 52,
+    height: '100%',
+    backgroundColor: '#FAFBFC',
+    borderLeftWidth: 1,
+    borderLeftColor: COLORS.border,
+    alignItems: 'center',
+    paddingTop: 24,
+  },
+  lineInner: {
+    width: 4,
+    height: 60,
+    backgroundColor: '#3B5BFE',
+    borderRadius: 2,
+  },
+  expanded: {
+    width: 320,
+    height: '100%',
+    backgroundColor: '#FAFBFC',
+    borderLeftWidth: 1,
+    borderLeftColor: COLORS.border,
+    flexDirection: 'column',
+    overflow: 'visible',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    // ✅ FIX: don't clip tooltip that overflows the header bar
+    overflow: 'visible',
+    zIndex: 9999,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 18,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textDark,
+  },
+  close: {
+    padding: 6,
+    borderRadius: 8,
+  },
+  headerRightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  composer: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  scroll: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+});
+
+// Desktop-specific styles - responsive with dynamic width
+const desktopStyles = StyleSheet.create({
+  panel: {
+    flex: 1,
+    minWidth: 280,
+    maxWidth: 400,
+    backgroundColor: '#FAFBFC',
+    borderLeftWidth: 1,
+    borderLeftColor: COLORS.border,
+    paddingHorizontal: 12,
+    paddingTop: 20,
+    flexDirection: 'column',
+  },
+  panelCollapsed: {
+    width: 52,
+    minWidth: 52,
+    paddingHorizontal: 8,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    // ✅ FIX: don't clip tooltip that overflows the header bar
+    overflow: 'visible',
+    zIndex: 9999,
+  },
+  titleContainer: {
+    flex: 1,
+  },
+  titleWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 18,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textDark,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    // ✅ FIX: allow tooltip to overflow this row container
+    overflow: 'visible',
+    zIndex: 9999,
+  },
+  collapseBtn: {
+    padding: 6,
+    borderRadius: 8,
+  },
+  composerWrapper: {
+    marginBottom: 16,
+  },
+});
+
+export { UnifiedThoughtsBackground as TeacherThoughtsBackground };
 export default TeacherThoughtsCard;

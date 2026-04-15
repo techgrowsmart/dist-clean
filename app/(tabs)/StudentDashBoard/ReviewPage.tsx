@@ -4,6 +4,7 @@ import {
   useRouter,
 } from 'expo-router';
 import {
+  Platform,
   ActivityIndicator,
   View,
   Text,
@@ -12,7 +13,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';

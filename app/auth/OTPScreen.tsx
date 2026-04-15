@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ImageBackground, Dimensions, Platform, StatusBar, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { authService } from '../../services/authService';
+import authService from '../../services/authService';
 import { safeBack } from '../../utils/navigation';
 
 const { width, height } = Dimensions.get('window');
@@ -13,6 +13,8 @@ export default function OTPScreen() {
   const isWeb = Platform.OS === 'web';
   
   const email = params.email as string || '';
+  const name = params.name as string || '';
+  const phone = params.phone as string || '';
   const isLogin = params.isLogin === 'true';
   const isSignup = params.isSignup === 'true';
   const role = params.role as string || 'student';
@@ -27,10 +29,12 @@ export default function OTPScreen() {
   const [verifying, setVerifying] = useState(false);
   const [isDevelopmentMode, setIsDevelopmentMode] = useState(false);
 
-  // Check if we're in development mode and show helper text
+  // Check if we're in development mode or static build for test user bypass
   useEffect(() => {
-    // Check if running on localhost:8081 (development)
-    if (typeof window !== 'undefined' && window.location.hostname === 'localhost' && window.location.port === '8081') {
+    // Check if running on localhost (any port) or static build
+    if (typeof window !== 'undefined' && 
+        (window.location.hostname === 'localhost' || 
+         window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
       setIsDevelopmentMode(true);
     }
   }, []);
@@ -112,7 +116,11 @@ export default function OTPScreen() {
         if (isSignup) {
           router.replace({ 
             pathname: '/auth/RoleSelectionScreen' as any,
-            params: { email: email }
+            params: { 
+              email: email,
+              name: signupName,
+              phone: signupPhone
+            }
           });
         } else {
           // For login verification, navigate to appropriate dashboard
@@ -149,7 +157,7 @@ export default function OTPScreen() {
     if (!canResend) return;
 
     try {
-      const response = await authService.sendOTP(email, '', isSignup, signupName);
+      const response = await authService.sendOTP(email, '', isSignup, signupName, signupPhone || '+0000000000');
       
       if (response.success) {
         setTimer(60);

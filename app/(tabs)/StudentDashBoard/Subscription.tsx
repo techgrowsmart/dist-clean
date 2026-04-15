@@ -1,343 +1,335 @@
 import { Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold } from '@expo-google-fonts/montserrat';
-import { Poppins_400Regular, Poppins_600SemiBold } from '@expo-google-fonts/poppins';
+import { Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 import { RedHatDisplay_400Regular } from '@expo-google-fonts/red-hat-display';
-import { Fontisto } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import axios from 'axios';
 import { useFonts } from 'expo-font';
-import React, { useEffect, useState } from 'react';
-import { Alert, Dimensions, Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { ActivityIndicator, Alert, Dimensions, Image, ImageBackground, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import RazorpayCheckout from 'react-native-razorpay';
-import BackButton from '../../../components/BackButton';
-import { BASE_URL, RAZOR_PAY_KEY } from '../../../config';
+import { widthPercentageToDP as wp } from 'react-native-responsive-screen';
+import { BASE_URL, RAZORPAY_KEY } from '../../../config';
 import { getAuthData } from '../../../utils/authStorage';
-import BottomNavigation from '../BottomNavigation';
 import WebNavbar from '../../../components/WebNavbar';
 
 const { width, height } = Dimensions.get('window');
-
 const scale = (size: number) => (width / 375) * size;
 const verticalScale = (size: number) => (height / 812) * size;
 
-interface SubscriptionPlanProps {
-  title: string;
-  price: string;
-  duration: string;
-  features: string[];
-  buttonText: string;
-  priceColor: string;
-  checkColor: string;
-  backgroundColor?: string;
-  bestValueTag?: boolean;
-  isIntroOffer?: boolean;
-  onSubscribe: (plan: any) => void;
-}
+const COLORS = { background: '#F5F7FB', cardBackground: '#FFFFFF', primaryGradientStart: '#4F6EF7', primaryGradientEnd: '#3B5BFE', primaryBlue: '#3B5BFE', accentGreen: '#22C55E', textPrimary: '#111827', textSecondary: '#6B7280', border: '#E5E7EB', white: '#FFFFFF' };
 
-const SubscriptionPlan: React.FC<SubscriptionPlanProps> = ({ 
-  title, 
-  price, 
-  duration, 
-  features, 
-  buttonText, 
-  priceColor, 
-  checkColor,
-  backgroundColor = '#ffffff',
-  bestValueTag = false,
-  isIntroOffer = false,
-  onSubscribe
-}) => {
-  const isPurpleCard = backgroundColor !== '#ffffff';
-  const titleColor = isPurpleCard ? '#ffffff' : '#000000';
-  const dividerColor = isPurpleCard ? 'rgba(255, 255, 255, 0.3)' : '#e0e0e0';
-  const buttonBgColor = '#ffffff';
-  const buttonTextColor = isPurpleCard ? '#6b6bff' : '#5f5fff';
-  const buttonBorderColor = isPurpleCard ? '#ffffff' : '#5f5fff';
+interface SubscriptionPlanProps { title: string; price: string; duration: string; note?: string; features: string[]; buttonText: string; badge?: string; isGradient?: boolean; footerText?: string; onSubscribe: (plan: any) => void; }
 
-  const handlePress = () => {
-    onSubscribe({ title, price, duration, buttonText });
-  };
+const PricingCard: React.FC<SubscriptionPlanProps> = ({ title, price, duration, note, features, badge, isGradient, footerText, onSubscribe }) => {
+  const textColor = isGradient ? COLORS.white : COLORS.textPrimary;
+  const subTextColor = isGradient ? 'rgba(255,255,255,0.8)' : COLORS.primaryBlue;
+  const checkColor = isGradient ? 'rgba(255,255,255,0.6)' : COLORS.primaryBlue;
+  const dividerColor = isGradient ? 'rgba(255, 255, 255, 0.2)' : COLORS.border;
+
+  // Clean price value for API (remove ₹ symbol)
+  const cleanPrice = price.replace('₹', '');
+  // Detect intro offer by note or price being "1"
+  const isIntroOffer = !!note || cleanPrice === "1";
 
   return (
-    <View style={[styles.planCard, { backgroundColor, borderColor: isPurpleCard ? backgroundColor : '#d0d0d0' }]}>
-      {isIntroOffer && (
-        <View style={styles.introOfferTag}>
-          <Text style={styles.introOfferText}>✅ Introductory Offer for Early Users</Text>
-        </View>
-      )}
-      
-      {bestValueTag && !isIntroOffer && (
-        <View style={styles.bestValueTag}>
-          <Text style={styles.bestValueText}>Best Value</Text>
-        </View>
-      )}
-
-      <Text style={[styles.planTitle, { color: titleColor }]}>{title}</Text>
-      
+    <View style={[styles.cardWrapper, isGradient ? styles.cardGradient : styles.cardWhite]}>
+      {badge ? <View style={styles.badgeWrap}><Text style={styles.badgeText}>{badge}</Text></View> : <View style={{ height: 26, marginBottom: 16 }} />}
+      <Text style={[styles.cardTitle, { color: textColor }]}>{title}</Text>
       <View style={styles.priceContainer}>
-        {isIntroOffer ? (
-          <>
-            <Text style={styles.originalPrice}>₹730 /</Text>
-            <Text style={[styles.duration, { color: '#ffffff' }]}>{duration}</Text>
-          </>
-        ) : (
-          <>
-            <Text style={[styles.price, { color: isPurpleCard ? '#ffffff' : priceColor }]}>₹{price}/</Text>
-            <Text style={[styles.duration, { color: isPurpleCard ? '#ffffff' : '#5f5fff' }]}>{duration}</Text>
-          </>
-        )}
+        <Text style={[styles.priceMain, { color: isGradient ? COLORS.white : COLORS.primaryBlue }]}>{price}<Text style={[styles.priceDuration, { color: subTextColor }]}>{duration}</Text></Text>
+        {note ? <Text style={styles.priceNote}>{note}</Text> : null}
       </View>
-
-      {isIntroOffer && (
-        <Text style={styles.earlyUserText}>₹0 for early users</Text>
-      )}
-
-      <View style={[styles.divider, { backgroundColor: dividerColor }]} />
-
-      <View style={styles.featuresContainer}>
-        {features.map((feature, index) => (
-          <View key={index} style={styles.featureRow}>
-            <Fontisto name="check" size={scale(14)} color={checkColor} style={styles.checkIcon}/>
-            <Text style={[styles.featureText, { color: titleColor }]}>{feature}</Text>
+      <View style={[styles.divider, { backgroundColor: dividerColor, marginTop: note ? 12 : 24 }]} />
+      <View style={styles.featuresList}>
+        {features.map((item, idx) => (
+          <View key={idx} style={styles.featureRow}>
+            <Ionicons name="checkmark" size={16} color={isGradient ? COLORS.white : COLORS.primaryBlue} style={{ marginRight: 8, marginTop: 2 }} />
+            <Text style={[styles.featureText, { color: textColor }]}>{item}</Text>
           </View>
         ))}
       </View>
-
-      <TouchableOpacity style={[styles.button, { borderWidth: isPurpleCard ? 0 : 1.5, borderColor: buttonBorderColor, backgroundColor: buttonBgColor, paddingVertical: scale(14) }]} activeOpacity={0.7} onPress={handlePress}>
-        <Text style={[styles.buttonText, { color: buttonTextColor }]}>{buttonText}</Text>
-      </TouchableOpacity>
-      
-      {isIntroOffer && (
-        <View style={styles.limitedTimeContainer}>
-          <Text style={styles.limitedTimeText}>🎉 Limited-Time Introductory Offer 🎉</Text>
-          <Text style={styles.validityText}>Valid till 6th June 2026</Text>
-        </View>
-      )}
+      <View style={styles.btnWrap}>
+        <TouchableOpacity style={[styles.actionBtn, isGradient ? styles.actionBtnWhite : styles.actionBtnOutline]} onPress={() => onSubscribe({ title, price: cleanPrice, duration, isIntroOffer })}>
+          <Text style={[styles.actionBtnText, isGradient ? { color: COLORS.textPrimary } : { color: COLORS.primaryBlue }]}>Get started with {title}</Text>
+        </TouchableOpacity>
+        {footerText ? <Text style={styles.footerText}>{footerText}</Text> : <View style={{ height: 30 }} />}
+      </View>
     </View>
   );
 };
 
-// Web Subscription Plan Component (Uizard Design)
-const WebSubscriptionPlan: React.FC<SubscriptionPlanProps> = ({ 
-  title, 
-  price, 
-  duration, 
-  features, 
-  buttonText, 
-  priceColor, 
-  checkColor,
-  backgroundColor = '#ffffff',
-  bestValueTag = false,
-  isIntroOffer = false,
-  onSubscribe
-}) => {
-  const isPurpleCard = backgroundColor !== '#ffffff';
-  const titleColor = isPurpleCard ? '#ffffff' : '#000000';
-  const dividerColor = isPurpleCard ? 'rgba(255, 255, 255, 0.3)' : '#e0e0e0';
-  const buttonBgColor = '#ffffff';
-  const buttonTextColor = isPurpleCard ? '#6b6bff' : '#5f5fff';
-  const buttonBorderColor = isPurpleCard ? '#ffffff' : '#5f5fff';
+const WebPricingCard: React.FC<SubscriptionPlanProps> = ({ title, price, duration, note, features, badge, isGradient, footerText, onSubscribe }) => {
+  const textColor = isGradient ? COLORS.white : COLORS.textPrimary;
+  const subTextColor = isGradient ? 'rgba(255,255,255,0.8)' : COLORS.primaryBlue;
+  const dividerColor = isGradient ? 'rgba(255, 255, 255, 0.2)' : COLORS.border;
 
-  const handlePress = () => {
-    onSubscribe({ title, price, duration, buttonText });
-  };
+  // Clean price value for API (remove ₹ symbol)
+  const cleanPrice = price.replace('₹', '');
+  // Detect intro offer by note or price being "1"
+  const isIntroOffer = !!note || cleanPrice === "1";
 
   return (
-    <View style={[webStyles.planCard, { backgroundColor, borderColor: isPurpleCard ? backgroundColor : '#d0d0d0' }]}>
-      {isIntroOffer && (
-        <View style={webStyles.introOfferTag}>
-          <Text style={webStyles.introOfferText}>🚀 Introductory Offer for Early Users</Text>
-        </View>
-      )}
-      
-      {bestValueTag && !isIntroOffer && (
-        <View style={webStyles.bestValueTag}>
-          <Text style={webStyles.bestValueText}>Best Value</Text>
-        </View>
-      )}
-
-      <Text style={[webStyles.planTitle, { color: titleColor }]}>{title}</Text>
-      
+    <View style={[webStyles.cardWrapper, isGradient ? webStyles.cardGradient : webStyles.cardWhite]}>
+      {badge ? <View style={webStyles.badgeWrap}><Text style={webStyles.badgeText}>{badge}</Text></View> : <View style={{ height: 26, marginBottom: 16 }} />}
+      <Text style={[webStyles.cardTitle, { color: textColor }]}>{title}</Text>
       <View style={webStyles.priceContainer}>
-        {isIntroOffer ? (
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', flexWrap: 'nowrap' }}>
-            <Text style={[webStyles.originalPrice, { textDecorationLine: "line-through", fontSize: 20 }]}>₹730 / </Text>
-            <Text style={[webStyles.originalPrice, { textDecorationLine: "line-through", fontSize: 14, color: '#ffffff' }]}>365 days</Text>
-          </View>
-        ) : (
-          <>
-            <Text style={[webStyles.price, { color: isPurpleCard ? '#ffffff' : priceColor }]}>₹{price} /</Text>
-            <Text style={[webStyles.duration, { color: isPurpleCard ? '#ffffff' : '#666666' }]}>{duration}</Text>
-          </>
-        )}
+        <Text style={[webStyles.priceMain, { color: isGradient ? COLORS.white : COLORS.primaryBlue }]}>{price}<Text style={[webStyles.priceDuration, { color: subTextColor }]}>{duration}</Text></Text>
+        {note ? <Text style={webStyles.priceNote}>{note}</Text> : null}
       </View>
-
-      {isIntroOffer && (
-        <Text style={webStyles.earlyUserText}>₹0 for early users</Text>
-      )}
-
-      <View style={[webStyles.planDivider, { backgroundColor: dividerColor }]} />
-
-      <View style={webStyles.planFeaturesContainer}>
-        {features.map((feature, index) => (
-          <View key={index} style={webStyles.planFeatureRow}>
-            <Text style={[webStyles.planCheckIcon, { color: checkColor }]}>✔</Text>
-            <Text style={[webStyles.planFeatureText, { color: isPurpleCard ? '#ffffff' : '#333333' }]}>{feature}</Text>
+      <View style={[webStyles.divider, { backgroundColor: dividerColor, marginTop: note ? 12 : 24 }]} />
+      <View style={webStyles.featuresList}>
+        {features.map((item, idx) => (
+          <View key={idx} style={webStyles.featureRow}>
+            <Ionicons name="checkmark" size={14} color={isGradient ? COLORS.white : COLORS.primaryBlue} style={{ marginRight: 8, marginTop: 2 }} />
+            <Text style={[webStyles.featureText, { color: textColor }]}>{item}</Text>
           </View>
         ))}
       </View>
-
-      <TouchableOpacity 
-        style={[webStyles.planButton, { backgroundColor: buttonBgColor, borderColor: buttonBorderColor }]}
-        onPress={handlePress}
-      >
-        <Text style={[webStyles.planButtonText, { color: buttonTextColor }]}>{buttonText}</Text>
-      </TouchableOpacity>
-
-      {isIntroOffer && (
-        <View style={webStyles.planLimitedTimeContainer}>
-          <Text style={webStyles.planLimitedTimeText}>🎉 Limited-Time Introductory Offer</Text>
-          <Text style={webStyles.planValidityText}>Valid till 6th June 2026</Text>
-        </View>
-      )}
+      <View style={webStyles.btnWrap}>
+        <TouchableOpacity style={[webStyles.actionBtn, isGradient ? webStyles.actionBtnWhite : webStyles.actionBtnOutline]} onPress={() => onSubscribe({ title, price: cleanPrice, duration, isIntroOffer })}>
+          <Text style={[webStyles.actionBtnText, isGradient ? { color: COLORS.textPrimary } : { color: COLORS.primaryBlue }]}>Get started with {title}</Text>
+        </TouchableOpacity>
+        {footerText ? <Text style={webStyles.footerText}>{footerText}</Text> : <View style={{ height: 30 }} />}
+      </View>
     </View>
   );
 };
 
-// Android Layout Component (Original)
-const AndroidLayout = ({ navigation, plans, handleSubscribe, fontsLoaded }) => {
-  return (
-    <View style={androidStyles.container}>
-      <View style={androidStyles.header}>
-        <BackButton size={scale(28)} color="#0d368c" onPress={() => navigation.goBack()} style={androidStyles.closeButton} />
-        <Text style={androidStyles.headerTitle}>Get Subscribed</Text>
-        <View style={androidStyles.placeholderView} />
+const GlobalHeader = () => (
+  <View style={styles.globalHeader}>
+    <View style={styles.logoWrapper}><Text style={styles.logoText}>Growsmart</Text></View>
+    <View style={styles.headerSearchWrapper}>
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={20} color={COLORS.textSecondary} style={{ marginRight: 10 }} />
+        <TextInput placeholder="Type in search" placeholderTextColor={COLORS.textSecondary} style={styles.searchInput as any} />
       </View>
-
-      <ScrollView style={androidStyles.scrollView} contentContainerStyle={androidStyles.scrollContent} showsVerticalScrollIndicator={false}>
-        {plans.map((plan, index) => (
-          <SubscriptionPlan key={index} {...plan} onSubscribe={handleSubscribe} />
-        ))}
-      </ScrollView>
-      
-      <BottomNavigation userType={'student'}/>
     </View>
-  );
-};
+    <View style={styles.profileHeaderSection}>
+      <TouchableOpacity style={styles.bellIcon}><Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} /></TouchableOpacity>
+      <Text style={styles.headerUserName}>Ben Goro</Text>
+      <Image source={{ uri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&fit=crop' }} style={styles.headerAvatar} />
+    </View>
+  </View>
+);
 
-// Web Layout Component (New Uizard Design)
-const WebLayout = ({ navigation, plans, handleSubscribe, fontsLoaded }) => {
-  const [screenWidth, setScreenWidth] = useState(Dimensions.get("window").width);
-  const [studentName, setStudentName] = useState("Student");
-  const [profileImage, setProfileImage] = useState(null);
-  const [unreadCount, setUnreadCount] = useState(0);
+const AndroidLayout = ({ router, plans, handleSubscribe, fontsLoaded, handleBackPress }) => (
+  <SafeAreaView style={styles.safeArea}>
+    <View style={styles.rootLayout}>
+      <GlobalHeader />
+      <ImageBackground source={{ uri: 'https://www.transparenttextures.com/patterns/clean-texturing.png' }} style={styles.bgMainContent} imageStyle={{ opacity: 0.15 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.mainScroll}>
+          <View style={styles.backButtonWrap}>
+            <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
+              <Ionicons name="arrow-back" size={20} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.contentConstraints}>
+            <View style={styles.headerCard}>
+              <Text style={styles.headerTitle}>Choose Your Learning Path</Text>
+              <Text style={styles.headerSubtitle}>Unlock premium features and expert-led courses designed to accelerate your career growth.</Text>
+            </View>
+            <View style={styles.pricingGrid}>
+              {plans.map((plan, index) => <PricingCard key={index} {...plan} onSubscribe={handleSubscribe} />)}
+            </View>
+            <View style={styles.brandSectionCard}>
+              <View style={styles.brandLeft}>
+                <View style={styles.shapesRow}>
+                  <View style={styles.shapeCircleOrange} /><View style={styles.shapeTriangleRight} /><View style={styles.shapeSquareGreen} /><View style={styles.shapeCircleGray} />
+                </View>
+                <Text style={styles.brandGiantLogo}>GrowSmart</Text>
+                <Text style={styles.brandTagline}>Empowering Students. Connecting Futures</Text>
+              </View>
+              <View style={styles.brandCenterAvatar}>
+                <Image source={{ uri: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=400&q=80' }} style={styles.avatarImage} resizeMode="cover" />
+              </View>
+              <View style={styles.brandRight}>
+                <View style={styles.carouselIndicators}><View style={styles.carouselActive} /><View style={styles.carouselInactive} /></View>
+                <Text style={styles.brandRightText}>Unlock Quality Learning From India's Best Teachers. Anytime. Anywhere.</Text>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+      </ImageBackground>
+    </View>
+  </SafeAreaView>
+);
+
+const WebLayout = ({ router, plans, handleSubscribe, fontsLoaded, handleBackPress }) => {
+  const params = useLocalSearchParams();
+  const paramStudentName = typeof params.studentName === 'string' ? params.studentName : null;
+  const paramProfileImage = typeof params.profileImage === 'string' ? params.profileImage : null;
+  const [studentName, setStudentName] = useState(paramStudentName || "Student");
+  const [profileImage, setProfileImage] = useState<string | null>(paramProfileImage || null);
+  const [unreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
-  
-  useEffect(() => {
-    const onChange = (result: any) => {
-      setScreenWidth(result.window.width);
-    };
-    
-    const subscription = Dimensions.addEventListener('change', onChange);
-    return () => subscription?.remove();
-  }, []);
 
-  // Load user data for navbar
   useEffect(() => {
     const loadUserData = async () => {
       try {
         const auth = await getAuthData();
-        if (auth?.name) setStudentName(auth.name);
-        if (auth?.profileImage) setProfileImage(auth.profileImage);
+        if (auth?.name && !paramStudentName) setStudentName(auth.name);
+        if (auth?.profileImage && !paramProfileImage) setProfileImage(auth.profileImage);
       } catch {}
     };
     loadUserData();
-  }, []);
+  }, [paramStudentName, paramProfileImage]);
 
   return (
     <View style={webStyles.page}>
-      {/* REUSABLE WEB NAVBAR */}
-      <WebNavbar
-        studentName={studentName}
-        profileImage={profileImage}
-        unreadCount={unreadCount}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-      />
-
-      {/* CENTER CONTENT ONLY - No Sidebars */}
-      <ScrollView
-        style={webStyles.centerOnlyContent}
-        contentContainerStyle={{ paddingBottom: 80 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* TOP ROW - Back Arrow and Header Card */}
-        <View style={webStyles.topRow}>
-          {/* BACK ARROW */}
-          <TouchableOpacity style={webStyles.backArrowCircle} onPress={() => navigation.goBack()}>
-            <Text style={webStyles.backArrow}>←</Text>
-          </TouchableOpacity>
-          
-          {/* HEADER CARD */}
-          <View style={webStyles.headerCardTop}>
-            <Text style={webStyles.headerCardTitle}>Choose Your Learning Path</Text>
-            <Text style={webStyles.headerCardSubtitle}>
-              Unlock premium features and expert-led courses designed to accelerate your career growth.
-            </Text>
+      <WebNavbar studentName={studentName} profileImage={profileImage} unreadCount={unreadCount} searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
+      <ImageBackground source={{ uri: 'https://www.transparenttextures.com/patterns/clean-texturing.png' }} style={webStyles.bgMainContent} imageStyle={{ opacity: 0.15 }}>
+        <ScrollView style={webStyles.centerOnlyContent} contentContainerStyle={{ paddingBottom: 80 }} showsVerticalScrollIndicator={false}>
+          <View style={webStyles.backButtonWrap}>
+            <TouchableOpacity style={webStyles.backButton} onPress={handleBackPress}>
+              <Ionicons name="arrow-back" size={20} color={COLORS.textPrimary} />
+            </TouchableOpacity>
           </View>
-        </View>
-
-        {/* SECTION 2 — SUBSCRIPTION PLANS GRID */}
-        <View style={webStyles.plansGrid}>
-          {plans.map((plan, index) => (
-            <WebSubscriptionPlan key={index} {...plan} onSubscribe={handleSubscribe} />
-          ))}
-        </View>
-
-        {/* SECTION 3 — SUBSCRIPTION BOTTOM IMAGE */}
-        <View style={webStyles.subscriptionBottomContainer}>
-          <Image 
-            source={require('../../../assets/image/SubscriptionBottom.png')} 
-            style={webStyles.subscriptionBottomImage}
-            resizeMode="contain"
-          />
-        </View>
-      </ScrollView>
+          <View style={webStyles.contentConstraints}>
+            <View style={webStyles.headerCard}>
+              <Text style={webStyles.headerTitle}>Choose Your Learning Path</Text>
+              <Text style={webStyles.headerSubtitle}>Unlock premium features and expert-led courses designed to accelerate your career growth.</Text>
+            </View>
+            <View style={webStyles.pricingGrid}>
+              {plans.map((plan, index) => <WebPricingCard key={index} {...plan} onSubscribe={handleSubscribe} />)}
+            </View>
+            <View style={webStyles.brandSectionCard}>
+              <View style={webStyles.brandLeft}>
+                <View style={webStyles.shapesRow}>
+                  <View style={webStyles.shapeCircleOrange} /><View style={webStyles.shapeTriangleRight} /><View style={webStyles.shapeSquareGreen} /><View style={webStyles.shapeCircleGray} />
+                </View>
+                <Text style={webStyles.brandGiantLogo}>GrowSmart</Text>
+                <Text style={webStyles.brandTagline}>Empowering Students. Connecting Futures</Text>
+              </View>
+              <View style={webStyles.brandCenterAvatar}>
+                <Image source={{ uri: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=400&q=80' }} style={webStyles.avatarImage} resizeMode="cover" />
+              </View>
+              <View style={webStyles.brandRight}>
+                <View style={webStyles.carouselIndicators}><View style={webStyles.carouselActive} /><View style={webStyles.carouselInactive} /></View>
+                <Text style={webStyles.brandRightText}>Unlock Quality Learning From India's Best Teachers. Anytime. Anywhere.</Text>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+      </ImageBackground>
     </View>
   );
 };
 
 export default function Subscription() {
-  const navigation = useNavigation();
-  const [fontsLoaded] = useFonts({
-    'RedHatDisplay': RedHatDisplay_400Regular,
-    'Poppins': Poppins_400Regular,
-    'PoppinsSemiBold': Poppins_600SemiBold,
-    'Inter': Inter_600SemiBold,
-    'Montserrat': Montserrat_400Regular,
-    'MontserratSemiBold': Montserrat_600SemiBold,
-    'MontserratBold': Montserrat_700Bold,
-  });
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const [fontsLoaded] = useFonts({ Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, RedHatDisplay_400Regular, Inter_600SemiBold, Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold });
+
+  // Extract spotlight payment parameters
+  const isSpotlightPayment = params.isSpotlightPayment === 'true';
+  const teacherEmail = typeof params.teacherEmail === 'string' ? params.teacherEmail : null;
+  const teacherName = typeof params.teacherName === 'string' ? params.teacherName : null;
+  const redirectTo = typeof params.redirectTo === 'string' ? params.redirectTo : null;
+
+  const handleBackPress = useCallback(() => { 
+    if (redirectTo === 'TeacherDetails' && teacherEmail) {
+      router.push({ pathname: '/(tabs)/StudentDashBoard/TeacherDetails', params: { email: teacherEmail } });
+    } else {
+      router.push('/(tabs)/StudentDashBoard/Student');
+    }
+  }, [router, redirectTo, teacherEmail]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') handleBackPress(); };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [handleBackPress]);
 
   const handleSubscribe = async (plan: any) => {
     try {
       const auth = await getAuthData();
       if (!auth?.token || !auth?.email) {
-        Alert.alert("Session Expired", "Please log in again.");
-        return;
+        return Alert.alert("Session Expired", "Please log in again.");
       }
 
       const headers = { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" };
-      const orderResponse = await axios.post(`${BASE_URL}/api/subscriptions/create-order`, { amount: plan.price }, { headers });
 
-      if (!orderResponse.data.success) throw new Error('Failed to create order');
+      // Ensure price is a clean numeric string
+      const planPrice = String(plan.price || "0").replace(/[^0-9.]/g, '');
+      const isIntroOffer = plan.isIntroOffer || planPrice === "0" || planPrice === "1";
 
+      // Create order (backend handles free orders internally)
+      const orderResponse = await axios.post(
+        `${BASE_URL}/api/subscriptions/create-order`,
+        { amount: isIntroOffer ? "0" : planPrice, plan_title: plan.title, duration: plan.duration },
+        { headers }
+      );
+
+      if (!orderResponse.data.success) {
+        throw new Error(orderResponse.data.message || 'Failed to create order');
+      }
+
+      // For web platform, only allow intro offers (paid subscriptions require mobile app)
+      if (Platform.OS === 'web' && !isIntroOffer) {
+        return Alert.alert(
+          "Mobile App Required",
+          "Paid subscriptions require the Grow Smart mobile app. The Intro Offer (₹1) is available on web."
+        );
+      }
+
+      // Handle intro offer (free/₹1 subscription) - skip Razorpay
+      if (isIntroOffer) {
+        const subscriptionRes = await axios.post(
+          `${BASE_URL}/api/subscriptions/create-subscription`,
+          { plan_title: plan.title, amount: "0", is_intro_offer: true, duration: plan.duration },
+          { headers }
+        );
+
+        if (subscriptionRes.data.success) {
+          // If this is a spotlight payment, update teacher's isSpotlight to true
+          if (isSpotlightPayment && teacherEmail && teacherName) {
+            try {
+              await axios.post(
+                `${BASE_URL}/api/payments/verify-payment-spotlight`,
+                {
+                  orderId: orderResponse.data.order.id,
+                  paymentId: orderResponse.data.order.id,
+                  signature: 'intro_offer_signature',
+                  email: teacherEmail,
+                  name: teacherName,
+                  amount: "0"
+                },
+                { headers }
+              );
+              console.log('✅ Teacher spotlight activated successfully');
+            } catch (spotlightError) {
+              console.error('Error activating spotlight:', spotlightError);
+              // Continue even if spotlight activation fails
+            }
+
+            // Redirect back to TeacherDetails after spotlight activation
+            router.push({
+              pathname: '/(tabs)/StudentDashBoard/TeacherDetails',
+              params: { email: teacherEmail }
+            });
+          } else {
+            router.push({
+              pathname: '/(tabs)/StudentDashBoard/CongratsStudent',
+              params: { planTitle: plan.title, validityDate: subscriptionRes.data.validity_date }
+            });
+          }
+        } else {
+          throw new Error(subscriptionRes.data.message || 'Failed to activate subscription');
+        }
+        return;
+      }
+
+      // Handle paid subscription with Razorpay
       const options = {
         description: `${plan.title} Subscription`,
         image: "https://your-logo-url.png",
         currency: "INR",
-        key: RAZOR_PAY_KEY,
-        amount: orderResponse.data.order.amount,
+        key: RAZORPAY_KEY,
+        amount: orderResponse.data.order.amount, // Amount in paise from backend
         order_id: orderResponse.data.order.id,
         name: "Grow Smart Subscription",
         prefill: { email: auth.email, name: auth.name || "Student" },
@@ -346,641 +338,240 @@ export default function Subscription() {
       };
 
       const paymentData = await RazorpayCheckout.open(options);
-      const subscriptionRes = await axios.post(`${BASE_URL}/api/subscriptions/create-subscription`, { plan_title: plan.title, amount: plan.price, payment_id: paymentData.razorpay_payment_id, order_id: paymentData.razorpay_order_id, signature: paymentData.razorpay_signature }, { headers });
+
+      const subscriptionRes = await axios.post(
+        `${BASE_URL}/api/subscriptions/create-subscription`,
+        {
+          plan_title: plan.title,
+          amount: planPrice,
+          payment_id: paymentData.razorpay_payment_id,
+          order_id: paymentData.razorpay_order_id,
+          signature: paymentData.razorpay_signature,
+          duration: plan.duration
+        },
+        { headers }
+      );
 
       if (subscriptionRes.data.success) {
-        Alert.alert('Success!', `Your ${plan.title} subscription has been activated successfully!`, [{ text: 'OK', onPress: () => navigation.goBack() }]);
+        // If this is a spotlight payment, update teacher's isSpotlight to true
+        if (isSpotlightPayment && teacherEmail && teacherName) {
+          try {
+            await axios.post(
+              `${BASE_URL}/api/payments/verify-payment-spotlight`,
+              {
+                orderId: paymentData.razorpay_order_id,
+                paymentId: paymentData.razorpay_payment_id,
+                signature: paymentData.razorpay_signature,
+                email: teacherEmail,
+                name: teacherName,
+                amount: planPrice
+              },
+              { headers }
+            );
+            console.log('✅ Teacher spotlight activated successfully');
+          } catch (spotlightError) {
+            console.error('Error activating spotlight:', spotlightError);
+            // Continue even if spotlight activation fails
+          }
+
+          // Redirect back to TeacherDetails after spotlight activation
+          router.push({
+            pathname: '/(tabs)/StudentDashBoard/TeacherDetails',
+            params: { email: teacherEmail }
+          });
+        } else {
+          router.push({
+            pathname: '/(tabs)/StudentDashBoard/CongratsStudent',
+            params: { planTitle: plan.title, validityDate: subscriptionRes.data.validity_date }
+          });
+        }
       } else {
         throw new Error(subscriptionRes.data.message || 'Failed to activate subscription');
       }
     } catch (error: any) {
       console.error('Payment error:', error);
-      if (error?.description) Alert.alert("Payment Cancelled", error.description);
-      else if (error.message) Alert.alert("Error", error.message);
-      else Alert.alert("Error", "Something went wrong. Please try again.");
+
+      if (error?.description) {
+        Alert.alert("Payment Cancelled", error.description);
+      } else if (error?.response?.data?.message) {
+        Alert.alert("Error", error.response.data.message);
+      } else if (error.message) {
+        Alert.alert("Error", error.message);
+      } else {
+        Alert.alert("Error", "Something went wrong. Please try again.");
+      }
     }
   };
 
-  if (!fontsLoaded) return <View style={styles.container}><Text>Loading Fonts...</Text></View>;
+  if (!fontsLoaded) return <View style={styles.loaderContainer}><ActivityIndicator size="large" color={COLORS.primaryBlue} /></View>;
 
   const plans = [
     {
       title: "Intro Offer",
-      price: "0",
-      duration: "365 days",
+      price: "₹1",
+      duration: "/ 365 days",
+      note: "₹1 for early users",
       features: [
-        'Unlimited Access to all Gurus',
-        'All Premium Tools',
-        'Early Feature Access',
-        'Advanced tools & analytics',
-        'Faster performance',
-        'Early access to new updates'
+        "Unlimited Access to all Gurus",
+        "All Premium Tools",
+        "Early Feature Access",
+        "Advanced tools & analytics",
+        "Faster performance",
+        "Early access to new updates"
       ],
       buttonText: "Get started with Intro Offer",
-      priceColor: "#ffffff",
-      checkColor: "#7dd3fc",
-      backgroundColor: "#6b6bff",
-      bestValueTag: false,
-      isIntroOffer: true
+      badge: "🚀 Introductory Offer for Early Users",
+      isGradient: true,
+      footerText: "🚀 Limited-Time Introductory Offer 🚀\nValid till 6th June 2026"
     },
     {
       title: "TeachLite",
-      price: "300",
-      duration: "90 days",
+      price: "₹300",
+      duration: "/ 90 days",
       features: [
-        'Learn at your pace',
-        'Never miss a class update',
-        'Begin your skill-building journey'
+        "Learn at your pace",
+        "Never miss a class update",
+        "Begin your skill-building journey"
       ],
       buttonText: "Get started with TeachLite",
-      priceColor: "#4255ff",
-      checkColor: "#3164f4"
+      isGradient: false
     },
     {
       title: "TeachStart",
-      price: "415", 
-      duration: "180 days",
+      price: "₹415",
+      duration: "/ 180 days",
       features: [
-        'Expand your learning',
-        'Stay updated instantly',
-        'Boost your learning with more classes'
+        "Expand your learning",
+        "Stay updated instantly",
+        "Boost your learning with more classes"
       ],
       buttonText: "Get started with TeachStart",
-      priceColor: "#ffffff",
-      checkColor: "#ffffff",
-      backgroundColor: "#6b6bff",
-      bestValueTag: true
+      badge: "Best Value",
+      isGradient: true
     },
     {
       title: "GuruGrade",
-      price: "730",
-      duration: "365 days", 
+      price: "₹730",
+      duration: "/ 365 days",
       features: [
-        'Go all-in on learning',
-        'Premium alerts & early access',
-        'Unlock full learning access'
+        "Go all-in on learning",
+        "Premium alerts & early access",
+        "Unlock full learning access"
       ],
-      buttonText: "Get started with GuruGrade", 
-      priceColor: "#4255ff",
-      checkColor: "#3164f4"
+      buttonText: "Get started with GuruGrade",
+      isGradient: false
     }
   ];
 
-  if (!fontsLoaded) return <View style={styles.container}><Text>Loading Fonts...</Text></View>;
-
-  // Conditional rendering based on platform
-  if (Platform.OS === "web") {
-    return (
-      <WebLayout 
-        navigation={navigation}
-        plans={plans}
-        handleSubscribe={handleSubscribe}
-        fontsLoaded={fontsLoaded}
-      />
-    );
-  }
-
-  return (
-    <AndroidLayout 
-      navigation={navigation}
-      plans={plans}
-      handleSubscribe={handleSubscribe}
-      fontsLoaded={fontsLoaded}
-    />
-  );
+  return Platform.OS === "web" ? <WebLayout router={router} plans={plans} handleSubscribe={handleSubscribe} fontsLoaded={fontsLoaded} handleBackPress={handleBackPress} /> : <AndroidLayout router={router} plans={plans} handleSubscribe={handleSubscribe} fontsLoaded={fontsLoaded} handleBackPress={handleBackPress} />;
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: scale(20), paddingTop: verticalScale(60), paddingBottom: verticalScale(20), backgroundColor: '#ffffff' },
-  closeButton: {},
-  headerTitle: { fontSize: scale(30), fontWeight: '700', color: '#0d368c', fontFamily: 'Inter', textAlign: 'center', flex: 1 },
-  placeholderView: { width: scale(28) },
-  scrollView: { flex: 1 },
-  scrollContent: { paddingHorizontal: scale(20), paddingBottom: verticalScale(100), paddingTop: verticalScale(10) },
-  planCard: { backgroundColor: '#ffffff', borderRadius: scale(24), borderWidth: 1, paddingHorizontal: scale(20), paddingVertical: scale(24), marginBottom: scale(16), alignItems: 'center', position: 'relative', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  planTitle: { fontSize: scale(26), fontWeight: '700', textAlign: 'center', marginBottom: scale(8), fontFamily: 'RedHatDisplay' },
-  priceContainer: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', marginBottom: scale(6) },
-  price: { fontSize: scale(40), fontWeight: '600', fontFamily: 'RedHatDisplay' },
-  duration: { fontSize: scale(18), fontWeight: '400', marginLeft: scale(2), fontFamily: 'RedHatDisplay' },
-  originalPrice: { fontSize: scale(32), fontWeight: '400', fontFamily: 'RedHatDisplay', color: '#ffffff', textDecorationLine: 'line-through', marginRight: scale(4), opacity: 0.85 },
-  earlyUserText: { fontSize: scale(16), color: '#ffffff', fontFamily: 'RedHatDisplay', marginBottom: scale(8) },
-  divider: { width: '100%', height: 1, marginVertical: scale(16) },
-  featuresContainer: { marginBottom: scale(20), width: '100%' },
-  featureRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: scale(10) },
-  checkIcon: { marginRight: scale(10), marginTop: scale(3) },
-  featureText: { flex: 1, fontSize: scale(15), fontWeight: '400', lineHeight: scale(21), fontFamily: 'RedHatDisplay' },
-  button: { backgroundColor: '#ffffff', paddingHorizontal: scale(20), alignItems: 'center', width: '100%', borderRadius: scale(10) },
-  buttonText: { fontSize: scale(15), fontWeight: '600', fontFamily: 'RedHatDisplay' },
-  bestValueTag: { backgroundColor: '#26cb63', paddingVertical: scale(6), paddingHorizontal: scale(14), borderRadius: scale(12), position: 'absolute', top: scale(-14), zIndex: 10 },
-  bestValueText: { color: '#ffffff', fontSize: scale(13), fontWeight: '700', fontFamily: 'Inter' },
-  introOfferTag: { backgroundColor: '#4caf50', paddingVertical: scale(6), paddingHorizontal: scale(14), borderRadius: scale(14), position: 'absolute', top: scale(-14), zIndex: 10 },
-  introOfferText: { color: '#ffffff', fontSize: scale(12), fontWeight: '600', fontFamily: 'Inter' },
-  limitedTimeContainer: { marginTop: scale(12), alignItems: 'center' },
-  limitedTimeText: { fontSize: scale(13), color: '#ffd54f', fontWeight: '600', fontFamily: 'Inter', marginBottom: scale(2) },
-  validityText: { fontSize: scale(11), color: 'rgba(255, 255, 255, 0.8)', fontFamily: 'Inter' }
+  safeArea: { flex: 1, backgroundColor: COLORS.cardBackground },
+  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  rootLayout: { flex: 1, flexDirection: 'column' },
+  globalHeader: { flexDirection: 'row', alignItems: 'center', height: '8%', minHeight: 70, backgroundColor: COLORS.cardBackground, borderBottomWidth: 1, borderBottomColor: COLORS.border, paddingHorizontal: 24, zIndex: 10 },
+  logoWrapper: { width: Platform.OS === 'web' ? '18%' : wp(18), minWidth: 200 },
+  logoText: { fontFamily: 'Poppins_700Bold', fontSize: 24, color: COLORS.primaryBlue },
+  headerSearchWrapper: { flex: 1, alignItems: 'center' },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background, borderRadius: 30, paddingHorizontal: 16, height: 44, width: '100%', maxWidth: 500 },
+  searchInput: { flex: 1, fontFamily: 'Poppins_400Regular', fontSize: 14, color: COLORS.textPrimary, outlineStyle: 'none' } as any,
+  profileHeaderSection: { flexDirection: 'row', alignItems: 'center', width: Platform.OS === 'web' ? '25%' : wp(25), minWidth: 200, justifyContent: 'flex-end' },
+  bellIcon: { marginRight: 20, padding: 8, backgroundColor: COLORS.background, borderRadius: 20 },
+  headerUserName: { fontFamily: 'Poppins_500Medium', fontSize: 14, color: COLORS.textPrimary, marginRight: 12 },
+  headerAvatar: { width: 40, height: 40, borderRadius: 20 },
+  bgMainContent: { flex: 1, width: '100%' },
+  mainScroll: { paddingVertical: 40, alignItems: 'center' },
+  backButtonWrap: { width: '85%', maxWidth: 1200, alignSelf: 'center', marginBottom: 20, paddingHorizontal: 16 },
+  backButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.white, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, ...Platform.select({ web: { boxShadow: '0px 4px 10px rgba(0,0,0,0.05)' }, default: { shadowColor: 'rgba(0,0,0,0.05)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 10 } }) },
+  contentConstraints: { width: '85%', maxWidth: 1200, alignItems: 'center' },
+  headerCard: { width: '100%', backgroundColor: COLORS.cardBackground, borderRadius: 16, paddingVertical: 32, paddingHorizontal: 24, alignItems: 'center', marginBottom: 40, borderWidth: 1, borderColor: 'rgba(0,0,0,0.04)', ...Platform.select({ web: { boxShadow: '0px 8px 20px rgba(0,0,0,0.02)' }, default: { shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 1, shadowRadius: 20, elevation: 2 } }) },
+  headerTitle: { fontFamily: 'Poppins_700Bold', fontSize: 40, color: COLORS.textPrimary, textAlign: 'center', marginBottom: 12 },
+  headerSubtitle: { fontFamily: 'Poppins_400Regular', fontSize: 16, color: '#3B5BFE', textAlign: 'center' },
+  pricingGrid: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'stretch', gap: 20, marginBottom: 40, flexWrap: 'wrap' },
+  cardWrapper: { flex: 1, minWidth: 240, borderRadius: 16, padding: 24, minHeight: 450, flexDirection: 'column' },
+  cardGradient: { backgroundColor: COLORS.primaryBlue, ...Platform.select({ web: { boxShadow: '0px 10px 20px rgba(59, 91, 254, 0.4)' }, default: { shadowColor: 'rgba(59, 91, 254, 0.4)', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 1, shadowRadius: 20, elevation: 10 } }) },
+  cardWhite: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border, ...Platform.select({ web: { boxShadow: '0px 4px 10px rgba(0,0,0,0.02)' }, default: { shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 10, elevation: 1 } }) },
+  badgeWrap: { backgroundColor: COLORS.accentGreen, alignSelf: 'center', paddingVertical: 4, paddingHorizontal: 16, borderRadius: 20, marginBottom: 16, height: 26, justifyContent: 'center' },
+  badgeText: { fontFamily: 'Poppins_600SemiBold', fontSize: 10, color: COLORS.white },
+  cardTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 20, textAlign: 'center', marginBottom: 16 },
+  priceContainer: { alignItems: 'center', minHeight: 60 },
+  priceMain: { fontFamily: 'Poppins_700Bold', fontSize: 32 },
+  priceDuration: { fontFamily: 'Poppins_400Regular', fontSize: 14 },
+  priceNote: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+  divider: { height: 1, width: '100%', marginVertical: 24 },
+  featuresList: { flex: 1 },
+  featureRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
+  featureText: { fontFamily: 'Poppins_400Regular', fontSize: 13, lineHeight: 20, flex: 1 },
+  btnWrap: { width: '100%', marginTop: 'auto', paddingTop: 24, alignItems: 'center' },
+  actionBtn: { width: '100%', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginBottom: 12 },
+  actionBtnWhite: { backgroundColor: COLORS.white },
+  actionBtnOutline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.primaryBlue },
+  actionBtnText: { fontFamily: 'Poppins_600SemiBold', fontSize: 13 },
+  footerText: { fontFamily: 'Poppins_400Regular', fontSize: 10, color: 'rgba(255,255,255,0.7)', textAlign: 'center', height: 30 },
+  brandSectionCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', backgroundColor: COLORS.cardBackground, borderRadius: 16, padding: 32, borderWidth: 1, borderColor: 'rgba(0,0,0,0.04)', ...Platform.select({ web: { boxShadow: '0px 8px 20px rgba(0,0,0,0.02)' }, default: { shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 1, shadowRadius: 20, elevation: 2 } }), position: 'relative', overflow: 'hidden' },
+  brandLeft: { flex: 1, zIndex: 2 },
+  shapesRow: { flexDirection: 'row', gap: 12, marginBottom: 20, alignItems: 'center' },
+  shapeCircleOrange: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F97316' },
+  shapeTriangleRight: { width: 0, height: 0, borderTopWidth: 20, borderTopColor: 'transparent', borderBottomWidth: 20, borderBottomColor: 'transparent', borderLeftWidth: 35, borderLeftColor: COLORS.primaryBlue },
+  shapeSquareGreen: { width: 40, height: 40, backgroundColor: '#86EFAC', borderRadius: 4 },
+  shapeCircleGray: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#D1D5DB' },
+  brandGiantLogo: { fontFamily: 'Poppins_700Bold', fontSize: 44, color: COLORS.textPrimary, lineHeight: 52 },
+  brandTagline: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: COLORS.textPrimary },
+  brandCenterAvatar: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  avatarImage: { width: 220, height: 220, borderRadius: 110, marginTop: 40 },
+  brandRight: { flex: 1, alignItems: 'flex-start', justifyContent: 'flex-end', paddingLeft: 40, alignSelf: 'stretch', paddingBottom: 20 },
+  carouselIndicators: { flexDirection: 'row', gap: 6, marginBottom: 12 },
+  carouselActive: { width: 24, height: 6, borderRadius: 3, backgroundColor: COLORS.primaryBlue },
+  carouselInactive: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.border },
+  brandRightText: { fontFamily: 'Poppins_400Regular', fontSize: 14, color: COLORS.textSecondary, lineHeight: 22 },
 });
 
-// Android Styles (Original)
-const androidStyles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: scale(20), paddingTop: verticalScale(60), paddingBottom: verticalScale(20), backgroundColor: '#ffffff' },
-  closeButton: {},
-  headerTitle: { fontSize: scale(30), fontWeight: '700', color: '#0d368c', fontFamily: 'Inter', textAlign: 'center', flex: 1 },
-  placeholderView: { width: scale(28) },
-  scrollView: { flex: 1 },
-  scrollContent: { paddingHorizontal: scale(20), paddingBottom: verticalScale(100), paddingTop: verticalScale(10) }
-});
-
-// Web Styles (New Uizard Design)
 const webStyles = StyleSheet.create({
-  // PAGE LAYOUT
-  page: {
-    flex: 1,
-    flexDirection: "column",
-    backgroundColor: "#f5f5f5"
-  },
-  
-  // CONTENT AREA
-  contentArea: {
-    flex: 1,
-    flexDirection: "row",
-    marginTop: 72
-  },
-  
-  // LEFT SIDEBAR
-  sidebar: {
-    width: 240,
-    backgroundColor: "#ffffff",
-    borderRightWidth: 1,
-    borderRightColor: "#e9ecef",
-  },
-  sidebarCollapsed: {
-    width: 60,
-  },
-  sidebarScroll: {
-    flex: 1,
-  },
-  sidebarMenu: {
-    padding: 20,
-  },
-  menuItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 4,
-  },
-  menuText: {
-    fontSize: 14,
-    color: "#495057",
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#e9ecef",
-    marginVertical: 16,
-  },
-  adCard: {
-    backgroundColor: "#f8f9fa",
-    borderRadius: 12,
-    padding: 16,
-    margin: 20,
-  },
-  adTitle: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#000000",
-    marginBottom: 8,
-  },
-  adDescription: {
-    fontSize: 12,
-    color: "#6c757d",
-    lineHeight: 16,
-  },
-  imagePlaceholder: {
-    width: "100%",
-    height: 80,
-    backgroundColor: "#e5e7eb",
-    borderRadius: 8
-  },
-  sidebarBottom: {
-    marginTop: "auto",
-    padding: 20,
-  },
-  
-  // CENTER CONTENT
-  centerOnlyContent: {
-    flex: 1,
-    marginTop: 56, // Adjusted to account for navbar height
-    paddingHorizontal: 40,
-    backgroundColor: "#f5f5f5"
-  },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 24,
-    gap: 16,
-  },
-  backArrowCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#d0d0d0",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  backArrow: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333333",
-  },
-  headerCardTop: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-    borderRadius: 20,
-    padding: 32,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  mainContent: {
-    flex: 1,
-    paddingHorizontal: 24
-  },
-  
-  // HEADER CARD
-  headerCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 20,
-    padding: 48,
-    marginBottom: 24,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  headerCardTitle: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#000000",
-    textAlign: "center",
-    marginBottom: 16,
-    lineHeight: 40,
-    fontFamily: "MontserratBold",
-  },
-  headerCardSubtitle: {
-    fontSize: 18,
-    color: "#4255ff",
-    textAlign: "center",
-    lineHeight: 26,
-    fontFamily: "Montserrat",
-  },
-  
-  // PLANS GRID
-  plansGrid: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 16,
-    marginBottom: 24,
-    flexWrap: "wrap",
-  },
-  
-  // PLAN CARD STYLES
-  planCard: {
-    width: 240,
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#d0d0d0",
-    padding: 16,
-    marginBottom: 16,
-    alignItems: "center",
-    position: "relative",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  introOfferTag: {
-    backgroundColor: "#4caf50",
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    position: "absolute",
-    top: -14,
-    zIndex: 10,
-  },
-  introOfferText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "600",
-    fontFamily: "Inter",
-  },
-  bestValueTag: {
-    backgroundColor: "#26cb63",
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    position: "absolute",
-    top: -14,
-    zIndex: 10,
-  },
-  bestValueText: {
-    color: "#ffffff",
-    fontSize: 13,
-    fontWeight: "700",
-    fontFamily: "Inter",
-  },
-  planTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    textAlign: "center",
-    marginBottom: 8,
-    fontFamily: "RedHatDisplay",
-  },
-  priceContainer: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "center",
-    marginBottom: 8,
-    flexWrap: "nowrap",
-  },
-  price: {
-    fontSize: 24,
-    fontWeight: "600",
-    fontFamily: "RedHatDisplay",
-  },
-  duration: {
-    fontSize: 14,
-    fontWeight: "400",
-    marginLeft: 4,
-    fontFamily: "RedHatDisplay",
-  },
-  originalPrice: {
-    fontSize: 16,
-    fontWeight: "400",
-    fontFamily: "RedHatDisplay",
-    color: "#ffffff",
-    textDecorationLine: "line-through",
-    marginRight: 4,
-    opacity: 0.85,
-  },
-  earlyUserText: {
-    fontSize: 12,
-    color: "#ffffff",
-    fontFamily: "RedHatDisplay",
-    marginBottom: 6,
-  },
-  planDivider: {
-    width: "100%",
-    height: 1,
-    marginVertical: 12,
-  },
-  planFeaturesContainer: {
-    marginBottom: 16,
-    width: "100%",
-  },
-  planFeatureRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 6,
-  },
-  planCheckIcon: {
-    marginRight: 8,
-    marginTop: 2,
-  },
-  planFeatureText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "400",
-    lineHeight: 16,
-    fontFamily: "RedHatDisplay",
-  },
-  planButton: {
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    alignItems: "center",
-    width: "100%",
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  planButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    fontFamily: "RedHatDisplay",
-  },
-  planLimitedTimeContainer: {
-    marginTop: 12,
-    alignItems: "center",
-  },
-  planLimitedTimeText: {
-    fontSize: 12,
-    color: "#ffd54f",
-    fontWeight: "600",
-    fontFamily: "Inter",
-    marginBottom: 2,
-  },
-  planValidityText: {
-    fontSize: 10,
-    color: "rgba(255, 255, 255, 0.8)",
-    fontFamily: "Inter",
-  },
-  featuresContainer: {
-    marginBottom: 20,
-    width: "100%",
-  },
-  featureRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 10,
-  },
-  checkIcon: {
-    marginRight: 10,
-    marginTop: 3,
-  },
-  featureText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "400",
-    lineHeight: 20,
-    fontFamily: "RedHatDisplay",
-  },
-  button: {
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    alignItems: "center",
-    width: "100%",
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  buttonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    fontFamily: "RedHatDisplay",
-  },
-  limitedTimeContainer: {
-    marginTop: 12,
-    alignItems: "center",
-  },
-  limitedTimeText: {
-    fontSize: 12,
-    color: "#ffd54f",
-    fontWeight: "600",
-    fontFamily: "Inter",
-    marginBottom: 2,
-  },
-  validityText: {
-    fontSize: 10,
-    color: "rgba(255, 255, 255, 0.8)",
-    fontFamily: "Inter",
-  },
-  
-  // PROMOTIONAL BANNER
-  promotionalBanner: {
-    flexDirection: "row",
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 32,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  promoLeft: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  promoLogo: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#000000",
-    marginBottom: 8,
-  },
-  promoText: {
-    fontSize: 16,
-    color: "#495057",
-    lineHeight: 22,
-  },
-  promoRight: {
-    flex: 1,
-    alignItems: "center",
-  },
-  promoImagePlaceholder: {
-    width: 100,
-    height: 60,
-    backgroundColor: "#e5e7eb",
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  promoSubtitle: {
-    fontSize: 12,
-    color: "#495057",
-    textAlign: "center",
-    lineHeight: 16,
-  },
-  
-  // RIGHT PANEL
-  rightPanel: {
-    width: 340,
-    backgroundColor: "#ffffff",
-    borderLeftWidth: 1,
-    borderLeftColor: "#e9ecef",
-    padding: 20,
-  },
-  panelTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#000000",
-    marginBottom: 20,
-  },
-  thoughtsContainer: {
-    flex: 1,
-  },
-  thoughtCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  thoughtHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  thoughtAuthor: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#000000",
-  },
-  thoughtTime: {
-    fontSize: 12,
-    color: "#6c757d",
-    marginTop: 2,
-  },
-  thoughtText: {
-    fontSize: 14,
-    color: "#495057",
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  thoughtImages: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 12,
-  },
-  thoughtImagePlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    backgroundColor: "#e5e7eb"
-  },
-  thoughtActions: {
-    flexDirection: "row",
-    gap: 16,
-  },
-  actionButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: "#f8f9fa",
-  },
-  actionText: {
-    fontSize: 12,
-    color: "#495057",
-  },
-  
-  // SUBSCRIPTION BOTTOM IMAGE
-  subscriptionBottomContainer: {
-    width: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 24,
-    marginBottom: 32,
-  },
-  subscriptionBottomImage: {
-    width: 1008, // Fixed width: 4 cards * 240px + 3 gaps * 16px = 1008px
-    height: 180,
-    borderRadius: 102,
-  },
+  page: { flex: 1, flexDirection: "column", backgroundColor: COLORS.cardBackground },
+  bgMainContent: { flex: 1, width: '100%' },
+  centerOnlyContent: { flex: 1 },
+  backButtonWrap: { width: '85%', maxWidth: 1200, alignSelf: 'center', marginBottom: 20, marginTop: 20, paddingHorizontal: 16 },
+  backButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.white, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, ...Platform.select({ web: { boxShadow: '0px 4px 10px rgba(0,0,0,0.05)' }, default: { shadowColor: 'rgba(0,0,0,0.05)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 10 } }) },
+  contentConstraints: { width: '85%', maxWidth: 1200, alignSelf: 'center', alignItems: 'center' },
+  headerCard: { width: '100%', backgroundColor: COLORS.cardBackground, borderRadius: 16, paddingVertical: 32, paddingHorizontal: 24, alignItems: 'center', marginBottom: 40, borderWidth: 1, borderColor: 'rgba(0,0,0,0.04)', ...Platform.select({ web: { boxShadow: '0px 8px 20px rgba(0,0,0,0.02)' }, default: { shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 1, shadowRadius: 20, elevation: 2 } }) },
+  headerTitle: { fontFamily: 'Montserrat_700Bold', fontSize: 40, color: COLORS.textPrimary, textAlign: 'center', marginBottom: 12 },
+  headerSubtitle: { fontFamily: 'Montserrat_400Regular', fontSize: 16, color: '#3B5BFE', textAlign: 'center' },
+  pricingGrid: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'stretch', gap: 20, marginBottom: 40, flexWrap: 'wrap' },
+  cardWrapper: { flex: 1, minWidth: 240, borderRadius: 16, padding: 20, minHeight: 420, flexDirection: 'column' },
+  cardGradient: { backgroundColor: COLORS.primaryBlue, ...Platform.select({ web: { boxShadow: '0px 10px 20px rgba(59, 91, 254, 0.4)' }, default: { shadowColor: 'rgba(59, 91, 254, 0.4)', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 1, shadowRadius: 20, elevation: 10 } }) },
+  cardWhite: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border, ...Platform.select({ web: { boxShadow: '0px 4px 10px rgba(0,0,0,0.02)' }, default: { shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 10, elevation: 1 } }) },
+  badgeWrap: { backgroundColor: COLORS.accentGreen, alignSelf: 'center', paddingVertical: 4, paddingHorizontal: 16, borderRadius: 20, marginBottom: 16, height: 26, justifyContent: 'center' },
+  badgeText: { fontFamily: 'Poppins_600SemiBold', fontSize: 10, color: COLORS.white },
+  cardTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 18, textAlign: 'center', marginBottom: 12 },
+  priceContainer: { alignItems: 'center', minHeight: 50 },
+  priceMain: { fontFamily: 'Poppins_700Bold', fontSize: 28 },
+  priceDuration: { fontFamily: 'Poppins_400Regular', fontSize: 12 },
+  priceNote: { fontFamily: 'Poppins_400Regular', fontSize: 11, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+  divider: { height: 1, width: '100%', marginVertical: 20 },
+  featuresList: { flex: 1 },
+  featureRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
+  featureText: { fontFamily: 'Poppins_400Regular', fontSize: 12, lineHeight: 18, flex: 1 },
+  btnWrap: { width: '100%', marginTop: 'auto', paddingTop: 20, alignItems: 'center' },
+  actionBtn: { width: '100%', paddingVertical: 10, borderRadius: 8, alignItems: 'center', marginBottom: 10 },
+  actionBtnWhite: { backgroundColor: COLORS.white },
+  actionBtnOutline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.primaryBlue },
+  actionBtnText: { fontFamily: 'Poppins_600SemiBold', fontSize: 12 },
+  footerText: { fontFamily: 'Poppins_400Regular', fontSize: 9, color: 'rgba(255,255,255,0.7)', textAlign: 'center', height: 26 },
+  brandSectionCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', backgroundColor: COLORS.cardBackground, borderRadius: 16, padding: 28, borderWidth: 1, borderColor: 'rgba(0,0,0,0.04)', ...Platform.select({ web: { boxShadow: '0px 8px 20px rgba(0,0,0,0.02)' }, default: { shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 1, shadowRadius: 20, elevation: 2 } }), position: 'relative', overflow: 'hidden', marginBottom: 32 },
+  brandLeft: { flex: 1, zIndex: 2 },
+  shapesRow: { flexDirection: 'row', gap: 12, marginBottom: 20, alignItems: 'center' },
+  shapeCircleOrange: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F97316' },
+  shapeTriangleRight: { width: 0, height: 0, borderTopWidth: 18, borderTopColor: 'transparent', borderBottomWidth: 18, borderBottomColor: 'transparent', borderLeftWidth: 32, borderLeftColor: COLORS.primaryBlue },
+  shapeSquareGreen: { width: 36, height: 36, backgroundColor: '#86EFAC', borderRadius: 4 },
+  shapeCircleGray: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#D1D5DB' },
+  brandGiantLogo: { fontFamily: 'Poppins_700Bold', fontSize: 38, color: COLORS.textPrimary, lineHeight: 46 },
+  brandTagline: { fontFamily: 'Poppins_600SemiBold', fontSize: 12, color: COLORS.textPrimary },
+  brandCenterAvatar: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  avatarImage: { width: 180, height: 180, borderRadius: 90, marginTop: 30 },
+  brandRight: { flex: 1, alignItems: 'flex-start', justifyContent: 'flex-end', paddingLeft: 30, alignSelf: 'stretch', paddingBottom: 16 },
+  carouselIndicators: { flexDirection: 'row', gap: 6, marginBottom: 12 },
+  carouselActive: { width: 20, height: 5, borderRadius: 3, backgroundColor: COLORS.primaryBlue },
+  carouselInactive: { width: 5, height: 5, borderRadius: 3, backgroundColor: COLORS.border },
+  brandRightText: { fontFamily: 'Poppins_400Regular', fontSize: 13, color: COLORS.textSecondary, lineHeight: 20 },
 });

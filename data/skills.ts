@@ -1,32 +1,27 @@
 export const skills = [
     {
-       
         name:"Dance",
-        image:require("@/assets/image/Dance.jpeg")
+        image:"https://images.unsplash.com/photo-1547153760-18fc86324498?w=400&h=300&fit=crop"
     },
     {
-     
         name:"Music",
-        image:require("@/assets/image/music.jpeg")
+        image:"https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=300&fit=crop"
     },
     {
-      
         name:"Photography",
-        image:require("@/assets/image/Photography.jpeg")
+        image:"https://images.unsplash.com/photo-1502780402662-acc01917ac2e?w=400&h=300&fit=crop"
     },
     {
-  
         name:"Workout",
-        image:require("@/assets/image/workout.jpeg")
-    }, {
-   
-        name:"Cooking",
-        image:require("@/assets/image/cooking.jpeg")
+        image:"https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=400&h=300&fit=crop"
     },
     {
-   
+        name:"Cooking",
+        image:"https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&h=300&fit=crop"
+    },
+    {
         name:"Art",
-        image:require("@/assets/image/Art.jpeg")
+        image:"https://images.unsplash.com/photo-1585115397848-55da82956c20?w=400&h=300&fit=crop"
     }
 ]
 

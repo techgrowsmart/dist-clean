@@ -1,7 +1,8 @@
-import React from "react";
-import {View, Text, TextInput, Image, TouchableOpacity, StyleSheet, ScrollView} from "react-native";
+import React, { useEffect } from "react";
+import {View, Text, TextInput, Image, TouchableOpacity, StyleSheet, ScrollView, Platform} from "react-native";
 import { router } from "expo-router";
 import {Link} from "expo-router"
+import { Ionicons } from '@expo/vector-icons';
 import BottomNavigation from "../../../app/(tabs)/StudentDashBoard/BottomNavigation";
 
 const videos = [
@@ -12,8 +13,37 @@ const videos = [
 ];
 
 export default function Explore() {
+    const handleBackPress = () => {
+        router.back();
+    };
+
+    // ESC key handler for web
+    useEffect(() => {
+        if (Platform.OS === 'web') {
+            const handleEsc = (e: KeyboardEvent) => {
+                if (e.key === 'Escape') {
+                    handleBackPress();
+                }
+            };
+            document.addEventListener('keydown', handleEsc);
+            return () => document.removeEventListener('keydown', handleEsc);
+        }
+    }, []);
+
     return (
         <View style={styles.container}>
+            {/* Page Header */}
+            <View style={styles.pageHeader}>
+                <TouchableOpacity 
+                    style={styles.backBtnCircle} 
+                    onPress={handleBackPress}
+                >
+                    <Ionicons name="arrow-back" size={20} color="#1F2937" />
+                </TouchableOpacity>
+                <Text style={styles.pageTitle}>Explore</Text>
+                <View style={styles.placeholder} />
+            </View>
+
             {/* Search Bar */}
             <View style={styles.searchContainer}>
                 <Image source={require("../../../assets/images/Search.png")} style={styles.searchIcon} />
@@ -53,6 +83,36 @@ export default function Explore() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#FFFFFF", padding: 20 },
+    // Page Header
+    pageHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+        paddingHorizontal: 8,
+    },
+    backBtnCircle: {
+        width: 46,
+        height: 46,
+        borderRadius: 23,
+        backgroundColor: '#FFFFFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    pageTitle: {
+        fontSize: 28,
+        fontWeight: '700',
+        color: '#1F2937',
+        marginLeft: 16,
+        flex: 1,
+    },
+    placeholder: {
+        width: 46,
+    },
     searchContainer: {
         flexDirection: "row",
         alignItems: "center",

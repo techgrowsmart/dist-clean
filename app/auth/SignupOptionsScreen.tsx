@@ -40,7 +40,12 @@ export default function SignupOptionsScreen() {
   };
 
   const handleBack = () => {
-    safeBack(router, '/login');
+    // Go back to InitialScreen instead of login to avoid redirect loop
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/auth/InitialScreen' as any);
+    }
   };
 
   if (isWeb) {

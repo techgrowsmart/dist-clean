@@ -18,10 +18,10 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    TouchableWithoutFeedback,
+    Pressable,
     View
 } from "react-native";
-import {
+import { 
     heightPercentageToDP as hp,
     widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
@@ -35,6 +35,7 @@ const { width, height } = Dimensions.get("window");
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState("");
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const sendOtp = async () => {
@@ -71,11 +72,16 @@ export default function LoginScreen() {
 
       if (!response.ok) {
         if (data.isRegistered === false) {
-          Toast.show({ type: "error", text1: data.message });
-          setTimeout(() => router.push("/SignUp"), 1500);
+          setEmailError("Account not found. Please sign up first.");
+          Toast.show({ type: "error", text1: data.message, text2: "Redirecting to Sign Up..." });
+          setTimeout(() => router.push("/SignUp"), 2000);
           return;
         }
-        Toast.show({ type: "error", text1: data.message });
+        if (response.status === 404) {
+          setEmailError("Account not found. Please check your email or sign up.");
+          return;
+        }
+        setEmailError(data.message || "Login failed. Please try again.");
         return;
       }
 
@@ -94,28 +100,24 @@ export default function LoginScreen() {
           text1: "Login Successful (Test User)"
         });
         
-        setTimeout(() => {
-          if (data.role === "teacher") {
-            router.replace("/(tabs)/TeacherDashBoard/Teacher");
-          } else {
-            router.replace("/(tabs)/StudentDashBoard/Student");
-          }
-        }, 1000);
+        if (data.role === "teacher") {
+          router.replace("/(tabs)/TeacherDashBoard/Teacher");
+        } else {
+          router.replace("/(tabs)/StudentDashBoard/Student");
+        }
         return;
       }
 
       if (data.status !== "active") {
         Toast.show({ type: "info", text1: data.message });
-        setTimeout(() => {
-          router.push({
-            pathname: `/(tabs)/LoginOtp`,
-            params: {
-              email: email,
-              otpId: data.otpId,
-              role: data.role,
-            },
-          });
-        }, 2000);
+        router.push({
+          pathname: `/(tabs)/LoginOtp`,
+          params: {
+            email: email,
+            otpId: data.otpId,
+            role: data.role,
+          },
+        });
       } else {
         // User is active, store auth data and redirect
         await storeAuthData({
@@ -130,15 +132,14 @@ export default function LoginScreen() {
           text1: "Login Successful"
         });
         
-        setTimeout(() => {
-          if (data.role === "teacher") {
-            router.replace("/(tabs)/TeacherDashBoard/Teacher");
-          } else {
-            router.replace("/(tabs)/StudentDashBoard/Student");
-          }
-        }, 1000);
+        if (data.role === "teacher") {
+          router.replace("/(tabs)/TeacherDashBoard/Teacher");
+        } else {
+          router.replace("/(tabs)/StudentDashBoard/Student");
+        }
       }
     } catch (error) {
+      setEmailError("Network error. Please check your connection and try again.");
       Toast.show({
         type: "error",
         text1: "Something went wrong",
@@ -159,8 +160,7 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.innerContainer}>
+      <Pressable onPress={Keyboard.dismiss} style={styles.innerContainer}>
           <Image source={require("../../assets/image/Login-screen.png")} style={styles.logo} resizeMode="contain" />
           <Text style={styles.head}>Log in</Text>
           
@@ -179,8 +179,8 @@ export default function LoginScreen() {
           />
           {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
 
-          <TouchableOpacity style={styles.button} onPress={sendOtp}>
-            <Text style={styles.buttonText}>Login</Text>
+          <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={sendOtp} disabled={loading}>
+            <Text style={styles.buttonText}>{loading ? "Loading..." : "Login"}</Text>
           </TouchableOpacity>
 
           <View style={styles.signupContainer}>
@@ -189,8 +189,7 @@ export default function LoginScreen() {
               <Text style={styles.signupLink}> Sign Up</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </TouchableWithoutFeedback>
+        </Pressable>
     </KeyboardAvoidingView>
   );
 }
@@ -203,8 +202,8 @@ const styles = StyleSheet.create({
   inputLabel: { alignSelf: "flex-start", color: "#606060", fontSize: wp("2.8%"), fontFamily: "Mulish_Regular", marginBottom: hp("1%"), paddingLeft: hp("2%") },
   input: { width: "100%", height: hp("7%"), backgroundColor: "#fff", borderRadius: wp("2.5%"), paddingHorizontal: wp("4%"), color: "#03070E", marginBottom: hp("1%"), fontSize: wp("3.8%"), fontFamily: "Mulish_Regular", borderWidth: hp("0.16%"), borderColor: "#5d674e" },
   inputError: { borderColor: "red", borderWidth: 1 },
-  errorText: { alignSelf: "flex-start", color: "red", fontSize: wp("3.2%"), marginBottom: hp("1%"), fontFamily: "Mulish_Regular" },
-  button: { width: "100%", height: hp("6.5%"), backgroundColor: "#5f5fff", borderRadius: wp("2.5%"), justifyContent: "center", alignItems: "center", marginTop: hp("2%") },
+  errorText: { alignSelf: "flex-start", color: "red", fontSize: wp("3.2%"), marginBottom: hp("1%"), fontFamily: "Mulish_Regular" },  button: { width: "100%", height: hp("6.5%"), backgroundColor: "#5f5fff", borderRadius: wp("2.5%"), justifyContent: "center", alignItems: "center", marginTop: hp("2%") },
+  buttonDisabled: { backgroundColor: "#a0a0ff" },
   buttonText: { color: "#fff", fontSize: wp("4%"), fontFamily: "Mulish_Medium" },
   signupContainer: { flexDirection: "row", alignItems: "center", marginTop: hp("10%") },
   signupText: { color: "#0f0f0f", fontSize: wp("3.8%"), fontFamily: "OpenSans_Regular" },

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Platform,
   StyleSheet,
   View,
   Text,
@@ -9,8 +10,8 @@ import {
   Image,
   Dimensions,
   ActivityIndicator,
-  Platform,
   Alert,
+  Animated,
 } from 'react-native';
 import {
   widthPercentageToDP as wp,
@@ -23,15 +24,17 @@ import {
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
-import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
-import Svg, { Rect, Line, G, Text as SvgText } from 'react-native-svg';
+import { MaterialCommunityIcons, Ionicons, FontAwesome5, Feather } from '@expo/vector-icons';
+import Svg, { Rect, Line, G, Text as SvgText, Circle } from 'react-native-svg';
 import TeacherWebHeader from '../ui/TeacherWebHeader';
-import TeacherThoughtsCard from '../ui/TeacherThoughtsCard';
+import ThoughtsCard from '../../app/(tabs)/StudentDashBoard/ThoughtsCard';
 import TeacherPostComposer from '../ui/TeacherPostComposer';
 import TeacherWebSidebar from '../ui/TeacherWebSidebar';
 import { getAuthData } from '../../utils/authStorage';
 import { BASE_URL } from '../../config';
 import axios from 'axios';
+import TeacherThoughtsCard from 'components/ui/TeacherThoughtsCard';
+import { UnifiedPost } from '../../components/ui/UnifiedThoughtsCard';
 
 // Global Design Tokens
 const COLORS = {
@@ -47,6 +50,19 @@ const COLORS = {
   textMuted: '#94A3B8',
   border: '#E5E7EB',
   white: '#FFFFFF',
+  successGreen: '#10B981',
+  warningOrange: '#F59E0B',
+};
+
+// OCR Backend Configuration
+const OCR_CONFIG = {
+  BASE_URL: 'https://your-ocr-backend.amazonaws.com/api', // Replace with actual EC2 endpoint
+  ENDPOINTS: {
+    SPOTLIGHT_DATA: '/spotlight/data',
+    PERFORMANCE_METRICS: '/ocr/performance',
+    REGION_ANALYSIS: '/ocr/regions',
+    UPDATE_SETTINGS: '/ocr/settings'
+  }
 };
 
 const STATES = [
@@ -59,17 +75,8 @@ const STATES = [
   'Ladakh', 'Lakshadweep', 'Puducherry'
 ];
 
-const CHART_DATA = [
-  { day: 'Oct 10', pos: true, high: 80, low: 40, open: 70, close: 50 },
-  { day: 'Oct 11', pos: false, high: 60, low: 20, open: 50, close: 30 },
-  { day: 'Oct 12', pos: true, high: 90, low: 50, open: 80, close: 60 },
-  { day: 'Oct 13', pos: false, high: 70, low: 30, open: 60, close: 40 },
-  { day: 'Oct 14', pos: true, high: 85, low: 45, open: 75, close: 55 },
-  { day: 'Oct 15', pos: false, high: 65, low: 25, open: 55, close: 35 },
-  { day: 'Oct 16', pos: true, high: 95, low: 55, open: 85, close: 65 },
-  { day: 'Oct 17', pos: false, high: 75, low: 35, open: 65, close: 45 },
-  { day: 'Oct 18', pos: true, high: 88, low: 48, open: 78, close: 58 },
-];
+// Chart data will be fetched from API
+const CHART_DATA = [];
 
 export default function SpotlightScreen() {
   const [fontsLoaded] = useFonts({
@@ -79,34 +86,166 @@ export default function SpotlightScreen() {
     Poppins_700Bold,
   });
 
+  // State management
   const [activeItem, setActiveItem] = useState('Spotlights');
-  const [isMobile, setIsMobile] = useState(Dimensions.get('window').width < 1024);
-  const [isTablet, setIsTablet] = useState(Dimensions.get('window').width >= 768 && Dimensions.get('window').width < 1024);
-  const [toggleType, setToggleType] = useState('Skill');
-  const [teacherName, setTeacherName] = useState('Teacher');
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+  const [screenHeight, setScreenHeight] = useState(Dimensions.get('window').height);
+  
+  // Responsive breakpoints
+  const isMobile = screenWidth < 768;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
+  const isDesktop = screenWidth >= 1024;
+  const isSmallMobile = screenWidth < 480;
+  
+  // Dynamic font sizes
+  const getFontSize = (mobile: number, tablet: number, desktop: number) => {
+    if (isSmallMobile) return mobile * 0.9;
+    if (isMobile) return mobile;
+    if (isTablet) return tablet;
+    return desktop;
+  };
+  
+  // Dynamic spacing
+  const getSpacing = (mobile: number, tablet: number, desktop: number) => {
+    if (isSmallMobile) return mobile * 0.8;
+    if (isMobile) return mobile;
+    if (isTablet) return tablet;
+    return desktop;
+  };
+  
+  // Dynamic dimensions
+  const getDimension = (mobile: number, tablet: number, desktop: number) => {
+    if (isSmallMobile) return mobile * 0.85;
+    if (isMobile) return mobile;
+    if (isTablet) return tablet;
+    return desktop;
+  };
+  
+  // Update dimensions on change
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setScreenWidth(window.width);
+      setScreenHeight(window.height);
+    });
+    return () => subscription?.remove();
+  }, []);
+  const [teacherName, setTeacherName] = useState('');
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState('');
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [toggleType, setToggleType] = useState('Subject');
 
-  // Teacher Posts Data for Thoughts
-  const [posts, setPosts] = useState<any[]>([]);
-  const [postsLoading, setPostsLoading] = useState(false);
-  const [userProfileCache, setUserProfileCache] = useState<Map<string, { name: string; profilePic: string }>>(new Map());
+  // OCR Data States
+  const [spotlightData, setSpotlightData] = useState<any>(null);
+  const [performanceMetrics, setPerformanceMetrics] = useState<any>(null);
+  const [regionAnalysis, setRegionAnalysis] = useState<any>(null);
+  const [selectedTimeRange, setSelectedTimeRange] = useState('30days');
+  const [selectedRegion, setSelectedRegion] = useState('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [ocrSettings, setOcrSettings] = useState<any>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadAuthToken = async () => {
+    const loadAuthData = async () => {
       try {
         const authData = await getAuthData();
         if (authData?.token) {
           setAuthToken(authData.token);
+          setUserEmail(authData.email || '');
+          setTeacherName(authData.name || 'Teacher');
+          setProfileImage(authData.profileImage || null);
         }
       } catch (error) {
-        console.error('Error loading auth token:', error);
+        console.error('Error loading auth data:', error);
       }
     };
 
-    loadAuthToken();
+    loadAuthData();
   }, []);
+
+  // Fetch OCR data from AWS EC2 backend
+  const fetchSpotlightData = async () => {
+    if (!authToken) return;
+
+    try {
+      setIsLoading(true);
+      
+      // Fetch spotlight data from OCR backend
+      const spotlightResponse = await axios.get(`${OCR_CONFIG.BASE_URL}${OCR_CONFIG.ENDPOINTS.SPOTLIGHT_DATA}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      // Fetch performance metrics
+      const performanceResponse = await axios.get(`${OCR_CONFIG.BASE_URL}${OCR_CONFIG.ENDPOINTS.PERFORMANCE_METRICS}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      // Fetch region analysis
+      const regionResponse = await axios.get(`${OCR_CONFIG.BASE_URL}${OCR_CONFIG.ENDPOINTS.REGION_ANALYSIS}?timeRange=${selectedTimeRange}&region=${selectedRegion}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      // Fetch OCR settings
+      const settingsResponse = await axios.get(`${OCR_CONFIG.BASE_URL}${OCR_CONFIG.ENDPOINTS.UPDATE_SETTINGS}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      // Update state with real data
+      if (spotlightResponse.data?.success) {
+        setSpotlightData(spotlightResponse.data);
+      }
+      
+      if (performanceResponse.data?.success) {
+        setPerformanceMetrics(performanceResponse.data);
+      }
+      
+      if (regionResponse.data?.success) {
+        setRegionAnalysis(regionResponse.data);
+      }
+      
+      if (settingsResponse.data?.success) {
+        setOcrSettings(settingsResponse.data);
+      }
+
+    } catch (error) {
+      console.error('Error fetching OCR data:', error);
+      
+      // Don't load mock data - only show real data
+      setSpotlightData({
+        totalDocuments: 0,
+        processedToday: 0,
+        accuracy: 0,
+        averageProcessingTime: 0
+      });
+      setPerformanceMetrics({
+        recognitionRate: 0,
+        errorRate: 0,
+        totalProcessed: 0,
+        uptime: 0
+      });
+      setRegionAnalysis({
+        topRegions: [],
+        processingTime: 0
+      });
+      setOcrSettings({ autoProcessing: false, quality: 'medium' });
+      
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const fetchPosts = async (token: string) => {
     try {
@@ -121,9 +260,29 @@ export default function SpotlightScreen() {
       }
     } catch (error) {
       console.error('Error fetching posts:', error);
+      // Don't load mock posts - only show real data
       setPosts([]);
+
     } finally {
       setPostsLoading(false);
+    }
+  };
+
+  const handleCreatePost = async (content: string) => {
+    if (!authToken || !content.trim()) return;
+    
+    try {
+      const res = await axios.post(`${BASE_URL}/api/posts/create`, 
+        { content },
+        { headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' } }
+      );
+      
+      if (res.data.success) {
+        // Refresh posts after creating a new one
+        await fetchPosts(authToken);
+      }
+    } catch (error) {
+      console.error('Error creating post:', error);
     }
   };
 
@@ -133,40 +292,32 @@ export default function SpotlightScreen() {
     }
   }, [authToken]);
 
-  // Handle create post
-  const handleCreatePost = async (content: string) => {
-    if (!authToken || !userEmail) {
-      throw new Error('Authentication required');
-    }
+  // Load data on component mount
+  useEffect(() => {
+    fetchSpotlightData();
+  }, [authToken, selectedTimeRange, selectedRegion]);
 
-    try {
-      const response = await axios.post(
-        `${BASE_URL}/api/posts/create`,
-        {
-          content: content.trim(),
-          tags: ''
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          }
-        }
-      );
-
-      if (response.data.success) {
-        if (authToken) {
-          await fetchPosts(authToken);
-        }
-        return response.data;
-      } else {
-        throw new Error(response.data.message || 'Failed to create post');
-      }
-    } catch (error: any) {
-      console.error('Error creating post:', error);
-      throw new Error(error.response?.data?.message || 'Failed to create post. Please try again.');
+  // Load posts when auth is available
+  useEffect(() => {
+    if (authToken) {
+      fetchPosts(authToken);
     }
+  }, [authToken]);
+
+  // Handle time range change
+  const handleTimeRangeChange = (value: string) => {
+    setSelectedTimeRange(value);
   };
+
+  // Handle region change
+  const handleRegionChange = (value: string) => {
+    setSelectedRegion(value);
+  };
+
+  // Teacher Posts Data for Thoughts (using UnifiedPost)
+  const [posts, setPosts] = useState<any[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [userProfileCache, setUserProfileCache] = useState<Map<string, { name: string; profilePic: string }>>(new Map());
 
   // Profile image cache
   const getProfileImageSource = (profilePic?: string) => {
@@ -177,7 +328,7 @@ export default function SpotlightScreen() {
   };
 
   const getInitials = (name: string) => {
-    return name.split(' ').map(word => word[0]).join('').toUpperCase();
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
   const resolvePostAuthor = (post: any) => {
@@ -242,12 +393,33 @@ export default function SpotlightScreen() {
               <View style={styles.webMainContent}>
                 <ScrollView style={styles.mainScroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                   <View style={styles.pageContent}>
-                    <Text style={styles.pageTitle}>Boost your visibility with Spotlight</Text>
+                    {/* Enhanced Page Header */}
+                    <View style={styles.enhancedPageHeader}>
+                      <View style={styles.headerContent}>
+                        <Text style={styles.pageTitle}>Boost Your Visibility</Text>
+                        <Text style={styles.pageSubtitle}>Get discovered by more students with Spotlight features</Text>
+                        <View style={styles.headerStats}>
+                          <View style={styles.statBadge}>
+                            <Ionicons name="trending-up" size={16} color={COLORS.successGreen} />
+                            <Text style={styles.statBadgeText}>+24.5% this month</Text>
+                          </View>
+                          <View style={styles.statBadge}>
+                            <Ionicons name="eye" size={16} color={COLORS.primaryBlue} />
+                            <Text style={styles.statBadgeText}>1.2K views</Text>
+                          </View>
+                        </View>
+                      </View>
+                      <View style={styles.headerIllustration}>
+                        <View style={styles.illustrationCircle}>
+                          <Ionicons name="star" size={32} color="#FFD700" />
+                        </View>
+                      </View>
+                    </View>
 
-                    {/* Filters & Toggles */}
-                    <View style={styles.topControls}>
+                    {/* Enhanced Filters & Toggles */}
+                    <View style={styles.enhancedControls}>
                        <View style={styles.filterGroup}>
-                          <View style={styles.filterItem}>
+                          <View style={styles.enhancedFilterItem}>
                              <View style={styles.filterIconRow}>
                                 <Ionicons name="location-sharp" size={16} color={COLORS.primaryBlue} />
                                 <Text style={styles.filterLabel}>LOCATION CONTEXT</Text>
@@ -255,7 +427,7 @@ export default function SpotlightScreen() {
                              <TextInput style={styles.filterInput} placeholder="Enter target region ..." placeholderTextColor={COLORS.textMuted} />
                           </View>
 
-                          <View style={[styles.filterItem, { flex: 1, marginLeft: 20, zIndex: 5000 }]}>
+                          <View style={[styles.enhancedFilterItem, { flex: 1, marginLeft: 20, zIndex: 5000 }]}>
                              <View style={styles.filterIconRow}>
                                 <MaterialCommunityIcons name="chart-bar" size={16} color={COLORS.primaryBlue} />
                                 <Text style={styles.filterLabel}>State</Text>
@@ -264,7 +436,7 @@ export default function SpotlightScreen() {
                           </View>
                        </View>
 
-                       <View style={styles.toggleContainer}>
+                       <View style={styles.enhancedToggleContainer}>
                           <TouchableOpacity 
                             style={[styles.toggleBtn, toggleType === 'Subject' && styles.toggleBtnActive]}
                             onPress={() => setToggleType('Subject')}
@@ -280,13 +452,16 @@ export default function SpotlightScreen() {
                        </View>
                     </View>
 
-                    {/* Chart */}
-                    <View style={styles.chartContainer}>
+                    {/* Enhanced Chart Section */}
+                    <View style={styles.enhancedChartContainer}>
                        <View style={styles.chartHeader}>
-                          <Text style={styles.chartTitle}>Performance Analytics</Text>
-                          <View style={styles.durationBadge}>
-                             <Text style={styles.durationBadgeText}>Last 30 days</Text>
+                          <View style={styles.chartTitleRow}>
+                            <Text style={styles.chartTitle}>Performance Analytics</Text>
+                            <View style={styles.durationBadge}>
+                               <Text style={styles.durationBadgeText}>Last 30 days</Text>
+                            </View>
                           </View>
+                          <Text style={styles.chartSubtitle}>Track your visibility and engagement metrics</Text>
                        </View>
                        
                        <View style={styles.chartArea}>
@@ -294,44 +469,53 @@ export default function SpotlightScreen() {
                        </View>
                     </View>
 
-                    {/* Stats Cards */}
-                    <View style={styles.statsContainer}>
-                       <View style={styles.statCard}>
+                    {/* Enhanced Stats Cards */}
+                    <View style={styles.enhancedStatsContainer}>
+                       <View style={styles.enhancedStatCard}>
                           <View style={styles.statIconWrapper}>
                              <Ionicons name="trending-up" size={24} color={COLORS.posBlue} />
                           </View>
                           <View style={styles.statContent}>
                              <Text style={styles.statValue}>+24.5%</Text>
                              <Text style={styles.statLabel}>Growth Rate</Text>
+                             <Text style={styles.statChange}>+5.2% from last month</Text>
                           </View>
                        </View>
                        
-                       <View style={styles.statCard}>
+                       <View style={styles.enhancedStatCard}>
                           <View style={styles.statIconWrapper}>
                              <Ionicons name="eye" size={24} color={COLORS.primaryBlue} />
                           </View>
                           <View style={styles.statContent}>
                              <Text style={styles.statValue}>1,247</Text>
                              <Text style={styles.statLabel}>Total Views</Text>
+                             <Text style={styles.statChange}>+189 this week</Text>
                           </View>
                        </View>
                        
-                       <View style={styles.statCard}>
+                       <View style={styles.enhancedStatCard}>
                           <View style={styles.statIconWrapper}>
                              <Ionicons name="people" size={24} color={COLORS.chartIndigo} />
                           </View>
                           <View style={styles.statContent}>
                              <Text style={styles.statValue}>89</Text>
                              <Text style={styles.statLabel}>New Students</Text>
+                             <Text style={styles.statChange}>+12 this week</Text>
                           </View>
                        </View>
                     </View>
 
-                    {/* Recent Activity */}
-                    <View style={styles.activitySection}>
-                       <Text style={styles.sectionTitle}>Recent Activity</Text>
+                    {/* Enhanced Recent Activity */}
+                    <View style={styles.enhancedActivitySection}>
+                       <View style={styles.activityHeader}>
+                          <Text style={styles.sectionTitle}>Recent Activity</Text>
+                          <TouchableOpacity style={styles.viewAllBtn}>
+                            <Text style={styles.viewAllBtnText}>View All</Text>
+                            <Ionicons name="chevron-forward" size={14} color={COLORS.primaryBlue} />
+                          </TouchableOpacity>
+                       </View>
                        <View style={styles.activityList}>
-                          <View style={styles.activityItem}>
+                          <View style={styles.enhancedActivityItem}>
                              <View style={styles.activityIcon}>
                                 <MaterialCommunityIcons name="book-open-variant" size={20} color={COLORS.primaryBlue} />
                              </View>
@@ -344,7 +528,7 @@ export default function SpotlightScreen() {
                              </View>
                           </View>
                           
-                          <View style={styles.activityItem}>
+                          <View style={styles.enhancedActivityItem}>
                              <View style={styles.activityIcon}>
                                 <Ionicons name="person" size={20} color={COLORS.posBlue} />
                              </View>
@@ -400,11 +584,12 @@ export default function SpotlightScreen() {
                     </View>
                   )}
                   
-                  {posts.map((post: any, index: number) => (
+                  {posts.map((post: UnifiedPost, index: number) => (
                     <View key={post.id} style={styles.webPostWrapper}>
                       <TeacherThoughtsCard
                         post={post}
                         userProfileCache={userProfileCache}
+                        isTeacherContext={true}
                         onLike={(postId: string) => {
                           setPosts(posts.map(p => 
                             p.id === postId 
@@ -472,115 +657,164 @@ export default function SpotlightScreen() {
                        <Text style={[styles.toggleText, toggleType === 'Skill' && styles.toggleTextActive]}>Skill</Text>
                     </TouchableOpacity>
                  </View>
-              </View>
+                </View>
 
-              {/* Main Section: Chart + Pricing */}
-              <View style={[styles.mainSection, (isMobile || isTablet) && { flexDirection: 'column' }]}>
-                 <View style={[styles.chartContainer, (isMobile || isTablet) && { width: '100%', marginBottom: 30 }]}>
-                    <View style={styles.chartHeader}>
-                       <Text style={styles.chartTitle}>Spotlight Tarrifs</Text>
-                       <TouchableOpacity style={styles.timeDropdown}>
-                          <Text style={styles.timeDropdownText}>Daily</Text>
-                          <Ionicons name="chevron-down" size={14} color="white" style={{ marginLeft: 8 }} />
-                       </TouchableOpacity>
-                    </View>
-                    <View style={styles.chartArea}>
-                       <CandleChart data={CHART_DATA} />
-                    </View>
-                 </View>
+                {/* Main Section: Chart + Pricing */}
+                <View style={[styles.mainSection, (isMobile || isTablet) && { flexDirection: 'column' }]}>
+                  <View style={[styles.chartContainer, (isMobile || isTablet) && { width: '100%', marginBottom: 30 }]}>
+                      <View style={styles.chartHeader}>
+                        <Text style={styles.chartTitle}>Spotlight Tarrifs</Text>
+                        <TouchableOpacity style={styles.timeDropdown}>
+                            <Text style={styles.timeDropdownText}>Daily</Text>
+                            <Ionicons name="chevron-down" size={14} color="white" style={{ marginLeft: 8 }} />
+                        </TouchableOpacity>
+                      </View>
+                      <View style={styles.chartArea}>
+                        <CandleChart data={CHART_DATA} />
+                      </View>
+                  </View>
 
-                 <View style={[styles.pricingCard, (isMobile || isTablet) && { width: '100%' }]}>
-                    <View style={styles.pricingHeader}>
-                       <View style={styles.recommendedBadge}>
-                          <Text style={styles.recommendedText}>RECOMMENDED</Text>
-                       </View>
-                       <Text style={styles.planTitle}>Spotlight Plan</Text>
-                       <View style={styles.priceRow}>
-                          <Text style={styles.priceSymbol}>₹</Text>
-                          <Text style={styles.priceValue}>149</Text>
-                          <Text style={styles.priceUnit}>/month</Text>
-                       </View>
-                    </View>
-                    
-                    <View style={styles.featuresList}>
-                       <FeatureItem label="Full Regional" />
-                       <FeatureItem label="Predictive Pricing" />
-                       <FeatureItem label="Unlimited Density" />
-                       <FeatureItem label="24/7 Priority Support" />
-                    </View>
+                  <View style={[styles.pricingCard, (isMobile || isTablet) && { width: '100%' }]}>
+                      <View style={styles.pricingHeader}>
+                        <View style={styles.recommendedBadge}>
+                            <Text style={styles.recommendedText}>RECOMMENDED</Text>
+                        </View>
+                        <Text style={[
+                          styles.pageTitle,
+                          isMobile && styles.pageTitleMobile,
+                          isSmallMobile && styles.pageTitleSmallMobile
+                        ]}>Spotlights</Text>
+                        <View style={styles.priceRow}>
+                            <Text style={styles.priceSymbol}>₹</Text>
+                            <Text style={styles.priceValue}>149</Text>
+                            <Text style={styles.priceUnit}>/month</Text>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.featuresList}>
+                        <FeatureItem label="Full Regional" />
+                        <FeatureItem label="Predictive Pricing" />
+                        <FeatureItem label="Unlimited Density" />
+                        <FeatureItem label="24/7 Priority Support" />
+                      </View>
 
-                    <TouchableOpacity style={styles.upgradeBtn}>
-                       <Text style={styles.upgradeBtnText}>Upgrade Now</Text>
-                    </TouchableOpacity>
-                 </View>
-              </View>
+                      <TouchableOpacity style={styles.upgradeBtn}>
+                        <Text style={styles.upgradeBtnText}>Upgrade Now</Text>
+                      </TouchableOpacity>
+                  </View>
+                </View>
 
-              {/* Pricing Section */}
-              <View style={styles.pricingSection}>
-                 <Text style={styles.adSectionTitle}>Advertising</Text>
-                 <Image 
-                    source={{ uri: 'https://images.unsplash.com/photo-1540200049848-d9813ea0e120?q=80&w=2070' }} 
-                    style={styles.adBannerImg}
-                 />
-                 <View style={styles.adContent}>
-                    <Text style={styles.adTitle}>Summer sale is on!</Text>
-                    <Text style={styles.adSubtitle}>Buy your loved pieces with reduced prices upto 70% off!</Text>
-                 </View>
-              </View>
-              
-              {/* Teacher Thoughts Section - Real Implementation */}
-              <View style={styles.thoughtsSection}>
-                <Text style={styles.sectionTitle}>Teacher Thoughts</Text>
-                
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
-                  <TeacherPostComposer
-                    onCreatePost={handleCreatePost}
-                    placeholder="Post your thoughts..."
+                {/* Pricing Section */}
+                <View style={[
+                      styles.mainSection,
+                      isMobile && styles.mainSectionMobile,
+                      isTablet && styles.mainSectionTablet
+                    ]}>
+                  <View style={[
+                    styles.chartContainer,
+                    isMobile && styles.chartContainerMobile,
+                    isTablet && styles.chartContainerTablet
+                  ]}>
+                      <Text style={styles.adSectionTitle}>Advertising</Text>
+                  <Image 
+                      source={{ uri: 'https://images.unsplash.com/photo-1540200049848-d9813ea0e120?q=80&w=2070' }} 
+                      style={styles.adBannerImg}
                   />
-                  {postsLoading && posts.length === 0 && (
-                    <ActivityIndicator color={COLORS.primaryBlue} style={{ marginTop: 30 }} />
-                  )}
-                  {!postsLoading && posts.length === 0 && (
-                    <View style={{ alignItems: 'center', paddingVertical: 30 }}>
-                      <Text style={{ fontSize: 16, color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
-                        No thoughts yet. Be the first to share!
-                      </Text>
-                    </View>
-                  )}
-                  {posts.map((post: any) => (
-                    <TeacherThoughtsCard
-                      key={post.id}
-                      post={post}
-                      userProfileCache={userProfileCache}
-                      onLike={(postId: string) => {
-                        setPosts(posts.map(p => 
-                          p.id === postId 
-                            ? { ...p, likes: p.isLiked ? p.likes - 1 : p.likes + 1, isLiked: !p.isLiked }
-                            : p
-                        ));
-                      }}
-                      onComment={(post) => {
-                        // Handle comment logic
-                      }}
-                      onReport={(post) => {
-                        // Handle report logic
-                      }}
-                      getProfileImageSource={getProfileImageSource}
-                      initials={getInitials}
-                      resolvePostAuthor={resolvePostAuthor}
+                  <View style={styles.adContent}>
+                      <Text style={styles.adTitle}>Summer sale is on!</Text>
+                      <Text style={styles.adSubtitle}>Buy your loved pieces with reduced prices upto 70% off!</Text>
+                  </View>
+                </View>
+                
+
+                
+                {/* Teacher Thoughts Section - Real Implementation */}
+                <View style={styles.thoughtsSection}>
+                  <Text style={styles.sectionTitle}>Teacher Thoughts</Text>
+                  
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+                    <TeacherPostComposer
+                      onCreatePost={handleCreatePost}
+                      placeholder="Post your thoughts..."
                     />
-                  ))}
-                </ScrollView>
-              </View>
-              </View>
+                    {postsLoading && posts.length === 0 && (
+                      <ActivityIndicator color={COLORS.primaryBlue} style={{ marginTop: 30 }} />
+                    )}
+                    {!postsLoading && posts.length === 0 && (
+                      <View style={{ alignItems: 'center', paddingVertical: 30 }}>
+                        <Text style={{ fontSize: 16, color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
+                          No thoughts yet. Be the first to share!
+                        </Text>
+                      </View>
+                    )}
+                    {posts.map((post: any) => {
+                      const resolvePostAuthor = (post: any) => {
+                        const userProfile = userProfileCache.get(post.author.email) || { name: 'Unknown User', profilePic: '' };
+                        let name = userProfile.name || post.author.name;
+                        let pic: string | null = userProfile.profilePic || post.author.profile_pic;
+                        let role = post.author.role;
+                        
+                        if (!name || name === 'null' || name === 'undefined' || name.trim() === '' || name.includes('@')) {
+                          name = post.author.email?.split('@')[0] || 'Unknown User';
+                        }
+                        
+                        if (pic && pic !== '' && pic !== 'null' && pic !== 'undefined') {
+                          if (!pic.startsWith('http') && !pic.startsWith('/')) {
+                            pic = `/${pic}`;
+                          }
+                        } else {
+                          pic = null;
+                        }
+                        
+                        if (!role || role.trim() === '' || role === 'null' || role === 'undefined') {
+                          role = 'User';
+                        }
+                        
+                        return { name, pic, role };
+                      };
+
+                      const initials = (name: string) => {
+                        return name ? name.split(' ').map(w => w.charAt(0)).join('').toUpperCase().slice(0, 2) : 'U';
+                      };
+
+                      return (
+                        <ThoughtsCard
+                          key={post.id}
+                          post={post}
+                          onLike={(postId: string) => {
+                            setPosts(posts.map(p => 
+                              p.id === postId 
+                                ? { ...p, likes: p.isLiked ? p.likes - 1 : p.likes + 1, isLiked: !p.isLiked }
+                                : p
+                            ));
+                          }}
+                          onComment={(post) => {
+                            // Handle comment logic
+                          }}
+                          onReport={(post) => {
+                            // Handle report logic
+                          }}
+                          getProfileImageSource={getProfileImageSource}
+                          initials={initials}
+                          resolvePostAuthor={resolvePostAuthor}
+                        />
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+                </View>
+                </View>
+                
             </ScrollView>
-          )}
-        </View>
-      </View>
-      
-    </View>
-  );
+            
+                  )}
+    
+            </View>
+            </View>
+            </View>
+  )
 }
+        
 
 // --- Chart Component (High-Precision Scale) ---
 const CandleChart = ({ data }: any) => {
@@ -798,24 +1032,30 @@ const styles = StyleSheet.create({
   scrollContent: { padding: wp('3%') },
   pageContent: { flex: 1 },
   pageTitle: { fontFamily: 'Poppins_700Bold', fontSize: 44, color: COLORS.textHeader, marginBottom: 40, letterSpacing: -1 },
+  pageTitleMobile: { fontSize: 32, marginBottom: 25 },
+  pageTitleSmallMobile: { fontSize: 28, marginBottom: 20 },
 
   topControls: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 35 },
   filterGroup: { flex: 1, flexDirection: 'row', marginRight: wp('5%') },
-  filterItem: { backgroundColor: COLORS.white, borderRadius: 16, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.04, shadowRadius: 15, elevation: 4 },
+  filterItem: { backgroundColor: COLORS.white, borderRadius: 16, padding: 18, ...Platform.select({ web: { boxShadow: '0px 8px 15px rgba(0, 0, 0, 0.04)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.04, shadowRadius: 15, elevation: 4 } }) },
   filterIconRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   filterLabel: { fontFamily: 'Poppins_700Bold', fontSize: 11, color: COLORS.textHeader, marginLeft: 12, textTransform: 'uppercase' },
   filterInput: { fontFamily: 'Poppins_400Regular', fontSize: 14, color: COLORS.textBody, backgroundColor: '#F9FAFB', borderRadius: 10, padding: 10 },
   dropdownTrigger: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 10, padding: 12, width: '100%', borderWidth: 1, borderColor: '#F3F4F6' },
   dropdownValue: { fontFamily: 'Poppins_500Medium', fontSize: 14, color: COLORS.textHeader },
 
-  toggleContainer: { flexDirection: 'row', backgroundColor: COLORS.white, borderRadius: 10, padding: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 3 },
+  toggleContainer: { flexDirection: 'row', backgroundColor: COLORS.white, borderRadius: 10, padding: 5, ...Platform.select({ web: { boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.06)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 3 } }) },
   toggleBtn: { paddingHorizontal: 25, paddingVertical: 10, borderRadius: 8 },
   toggleBtnActive: { backgroundColor: COLORS.primaryBlue },
   toggleText: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.textMuted },
   toggleTextActive: { color: COLORS.white },
 
   mainSection: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 40 },
-  chartContainer: { width: wp('58%'), backgroundColor: COLORS.chartDark, borderRadius: 16, padding: 25, overflow: 'hidden' },
+  mainSectionMobile: { flexDirection: 'column' },
+  mainSectionTablet: { flexDirection: 'column' },
+  chartContainer: { width: '58%', backgroundColor: COLORS.chartDark, borderRadius: 16, padding: 25 },
+  chartContainerMobile: { width: '100%', marginBottom: 20 },
+  chartContainerTablet: { width: '60%', marginBottom: 20 },
   chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
   chartTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 18, color: COLORS.white },
   timeDropdown: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
@@ -833,13 +1073,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderTopWidth: 0,
     borderColor: COLORS.primaryBlue,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 15,
-    zIndex: 10000,
-    overflow: 'hidden'
+    zIndex: 10000
   },
   dropdownOption: {
     padding: 14,
@@ -852,7 +1108,9 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
 
-  pricingCard: { width: wp('22%'), backgroundColor: '#2563EB', borderRadius: 16, padding: 30, shadowColor: COLORS.primaryBlue, shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.2, shadowRadius: 30, elevation: 15 },
+  pricingCard: { width: '22%', backgroundColor: '#2563EB', borderRadius: 16, padding: 30, ...Platform.select({ web: { boxShadow: '0px 20px 30px rgba(59, 130, 246, 0.2)' }, default: { shadowColor: COLORS.primaryBlue, shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.2, shadowRadius: 30, elevation: 15 } }) },
+  pricingCardMobile: { width: '100%', marginBottom: 20 },
+  pricingCardTablet: { width: '35%', marginBottom: 20 },
   pricingSection: { marginBottom: 40 },
   pricingHeader: { marginBottom: 35 },
   recommendedBadge: { backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginBottom: 15 },
@@ -870,13 +1128,13 @@ const styles = StyleSheet.create({
   upgradeBtn: { backgroundColor: COLORS.white, borderRadius: 12, height: 56, justifyContent: 'center', alignItems: 'center' },
   upgradeBtnText: { fontFamily: 'Poppins_700Bold', fontSize: 16, color: COLORS.primaryBlue },
 
-  bottomAd: { backgroundColor: COLORS.white, borderRadius: 16, padding: wp('3%'), shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3, marginBottom: 30 },
+  bottomAd: { backgroundColor: COLORS.white, borderRadius: 16, padding: wp('3%'), marginBottom: 30, ...Platform.select({ web: { boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.05)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 } }) },
   adSectionTitle: { fontFamily: 'Poppins_700Bold', fontSize: 13, color: COLORS.textHeader, marginBottom: 20 },
   adBannerImg: { width: '100%', height: hp('15%'), borderRadius: 12, marginBottom: 20 },
   adContent: { paddingHorizontal: 10 },
   adTitle: { fontFamily: 'Poppins_700Bold', fontSize: 16, color: COLORS.textHeader },
   adSubtitle: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: COLORS.textBody, marginTop: 4 },
-  thoughtsSection: { backgroundColor: COLORS.white, borderRadius: 16, padding: wp('3%'), shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3, marginBottom: 30 },
+  thoughtsSection: { backgroundColor: COLORS.white, borderRadius: 16, padding: wp('3%'), marginBottom: 30, ...Platform.select({ web: { boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.05)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 } }) },
   sectionTitle: { fontFamily: 'Poppins_700Bold', fontSize: 18, color: COLORS.textHeader, marginBottom: 20 },
   drawerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 99, flexDirection: 'row' },
   
@@ -884,15 +1142,16 @@ const styles = StyleSheet.create({
   webDualColumns: {
     flexDirection: 'row',
     flex: 1,
+    gap: 24,
   },
   webMainContent: {
     flex: 1,
-    marginRight: 30,
+    marginRight: 0,
   },
   webRightPanel: {
-    width: Platform.OS === 'web' ? '30%' : '30%',
-    minWidth: 350,
-    maxWidth: 450,
+    width: 380,
+    minWidth: 320,
+    maxWidth: 400,
     backgroundColor: '#FAFBFC',
     borderLeftWidth: 1,
     borderLeftColor: '#E5E7EB',
@@ -1005,10 +1264,27 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 3,
   },
   statIconWrapper: {
@@ -1046,10 +1322,27 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 3,
   },
   activityIcon: {
@@ -1085,5 +1378,206 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 10,
     color: COLORS.white,
+  },
+
+  // Enhanced UI Styles
+  enhancedPageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 40,
+    backgroundColor: COLORS.primaryBlue,
+    borderRadius: 20,
+    padding: 30,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 10px 30px rgba(37, 99, 235, 0.3)',
+      },
+      default: {
+        shadowColor: COLORS.primaryBlue,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 30,
+        elevation: 15,
+      },
+    }),
+  },
+  headerContent: {
+    flex: 1,
+  },
+  pageSubtitle: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 16,
+  },
+  headerStats: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  statBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  statBadgeText: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 12,
+    color: COLORS.white,
+    marginLeft: 6,
+  },
+  headerIllustration: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  illustrationCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  enhancedControls: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 35,
+  },
+  enhancedFilterItem: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.primaryBlue,
+    ...Platform.select({
+      web: { boxShadow: '0px 10px 20px rgba(0, 0, 0, 0.08)' },
+      default: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 6 }
+    }),
+  },
+  enhancedToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
+    padding: 6,
+    ...Platform.select({
+      web: { boxShadow: '0px 6px 15px rgba(0, 0, 0, 0.08)' },
+      default: { shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.08, shadowRadius: 15, elevation: 4 }
+    }),
+  },
+
+  enhancedChartContainer: {
+    backgroundColor: COLORS.chartDark,
+    borderRadius: 20,
+    padding: 30,
+    marginBottom: 30,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 15px 35px rgba(15, 23, 42, 0.3)',
+      },
+      default: {
+        shadowColor: COLORS.chartDark,
+        shadowOffset: { width: 0, height: 15 },
+        shadowOpacity: 0.3,
+        shadowRadius: 35,
+        elevation: 15,
+      },
+    }),
+  },
+  chartTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  chartSubtitle: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+
+  enhancedStatsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 30,
+    gap: 20,
+  },
+  enhancedStatCard: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    padding: 24,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 8px 25px rgba(0, 0, 0, 0.08)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.08,
+        shadowRadius: 25,
+        elevation: 6,
+      },
+    }),
+    borderTopWidth: 3,
+    borderTopColor: COLORS.primaryBlue,
+  },
+  statChange: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 11,
+    color: COLORS.successGreen,
+    marginTop: 4,
+  },
+
+  enhancedActivitySection: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: 25,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 8px 25px rgba(0, 0, 0, 0.08)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.08,
+        shadowRadius: 25,
+        elevation: 6,
+      },
+    }),
+  },
+  activityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  viewAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  viewAllBtnText: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 12,
+    color: COLORS.primaryBlue,
+    marginRight: 4,
+  },
+  enhancedActivityItem: {
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primaryBlue,
   },
 });

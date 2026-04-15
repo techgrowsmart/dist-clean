@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -13,7 +14,6 @@ import {
   Modal,
   Alert,
   TextInput,
-  Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { FontAwesome, Ionicons, AntDesign, MaterialIcons } from '@expo/vector-icons';
@@ -26,6 +26,8 @@ import { autoRefreshToken } from '../../../utils/tokenRefresh';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import WebSidebar from "../../../components/ui/WebSidebar";
 import WebNavbar from "../../../components/ui/WebNavbar";
+import ResponsiveSidebar from "../../../components/ui/ResponsiveSidebar";
+import StudentThoughtsCard from "../../../components/ui/StudentThoughtsCard";
 import ThoughtsCard from "./ThoughtsCard";
 import axios from "axios";
 import { addFavoriteTeacher, removeFavoriteTeacher, checkFavoriteStatus } from '../../../services/favoriteTeachers';
@@ -53,7 +55,17 @@ interface Teacher {
   board?: string;
   class?: string;
   subject?: string;
-  charge?: number;
+  charge?: number | string;
+  hourlyRate?: number | string;
+  rate?: number | string;
+  price?: number | string;
+  fee?: number | string;
+  amount?: number | string;
+  hourly_charge?: number | string;
+  tuition_fee?: number | string;
+  cost?: number | string;
+  sessionCharge?: number | string;
+  classCharge?: number | string;
   rating?: number;
   introduction?: string;
   description?: string;
@@ -88,6 +100,19 @@ export default function TeachersList({
   const boardName = propBoardName || params.boardName as string;
   const selectedClass = propSelectedClass || params.selectedClass as string;
   const selectedSubject = propSelectedSubject || params.selectedSubject as string;
+  const showAllTutors = params.showAllTutors === 'true';
+
+  // University flow params
+  const isUniversityFlow = params.isUniversities === 'true' || params.isUniversity === 'true';
+  const universityId = params.universityId as string;
+  const universityName = params.universityName as string;
+  const yearId = params.yearId as string;
+  const yearName = params.yearName as string;
+  const year = params.year as string;
+  const yearIndex = params.yearIndex as string;
+
+  // Skill flow params
+  const skill = params.skill as string;
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_600SemiBold,
@@ -102,10 +127,19 @@ export default function TeachersList({
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
-  const [activeMenu, setActiveMenu] = useState("Teachers");
-  const [sidebarActiveItem, setSidebarActiveItem] = useState("Teachers");
+  const [activeMenu, setActiveMenu] = useState("Home");
+  const [sidebarActiveItem, setSidebarActiveItem] = useState("Home");
 
   const isDesktop = Platform.OS === 'web' && Dimensions.get('window').width >= 1024;
+  const [isMobile, setIsMobile] = useState(Dimensions.get('window').width < 768);
+
+  // Update isMobile on resize
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setIsMobile(window.width < 768);
+    });
+    return () => subscription?.remove();
+  }, []);
 
   // Posts-related state for ThoughtsCard
   const [posts, setPosts] = useState<any[]>([]);
@@ -121,16 +155,18 @@ export default function TeachersList({
   const [reportItemId, setReportItemId] = useState('');
   const [reportReason, setReportReason] = useState('');
 
-  const formatCharge = (charge: string | number) => {
+  const formatCharge = (charge: string | number | undefined | null) => {
+    if (!charge && charge !== 0) return '₹0';
     const num = typeof charge === 'string' ? parseFloat(charge) : charge;
+    if (isNaN(num)) return '₹0';
     return `₹${num.toFixed(0)}`;
   };
 
   useEffect(() => {
     console.log("🚀 useEffect triggered!");
-    console.log("📋 Props received:", { boardName, selectedClass, selectedSubject });
+    console.log("📋 Props received:", { boardName, selectedClass, selectedSubject, showAllTutors, isUniversityFlow, universityName, yearName, skill });
     fetchTeachers();
-  }, [boardName, selectedClass, selectedSubject]);
+  }, [boardName, selectedClass, selectedSubject, showAllTutors, isUniversityFlow, universityName, yearName, skill]);
 
   // Fetch posts for ThoughtsCard (web only)
   useEffect(() => {
@@ -153,7 +189,7 @@ export default function TeachersList({
           if (authData?.email) {
             setUserEmail(authData.email);
             setUserRole(authData.role || 'student');
-            
+
             const res = await fetch(`${BASE_URL}/api/userProfile`, {
               method: 'POST',
               headers: {
@@ -168,9 +204,9 @@ export default function TeachersList({
 
             if (res.ok) {
               const data = await res.json();
-              if (data.name || data.profileimage) {
-                setStudentName(data.name || '');
-                setProfileImage(data.profileimage || '');
+              if (data.data?.name || data.data?.profileimage) {
+                setStudentName(data.data.name || '');
+                setProfileImage(data.data.profileimage || '');
               }
             }
           }
@@ -180,10 +216,153 @@ export default function TeachersList({
       };
 
       fetchUserProfile();
+
+      // Add ESC key handler for web
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          if (onBack) {
+            onBack();
+          } else {
+            router.back();
+          }
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
     }
-  }, []);
+  }, [onBack, router]);
 
   const fetchTeachers = async () => {
+    // Skill flow: fetch teachers by skill
+    if (skill) {
+      setLoading(true);
+      try {
+        const auth = await getAuthData();
+        if (!auth || !auth.token) {
+          console.error("No authentication token found");
+          setLoading(false);
+          return;
+        }
+        const headers = {
+          Authorization: `Bearer ${auth.token}`,
+          "Content-Type": "application/json",
+        };
+        console.log("📡 Fetching skill teachers:", { skill });
+        const res = await fetch(`${BASE_URL}/api/teachers/skill`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            selectedSkill: skill
+          }),
+        });
+        const data = await res.json();
+        console.log("🔍 SKILL TEACHERS API RESPONSE:", JSON.stringify(data, null, 2));
+        
+        if (Array.isArray(data)) {
+          setTeachers(data);
+        } else {
+          setTeachers([]);
+        }
+        setCurrentPage(1);
+        setLoading(false);
+        return;
+      } catch (error) {
+        console.error("Error fetching skill teachers:", error);
+        setTeachers([]);
+        setCurrentPage(1);
+        setLoading(false);
+        return;
+      }
+    }
+
+    // If showAllTutors is true, fetch all subject teachers regardless of board/class/subject
+    if (showAllTutors) {
+      setLoading(true);
+      try {
+        const auth = await getAuthData();
+        if (!auth || !auth.token) {
+          console.error("No authentication token found");
+          setLoading(false);
+          return;
+        }
+        const headers = {
+          Authorization: `Bearer ${auth.token}`,
+          "Content-Type": "application/json",
+        };
+        const res = await fetch(`${BASE_URL}/api/teachers`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            category: "Subject teacher"
+          }),
+        });
+        const data = await res.json();
+        console.log("🔍 ALL TEACHERS API RESPONSE:", JSON.stringify(data, null, 2));
+        
+        if (data.success && data.data) {
+          setTeachers(data.data);
+          setCurrentPage(1);
+          setLoading(false);
+          return;
+        } else {
+          setTeachers([]);
+          setCurrentPage(1);
+          setLoading(false);
+          return;
+        }
+      } catch (error) {
+        console.error("Error fetching all teachers:", error);
+        setTeachers([]);
+        setCurrentPage(1);
+        setLoading(false);
+        return;
+      }
+    }
+
+    // University flow: fetch university teachers
+    if (isUniversityFlow && universityName && yearName && selectedSubject) {
+      setLoading(true);
+      try {
+        const auth = await getAuthData();
+        if (!auth || !auth.token) {
+          console.error("No authentication token found");
+          setLoading(false);
+          return;
+        }
+        const headers = {
+          Authorization: `Bearer ${auth.token}`,
+          "Content-Type": "application/json",
+        };
+        console.log("📡 Fetching university teachers:", { university: universityName, year: yearName, subject: selectedSubject });
+        const res = await fetch(`${BASE_URL}/api/universities/teachers`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            university: universityName,
+            year: yearName,
+            subject: selectedSubject,
+          }),
+        });
+        const data = await res.json();
+        console.log("🔍 UNIVERSITY TEACHERS API RESPONSE:", JSON.stringify(data, null, 2));
+        if (Array.isArray(data)) {
+          setTeachers(data);
+        } else {
+          setTeachers([]);
+        }
+        setCurrentPage(1);
+        setLoading(false);
+        return;
+      } catch (error) {
+        console.error("Error fetching university teachers:", error);
+        setTeachers([]);
+        setCurrentPage(1);
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Original logic for board/class/subject specific teachers
     if (!boardName || !selectedClass || !selectedSubject) {
       setLoading(false);
       return;
@@ -312,9 +491,9 @@ export default function TeachersList({
   };
 
   const handleLikePress = async (teacherEmail: string) => {
+    const isLiked = likedTeachers[teacherEmail] || false;
+    
     try {
-        const isLiked = likedTeachers[teacherEmail] || false;
-        
         // Optimistic update
         setLikedTeachers(prev => ({
             ...prev, 
@@ -381,6 +560,27 @@ export default function TeachersList({
     }
   };
 
+  const renderWebRightSidebar = () => (
+    <StudentThoughtsCard
+      posts={posts}
+      postsLoading={postsLoading}
+      userProfileCache={userProfileCache}
+      currentUserEmail={userEmail || undefined}
+      getProfileImageSource={getProfileImageSource}
+      initials={initials}
+      resolvePostAuthor={resolvePostAuthor}
+      handleLike={handleLike}
+      setPosts={setPosts}
+      onComment={openCommentsModal}
+      isMobile={isMobile}
+      showThoughtsPanel={true}
+      authToken={authToken}
+      BASE_URL={BASE_URL}
+      formatTimeAgo={formatTimeAgo}
+      router={router}
+    />
+  );
+
   // Posts-related functions for ThoughtsCard
   const formatTimeAgo = (createdAt: string) => {
     try {
@@ -404,9 +604,9 @@ export default function TeachersList({
   const fetchUserProfile = async (token: string, email: string) => {
     try {
       if (userProfileCache.has(email)) return userProfileCache.get(email)!;
-      const response = await axios.post(`${BASE_URL}/api/userProfile`, { email }, { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` } });
-      if (response.data?.name) {
-        const profile = { name: response.data.name, profilePic: response.data.profileimage || '' };
+      const response = await axios.post(`${BASE_URL}/api/userProfile`, { email, source: 'astraDB' }, { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` } });
+      if (response.data?.data?.name) {
+        const profile = { name: response.data.data.name, profilePic: response.data.data.profileimage || '' };
         setUserProfileCache(prev => new Map(prev.set(email, profile)));
         return profile;
       }
@@ -445,8 +645,9 @@ export default function TeachersList({
 
   const resolvePostAuthor = (post: any) => {
     const cached = userProfileCache.get(post.author?.email) || { name: '', profilePic: '' };
-    let name = cached.name || post.author?.name || '';
-    let pic: string | null = cached.profilePic || post.author?.profile_pic || null;
+    // Prioritize post.author.name first, then cache, then fallback
+    let name = post.author?.name || cached.name || '';
+    let pic: string | null = post.author?.profile_pic || cached.profilePic || null;
     if (!name) name = 'Unknown User';
     return { name, pic: pic || '', role: 'student' };
   };
@@ -498,13 +699,82 @@ export default function TeachersList({
       }
     }
 
-    const matchingTuition = tuitions.find(t =>
-      t.board === boardName && t.class === selectedClass && t.subject === selectedSubject
+    // For university flow, use universityName and yearName instead of boardName/class
+    const searchBoard = isUniversityFlow ? universityName : boardName;
+    const searchClass = isUniversityFlow ? yearName : selectedClass;
+
+    // Debug: Log the tuition data for first teacher
+    if (tuitions.length > 0 && __DEV__) {
+      console.log('🔍 Teacher:', item.name);
+      console.log('🔍 Tuitions:', JSON.stringify(tuitions, null, 2));
+      console.log('🔍 Search:', { searchBoard, searchClass, selectedSubject });
+    }
+
+    // Find matching tuition - for universities, also check if board equals "Universities"
+    let matchingTuition = tuitions.find(t =>
+      (t.board === searchBoard || t.university === searchBoard || (isUniversityFlow && t.board === 'Universities')) &&
+      (t.class === searchClass || t.year === searchClass || (isUniversityFlow && t.year === yearName)) &&
+      (t.subject === selectedSubject)
     );
 
-    const teachingClass = matchingTuition?.class || selectedClass;
+    // If no exact match and this is university flow, just use the first tuition
+    if (!matchingTuition && isUniversityFlow && tuitions.length > 0) {
+      matchingTuition = tuitions[0];
+      console.log('🔍 Using first tuition as fallback for university teacher');
+    }
+
+    // Debug: Log if matching tuition found
+    if (__DEV__) {
+      console.log('🔍 Matching tuition:', matchingTuition ? 'FOUND' : 'NOT FOUND');
+      if (matchingTuition) {
+        console.log('🔍 Matching tuition data:', JSON.stringify(matchingTuition, null, 2));
+      }
+    }
+
+    const teachingClass = matchingTuition?.class || matchingTuition?.year || searchClass;
     const subject = matchingTuition?.subject || selectedSubject;
-    const charge = matchingTuition?.charge || item.charge || '0';
+
+    // Extract charge from matching tuition or fall back to item level
+    let chargeValue: string | number = '0';
+
+    if (matchingTuition) {
+      // Try all possible field names on the matching tuition
+      chargeValue = matchingTuition.charge ??
+                    matchingTuition.price ??
+                    matchingTuition.fee ??
+                    matchingTuition.amount ??
+                    matchingTuition.hourlyRate ??
+                    matchingTuition.rate ??
+                    matchingTuition.hourly_charge ??
+                    matchingTuition.tuition_fee ??
+                    matchingTuition.cost ??
+                    matchingTuition.sessionCharge ??
+                    matchingTuition.classCharge ??
+                    '0';
+    }
+
+    // If still no charge, try item-level fields
+    if (chargeValue === '0' || chargeValue === 0 || chargeValue === undefined || chargeValue === null || chargeValue === '') {
+      chargeValue = item.charge ??
+                    item.hourlyRate ??
+                    item.rate ??
+                    item.price ??
+                    item.fee ??
+                    item.amount ??
+                    item.hourly_charge ??
+                    item.tuition_fee ??
+                    item.cost ??
+                    item.sessionCharge ??
+                    item.classCharge ??
+                    '0';
+    }
+
+    // Debug: Log the final charge value
+    if (__DEV__) {
+      console.log('💰 Final charge value:', chargeValue, typeof chargeValue);
+    }
+
+    const charge = chargeValue;
     const introduction = item.introduction || item.description || 'Experienced educator with passion for teaching';
     const rating = item.rating || 4.9;
 
@@ -596,6 +866,13 @@ export default function TeachersList({
               source={profileImg ? { uri: profileImg } : require('../../../assets/images/Profile.png')}
               style={styles.image}
             />
+            {/* Heart/Favorite Button */}
+            <TouchableOpacity
+              style={styles.heartBtn}
+              onPress={(e) => { e.stopPropagation(); handleLikePress(item.email); }}
+            >
+              <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={20} color={isLiked ? '#e74c3c' : '#fff'} />
+            </TouchableOpacity>
           </View>
           <Text style={styles.name} numberOfLines={2}>{item.name}</Text>
           <View style={styles.webClassInfo}>
@@ -670,54 +947,13 @@ export default function TeachersList({
   if (Platform.OS === 'web') {
     return (
       <SafeAreaView style={styles.safeArea}>
-        {/* ── WEB HEADER - Full Width ── */}
-        {isDesktop && (
-          <WebNavbar
-            studentName={studentName || "Student"}
-            profileImage={profileImage}
-          />
-        )}
-
-        <View style={styles.rootContainer}>
-
-          {/* ── MOBILE TOP NAVBAR ── */}
-          {!isDesktop && (
-            <View style={styles.topHeader}>
-              <View style={styles.searchContainer}>
-                <Ionicons name="search" size={20} color={COLORS.textSecondary} style={styles.searchIcon} />
-                <TextInput 
-                  placeholder="Type in search" 
-                  placeholderTextColor={COLORS.textSecondary} 
-                  style={styles.searchInput} 
-                />
-              </View>
-              <View style={styles.profileHeaderSection}>
-                <TouchableOpacity 
-                  style={styles.bellIcon} 
-                  onPress={() => router.push("/(tabs)/StudentDashBoard/StudentNotification")}
-                >
-                  <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
-                </TouchableOpacity>
-                <Text style={styles.headerUserName}>{studentName || 'Student'}</Text>
-                <Image 
-                  source={profileImage ? { uri: profileImage } : require("../../../assets/images/Profile.png")} 
-                  style={styles.headerAvatar} 
-                />
-              </View>
-            </View>
-          )}
-
-          {/* ── LEFT SIDEBAR (WebSidebar component — desktop only) ── */}
-          {isDesktop && (
-            <WebSidebar
-              activeItem={sidebarActiveItem}
-              onItemPress={handleSidebarItemPress}
-              userEmail={userEmail || "student@example.com"}
-              studentName={studentName || "Student"}
-              profileImage={profileImage}
-            />
-          )}
-
+        <ResponsiveSidebar
+          activeItem={sidebarActiveItem}
+          onItemPress={handleSidebarItemPress}
+          userEmail={userEmail || ""}
+          studentName={studentName || "Student"}
+          profileImage={profileImage}
+        >
           {/* ── MAIN AREA ── */}
           <View style={styles.mainLayout}>
 
@@ -726,9 +962,14 @@ export default function TeachersList({
 
               {/* CENTER: Teachers Grid */}
               <View style={styles.centerContent}>
-                <View style={styles.pageTitleContainer}>
-                  <Ionicons name="school" size={28} color={COLORS.textPrimary} />
-                  <Text style={styles.pageTitle}>Teachers</Text>
+                <View style={styles.pageNavHeader}>
+                  <TouchableOpacity 
+                    style={styles.backButton} 
+                    onPress={() => router.back()}
+                  >
+                    <Ionicons name="arrow-back" size={20} color={COLORS.textPrimary} />
+                  </TouchableOpacity>
+                  <Text style={styles.pageTitle}>{skill ? `${skill} Teachers` : `${selectedSubject} Teachers`}</Text>
                 </View>
 
                 <View style={styles.webTeachersHeader}>
@@ -762,34 +1003,17 @@ export default function TeachersList({
               </View>
 
               {/* RIGHT: Thoughts Panel (ThoughtsCard reused from Student.tsx) */}
-              <View style={styles.rightPanel}>
-                <Text style={styles.rightPanelTitle}>Thoughts</Text>
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.thoughtsList}>
-                  {postsLoading && posts.length === 0 && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 30 }} />}
-                  {!postsLoading && posts.length === 0 && (
-                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                      <MaterialIcons name="post-add" size={40} color="#ccc" />
-                      <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No thoughts yet</Text>
-                    </View>
-                  )}
-                  {posts.map((post) => (
-                    <ThoughtsCard
-                      key={post.id}
-                      post={post}
-                      onLike={handleLike}
-                      onComment={openCommentsModal}
-                      onReport={(p) => { setReportType('post'); setReportItemId(p.id); setReportReason(''); setShowReportModal(true); }}
-                      getProfileImageSource={getProfileImageSource}
-                      initials={initials}
-                      resolvePostAuthor={resolvePostAuthor}
-                    />
-                  ))}
-                </ScrollView>
-              </View>
+              <>
+                {isMobile ? (
+                  renderWebRightSidebar()
+                ) : (
+                  <View style={styles.rightPanel}>{renderWebRightSidebar()}</View>
+                )}
+              </>
 
             </View>
           </View>
-        </View>
+      </ResponsiveSidebar>
       </SafeAreaView>
     );
   }
@@ -800,7 +1024,7 @@ export default function TeachersList({
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#4255ff" />
         </TouchableOpacity>
-        <Text style={styles.mobileHeaderTitle}>Teachers</Text>
+        <Text style={styles.mobileHeaderTitle}>{skill ? `${skill} Teachers` : 'Teachers'}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -861,6 +1085,10 @@ const webCardStyles = StyleSheet.create({
     backgroundColor: 'rgba(110,110,110,0.72)',
     borderRadius: 22,
     padding: 9,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   info: {
     padding: 16,
@@ -1020,6 +1248,14 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     marginBottom: 24 
   },
+  pageNavHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
   pageTitle: {
     fontSize: 24,
     fontFamily: 'Poppins_600SemiBold',
@@ -1150,6 +1386,18 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
+  },
+  heartBtn: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 12,
+    padding: 8,
+    minWidth: 40,
+    minHeight: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   name: {
     fontSize: 16,

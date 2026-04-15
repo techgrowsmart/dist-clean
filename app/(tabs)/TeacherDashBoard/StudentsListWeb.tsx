@@ -1,13 +1,13 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { Platform,  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
+import {  Ionicons } from '@expo/vector-icons';
+import {  router } from 'expo-router';
 import TeacherWebHeader from '../../../components/ui/TeacherWebHeader';
 import TeacherWebSidebar from '../../../components/ui/TeacherWebSidebar';
 import TeacherThoughtsCard, { TeacherThoughtsBackground } from '../../../components/ui/TeacherThoughtsCard';
 import TeacherPostComposer from '../../../components/ui/TeacherPostComposer';
-import { getAuthData } from '../../../utils/authStorage';
-import { BASE_URL } from '../../../config';
+import {  getAuthData } from '../../../utils/authStorage';
+import {   BASE_URL } from '../../../config';
 import axios from 'axios';
 
 const { width, height } = Dimensions.get('window');
@@ -232,15 +232,15 @@ const StudentsListWeb: React.FC<StudentsListWebProps> = ({
       <View style={styles.contentLayout}>
         {/* Sidebar */}
         {!isMobile && (
-          <TeacherWebSidebar 
-            activeItem={activeItem} 
-            onItemPress={handleSidebarSelect} 
-            userEmail={userEmail || ''} 
+          <TeacherWebSidebar
+            activeItem={activeItem}
+            onItemPress={handleSidebarSelect}
+            userEmail={userEmail || ''}
             teacherName={teacherName}
             profileImage={profileImage}
             subjectCount={0}
             studentCount={safeStudents.length}
-            revenue="₹8.9K"
+            revenue="₹0"
             isSpotlight={false}
           />
         )}
@@ -281,7 +281,7 @@ const StudentsListWeb: React.FC<StudentsListWebProps> = ({
                     <Text style={styles.emptyStateSubtext}>Your enrolled students will appear here</Text>
                   </View>
                 ) : (
-                  students.map((student, index) => (
+                  safeStudents.map((student, index) => (
                     <View key={index} style={styles.studentCard}>
                       <View style={styles.studentInfo}>
                         <View style={styles.avatar}>
@@ -415,10 +415,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...Platform.select({
+
+      web: {
+
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+
+      },
+
+      default: {
+
+        shadowColor: '#000',
+
+        shadowOffset: { width: 0, height: 4 },
+
+        shadowOpacity: 0.3,
+
+        shadowRadius: 8,
+
+      },
+
+    }),
     elevation: 3,
   },
   studentInfo: {

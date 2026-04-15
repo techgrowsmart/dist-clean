@@ -1,437 +1,1123 @@
-import { View, Text, ScrollView, StyleSheet, Platform, TouchableOpacity, FlatList, RefreshControl } from 'react-native'
-import React, { useState, useEffect } from 'react'
-import { router } from 'expo-router'
-import TeacherWebHeader from '../../../components/ui/TeacherWebHeader'
-import TeacherWebSidebar from '../../../components/ui/TeacherWebSidebar'
-import { getAuthData } from '../../../utils/authStorage'
-import { MaterialIcons, Ionicons } from '@expo/vector-icons'
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { BASE_URL } from '../../../config'
+import React, { useEffect, useState, useRef } from "react";
+import {
+  Platform,
+  View,
+  Text,
+  StyleSheet,
+  Dimensions,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+  Animated,
+  FlatList,
+  Linking,
+  Alert,
+  Modal,
+} from "react-native";
+import { Ionicons } from '@expo/vector-icons';
+import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
+import { router, useLocalSearchParams } from 'expo-router';
+import TeacherWebHeader from "../../../components/ui/TeacherWebHeader";
+import TeacherWebSidebar from "../../../components/ui/TeacherWebSidebar";
+import { getAuthData } from "../../../utils/authStorage";
+import { BASE_URL } from "../../../config";
+
+const { width, height } = Dimensions.get("window");
+
+interface Invoice {
+  id: string;
+  name: string;
+  description: string;
+  amount: string;
+  date: string;
+  status: 'paid' | 'pending' | 'overdue';
+  dueDate: string;
+  pdfUrl?: string;
+  downloadUrl?: string;
+}
+
+interface BillingStats {
+  totalPaid: number;
+  totalPending: number;
+  totalOverdue: number;
+  nextPaymentDate: string;
+  nextPaymentAmount: string;
+}
 
 const Billing = () => {
   const [teacherName, setTeacherName] = useState('');
   const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [sidebarActiveItem, setSidebarActiveItem] = useState('Billing');
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [billingData, setBillingData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [billingStats, setBillingStats] = useState<BillingStats>({
+    totalPaid: 0,
+    totalPending: 0,
+    totalOverdue: 0,
+    nextPaymentDate: '',
+    nextPaymentAmount: '',
+  });
   const [refreshing, setRefreshing] = useState(false);
-
-  // Load teacher data and billing information
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      const loadTeacherData = async () => {
-        try {
-          const authData = await getAuthData();
-          if (authData?.name) {
-            setTeacherName(authData.name);
-          }
-          if (authData?.profileImage) {
-            setProfileImage(authData.profileImage);
-          }
-          if (authData?.email) {
-            setUserEmail(authData.email);
-          }
-        } catch (error) {
-          console.error('Error loading teacher data:', error);
-        }
-      };
-      loadTeacherData();
-    }
-    
-    // Load billing data
-    loadBillingData();
-  }, []);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'pending' | 'overdue'>('all');
+  const [sortBy, setSortBy] = useState<'date' | 'amount' | 'status'>('date');
+  const [sidebarActiveItem, setSidebarActiveItem] = useState("Billing");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activeItem, setActiveItem] = useState("Billing");
   
-  const loadBillingData = async () => {
-    try {
-      setLoading(true);
-      const authData = await getAuthData();
-      if (!authData?.token) return;
-      
-      // TODO: Replace with actual API endpoint
-      const response = await fetch(`${BASE_URL}/api/teacher/billing`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${authData.token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+  // Animation refs
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(50));
+  
+  // Responsive breakpoints
+  const isMobile = width < 768;
+  const isDesktop = width >= 1024;
+  
+  const [fontsLoaded] = useFonts({
+    Poppins_400Regular,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+  });
 
-      if (response.ok) {
-        const data = await response.json();
-        setBillingData(data.billing || []);
-      } else {
-        console.error('Failed to load billing data:', response.statusText);
-        setBillingData([]);
-      }
-    } catch (error) {
-      console.error('Error loading billing data:', error);
-      setBillingData([]);
-    } finally {
-      setLoading(false);
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'paid': return '#10B981';
+      case 'pending': return '#F59E0B';
+      case 'overdue': return '#EF4444';
+      default: return '#6B7280';
     }
   };
-  
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'paid': return 'checkmark-circle';
+      case 'pending': return 'time';
+      case 'overdue': return 'alert-circle';
+      default: return 'help-circle';
+    }
+  };
+
+  const handleInvoicePress = (invoice: Invoice) => {
+    setSelectedInvoice(invoice);
+    setShowInvoiceModal(true);
+  };
+
+  const handleDownloadInvoice = (invoice: Invoice) => {
+    if (invoice.downloadUrl) {
+      Linking.openURL(invoice.downloadUrl);
+    } else {
+      Alert.alert('Download', 'Invoice download will be available soon.');
+    }
+  };
+
+  const handlePayInvoice = (invoice: Invoice) => {
+    router.push({
+      pathname: '/(tabs)/TeacherDashBoard/Payment',
+      params: { invoiceId: invoice.id, amount: invoice.amount }
+    } as any);
+  };
+
+  const handleSidebarToggle = () => {
+    setSidebarCollapsed(!sidebarCollapsed);
+  };
+
+  const handleBackPress = () => {
+    router.push("/(tabs)/TeacherDashBoard/Teacher");
+  };
+
+  // ESC key handler for web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleBackPress();
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, []);
+
+  const handleSelect = (item: string) => {
+    setActiveItem(item);
+    // Navigate based on item
+    switch (item) {
+      case "Dashboard":
+        router.push("/(tabs)/TeacherDashBoard/TutorDashboardWeb" as any);
+        break;
+      case "My Students":
+        router.push("/(tabs)/TeacherDashBoard/StudentsEnrolled" as any);
+        break;
+      case "My Subjects":
+        router.push("/(tabs)/TeacherDashBoard/MySubjectsWeb" as any);
+        break;
+      case "Create Subject":
+        router.push("/(tabs)/TeacherDashBoard/CreateSubject" as any);
+        break;
+      case "Spotlights":
+        router.push("/(tabs)/TeacherDashBoard/Spotlights" as any);
+        break;
+      case "Connect":
+        router.push("/(tabs)/TeacherDashBoard/ConnectWeb" as any);
+        break;
+      case "Share":
+        router.push("/(tabs)/TeacherDashBoard/Share" as any);
+        break;
+      case "Profile":
+        router.push("/(tabs)/TeacherDashBoard/ProfileWeb" as any);
+        break;
+      case "Billing":
+        // Already on this page
+        break;
+      case "Contact Us":
+        router.push("/(tabs)/TeacherDashBoard/Contact" as any);
+        break;
+      case "Terms & Conditions":
+        // External link
+        break;
+      case "Privacy Policy":
+        // External link
+        break;
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadBillingData();
+    // Reload billing data would go here
     setRefreshing(false);
   };
 
-  // Handle sidebar navigation
-  const handleSidebarSelect = (item: string) => {
-    setSidebarActiveItem(item);
-    // Handle navigation for sidebar items
-    switch (item) {
-      case 'Dashboard':
-        router.push('/(tabs)/TeacherDashBoard/TutorDashboardWeb');
-        break;
-      case 'My Students':
-        router.push('/(tabs)/TeacherDashBoard/StudentsEnrolled');
-        break;
-      case 'My Subjects':
-        router.push('/(tabs)/TeacherDashBoard/SubjectsListWeb');
-        break;
-      case 'Create Subject':
-        router.push('/(tabs)/TeacherDashBoard/CreateSubject');
-        break;
-      case 'Spotlights':
-        router.push('/(tabs)/TeacherDashBoard/JoinedDateWeb');
-        break;
-      case 'Share':
-        router.push('/(tabs)/TeacherDashBoard/Share');
-        break;
-      case 'Billing':
-        // Already on this page
-        break;
-      case 'Settings':
-        router.push('/(tabs)/TeacherDashBoard/Settings');
-        break;
-      case 'Contact Us':
-        router.push('/(tabs)/Contact');
-        break;
-      default:
-        console.log('Navigate to:', item);
-    }
-  };
+  useEffect(() => {
+    // Fetch teacher data
+    const fetchTeacherData = async () => {
+      try {
+        const auth = await getAuthData();
+        if (auth?.token) {
+          setAuthToken(auth.token);
+          setTeacherName(auth.name || '');
+          setUserEmail(auth.email || '');
+          setProfileImage(auth.profileImage || null);
+        }
+      } catch (error) {
+        console.error('Error loading teacher data:', error);
+      }
+    };
 
-  const renderBillingItem = ({ item }: { item: any }) => (
-    <View style={styles.billingItem}>
-      <View style={styles.itemHeader}>
-        <View style={[styles.statusDot, { backgroundColor: item.status === 'Paid' ? '#10b981' : '#f59e0b' }]} />
-        <View style={styles.itemInfo}>
-          <Text style={styles.itemDescription}>{item.description}</Text>
-          <Text style={styles.itemDate}>{item.date}</Text>
-        </View>
-        <View style={styles.itemAmount}>
-          <Text style={styles.amountText}>{item.amount}</Text>
-          <Text style={[styles.statusText, { color: item.status === 'Paid' ? '#10b981' : '#f59e0b' }]}>
-            {item.status}
-          </Text>
-        </View>
+    // Start entrance animations
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      })
+    ]).start();
+
+    const loadBillingData = async () => {
+      try {
+        const auth = await getAuthData();
+        if (!auth?.token) {
+          console.error('❌ No auth token found for billing data');
+          setInvoices([]);
+          setBillingStats({
+            totalPaid: 0,
+            totalPending: 0,
+            totalOverdue: 0,
+            nextPaymentDate: '',
+            nextPaymentAmount: '',
+          });
+          setLoading(false);
+          return;
+        }
+
+        const headers = { 
+          Authorization: `Bearer ${auth.token}`, 
+          "Content-Type": "application/json" 
+        };
+
+        // Fetch teacher billing data from API
+        const response = await fetch(`${BASE_URL}/api/billing/teacher-invoices`, {
+          method: 'GET',
+          headers,
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setInvoices(data.invoices || []);
+          setBillingStats(data.stats || {
+            totalPaid: 0,
+            totalPending: 0,
+            totalOverdue: 0,
+            nextPaymentDate: '',
+            nextPaymentAmount: '',
+          });
+        } else {
+          console.error('❌ Failed to fetch billing data:', response.status);
+          setInvoices([]);
+          setBillingStats({
+            totalPaid: 0,
+            totalPending: 0,
+            totalOverdue: 0,
+            nextPaymentDate: '',
+            nextPaymentAmount: '',
+          });
+        }
+      } catch (error) {
+        console.error('❌ Error loading billing data:', error);
+        setInvoices([]);
+        setBillingStats({
+          totalPaid: 0,
+          totalPending: 0,
+          totalOverdue: 0,
+          nextPaymentDate: '',
+          nextPaymentAmount: '',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+
+
+    fetchTeacherData();
+    loadBillingData();
+  }, [authToken]);
+
+  // Filter and sort invoices
+  const filteredInvoices = invoices.filter(invoice => 
+    filterStatus === 'all' || invoice.status === filterStatus
+  );
+
+  const sortedInvoices = [...filteredInvoices].sort((a, b) => {
+    switch (sortBy) {
+      case 'date':
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      case 'amount':
+        return parseFloat(b.amount.replace('₹', '')) - parseFloat(a.amount.replace('₹', ''));
+      case 'status':
+        return a.status.localeCompare(b.status);
+      default:
+        return 0;
+    }
+  });
+
+  const renderInvoiceItem = (invoice: Invoice) => (
+    <TouchableOpacity
+      key={invoice.id}
+      style={styles.invoiceItem}
+      onPress={() => handleInvoicePress(invoice)}
+    >
+      <View style={[styles.statusIcon, { backgroundColor: getStatusColor(invoice.status) }]}>
+        <Ionicons name={getStatusIcon(invoice.status)} size={20} color="#FFFFFF" />
       </View>
-      <View style={styles.itemFooter}>
-        <View style={styles.typeBadge}>
-          <Text style={styles.typeText}>{item.type}</Text>
-        </View>
-        <TouchableOpacity style={styles.downloadBtn}>
-          <Ionicons name="download-outline" size={16} color="#3B5BFE" />
+      <View style={styles.invoiceInfo}>
+        <Text style={styles.invoiceName}>{invoice.name}</Text>
+        <Text style={styles.invoiceDescription}>{invoice.description}</Text>
+        <Text style={styles.invoiceDate}>Due: {invoice.dueDate}</Text>
+      </View>
+      <View style={styles.invoiceRight}>
+        <Text style={styles.invoiceAmount}>{invoice.amount}</Text>
+        <Text style={[styles.invoiceStatus, { color: getStatusColor(invoice.status) }]}>
+          {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={styles.downloadButton}
+        onPress={() => handleDownloadInvoice(invoice)}
+      >
+        <Ionicons name="download-outline" size={20} color="#3B5BFE" />
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+
+  const renderStatsCard = () => (
+    <View style={styles.statsContainer}>
+      <View style={styles.statsHeader}>
+        <Text style={styles.statsTitle}>Billing Overview</Text>
+        <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
+          <Ionicons name="refresh-outline" size={20} color="#3B5BFE" />
         </TouchableOpacity>
       </View>
+      
+      <View style={styles.statsGrid}>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{billingStats.totalPaid}</Text>
+          <Text style={styles.statLabel}>Total Paid</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{billingStats.totalPending}</Text>
+          <Text style={styles.statLabel}>Pending</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{billingStats.totalOverdue}</Text>
+          <Text style={styles.statLabel}>Overdue</Text>
+        </View>
+      </View>
+      
+      {billingStats.nextPaymentDate && (
+        <View style={styles.nextPayment}>
+          <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+          <Text style={styles.nextPaymentText}>
+            Next payment: {billingStats.nextPaymentAmount} on {billingStats.nextPaymentDate}
+          </Text>
+        </View>
+      )}
     </View>
   );
-  
-  return (
-    // Web Layout - Only show on web
-    Platform.OS === 'web' ? (
-      <View style={styles.webLayout}>
-        {/* Web Header */}
-        <TeacherWebHeader 
-          teacherName={teacherName}
-          profileImage={profileImage}
-          showSearch={true}
-        />
-        
-        {/* Main Content with Sidebar */}
-        <View style={styles.webContent}>
-          {/* Sidebar */}
-          <TeacherWebSidebar 
-            teacherName={teacherName}
-            profileImage={profileImage}
-            activeItem={sidebarActiveItem}
-            onItemPress={handleSidebarSelect}
-            userEmail={userEmail}
-            subjectCount={0}
-            studentCount={0}
-            revenue="₹4.3K"
-            isSpotlight={false}
-          />
-          
-          {/* Main Content Area */}
-          <View style={styles.webMainContent}>
-            <ScrollView 
-              style={styles.scrollContainer} 
-              showsVerticalScrollIndicator={false}
-              refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-              }
-            >
-              <View style={styles.container}>
-                <View style={styles.headerSection}>
-                  <Text style={styles.title}>Billing & Payments</Text>
-                  <TouchableOpacity style={styles.addPaymentBtn}>
-                    <MaterialIcons name="add" size={20} color="#fff" />
-                    <Text style={styles.addPaymentText}>Add Payment Method</Text>
-                  </TouchableOpacity>
+
+  const renderFilters = () => (
+    <View style={styles.filtersContainer}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        {(['all', 'paid', 'pending', 'overdue'] as const).map((status) => (
+          <TouchableOpacity
+            key={status}
+            style={[
+              styles.filterChip,
+              filterStatus === status && styles.filterChipActive
+            ]}
+            onPress={() => setFilterStatus(status)}
+          >
+            <Text style={[
+              styles.filterText,
+              filterStatus === status && styles.filterTextActive
+            ]}>
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#3B5BFE" />
+      </View>
+    );
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#3B5BFE" />
+        <Text style={styles.loadingText}>Loading billing data...</Text>
+      </View>
+    );
+  }
+
+  if (!isDesktop) {
+    return (
+      <View style={styles.container}>
+        {/* Header */}
+        <TeacherWebHeader teacherName={teacherName} profileImage={profileImage} />
+
+        <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          <ScrollView 
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          >
+            {/* Stats Card */}
+            {renderStatsCard()}
+
+            {/* Filters */}
+            {renderFilters()}
+
+            {/* Invoices List */}
+            <View style={styles.invoicesContainer}>
+              <View style={styles.invoicesHeader}>
+                <Text style={styles.invoicesTitle}>Invoices</Text>
+                <Text style={styles.invoicesCount}>{sortedInvoices.length} items</Text>
+              </View>
+              
+              {sortedInvoices.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Ionicons name="document-text-outline" size={48} color="#9CA3AF" />
+                  <Text style={styles.emptyText}>No invoices found</Text>
+                  <Text style={styles.emptySubtext}>Your billing history will appear here</Text>
                 </View>
-                
-                {loading ? (
-                  <View style={styles.loadingContainer}>
-                    <Text style={styles.loadingText}>Loading billing information...</Text>
-                  </View>
-                ) : billingData.length === 0 ? (
-                  <View style={styles.emptyState}>
-                    <Text style={styles.emptyText}>No billing records found</Text>
-                    <Text style={styles.emptySubtext}>Your payment history will appear here</Text>
-                  </View>
-                ) : (
-                  <>
-                    <FlatList
-                      data={billingData}
-                      renderItem={renderBillingItem}
-                      keyExtractor={(item) => item.id}
-                      contentContainerStyle={styles.listContainer}
-                      showsVerticalScrollIndicator={false}
-                    />
-                    
-                    <View style={styles.summarySection}>
-                      <Text style={styles.summaryTitle}>Payment Summary</Text>
-                      <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Total Paid:</Text>
-                        <Text style={styles.summaryValue}>
-                          ₹{billingData
-                            .filter(item => item.status === 'Paid')
-                            .reduce((sum, item) => sum + parseFloat(item.amount.replace('₹', '').replace(',', '')), 0)
-                            .toLocaleString('en-IN')}
+              ) : (
+                sortedInvoices.map(renderInvoiceItem)
+              )}
+            </View>
+          </ScrollView>
+        </Animated.View>
+
+        {/* Invoice Modal */}
+        <Modal
+          visible={showInvoiceModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowInvoiceModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Invoice Details</Text>
+                <TouchableOpacity onPress={() => setShowInvoiceModal(false)}>
+                  <Ionicons name="close" size={24} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
+              
+              {selectedInvoice && (
+                <View style={styles.modalBody}>
+                  <View style={styles.modalInvoiceInfo}>
+                    <Text style={styles.modalInvoiceName}>{selectedInvoice.name}</Text>
+                    <Text style={styles.modalInvoiceDescription}>{selectedInvoice.description}</Text>
+                    <View style={styles.modalInvoiceDetails}>
+                      <View style={styles.modalDetailRow}>
+                        <Text style={styles.modalDetailLabel}>Amount:</Text>
+                        <Text style={styles.modalDetailValue}>{selectedInvoice.amount}</Text>
+                      </View>
+                      <View style={styles.modalDetailRow}>
+                        <Text style={styles.modalDetailLabel}>Status:</Text>
+                        <Text style={[styles.modalDetailValue, { color: getStatusColor(selectedInvoice.status) }]}>
+                          {selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1)}
                         </Text>
                       </View>
-                      <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Pending:</Text>
-                        <Text style={styles.summaryValue}>
-                          ₹{billingData
-                            .filter(item => item.status === 'Pending')
-                            .reduce((sum, item) => sum + parseFloat(item.amount.replace('₹', '').replace(',', '')), 0)
-                            .toLocaleString('en-IN')}
-                        </Text>
+                      <View style={styles.modalDetailRow}>
+                        <Text style={styles.modalDetailLabel}>Date:</Text>
+                        <Text style={styles.modalDetailValue}>{selectedInvoice.date}</Text>
+                      </View>
+                      <View style={styles.modalDetailRow}>
+                        <Text style={styles.modalDetailLabel}>Due Date:</Text>
+                        <Text style={styles.modalDetailValue}>{selectedInvoice.dueDate}</Text>
                       </View>
                     </View>
-                  </>
-                )}
-              </View>
-            </ScrollView>
+                  </View>
+                  
+                  <View style={styles.modalActions}>
+                    {selectedInvoice.status === 'pending' && (
+                      <TouchableOpacity
+                        style={[styles.modalButton, styles.payButton]}
+                        onPress={() => handlePayInvoice(selectedInvoice)}
+                      >
+                        <Ionicons name="card-outline" size={20} color="#FFFFFF" />
+                        <Text style={styles.modalButtonText}>Pay Now</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      style={[styles.modalButton, styles.downloadModalButton]}
+                      onPress={() => handleDownloadInvoice(selectedInvoice)}
+                    >
+                      <Ionicons name="download-outline" size={20} color="#3B5BFE" />
+                      <Text style={[styles.modalButtonText, { color: '#3B5BFE' }]}>Download</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
+      </View>
+    );
+  }
+
+  // Desktop Layout - Teacher Version
+  return (
+    <View style={styles.container}>
+      {/* ── Top header ── */}
+      <TeacherWebHeader teacherName={teacherName} profileImage={profileImage} />
+
+      {/* ── Body: sidebar + content area ── */}
+      <View style={styles.contentLayout}>
+
+        <TeacherWebSidebar
+  teacherName={teacherName}
+  profileImage={profileImage}
+  activeItem={activeItem}
+  onItemPress={handleSelect}
+  userEmail={userEmail}
+  collapsed={sidebarCollapsed}
+  onToggleCollapse={handleSidebarToggle}
+/>
+
+        {/* ── Main wrapper: center content only ── */}
+        <View style={styles.mainWrapper}>
+          {/* ── CENTER: scrollable billing content ── */}
+          <View style={styles.centerContent}>
+            <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+              <ScrollView 
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+              >
+                {/* Page Header */}
+                <View style={styles.pageHeader}>
+                  <TouchableOpacity 
+                    style={styles.backBtnCircle} 
+                    onPress={handleBackPress}
+                  >
+                    <Ionicons name="arrow-back" size={20} color="#1F2937" />
+                  </TouchableOpacity>
+                  <Text style={styles.pageTitle}>Billing</Text>
+                  <View style={styles.placeholder} />
+                </View>
+
+                {/* Stats Card */}
+                {renderStatsCard()}
+
+                {/* Filters */}
+                {renderFilters()}
+
+                {/* Invoices List */}
+                <View style={styles.invoicesContainer}>
+                  <View style={styles.invoicesHeader}>
+                    <Text style={styles.invoicesTitle}>Invoices</Text>
+                    <Text style={styles.invoicesCount}>{sortedInvoices.length} items</Text>
+                  </View>
+                  
+                  {sortedInvoices.length === 0 ? (
+                    <View style={styles.emptyState}>
+                      <Ionicons name="document-text-outline" size={48} color="#9CA3AF" />
+                      <Text style={styles.emptyText}>No invoices found</Text>
+                      <Text style={styles.emptySubtext}>Your billing history will appear here</Text>
+                    </View>
+                  ) : (
+                    sortedInvoices.map(renderInvoiceItem)
+                  )}
+                </View>
+              </ScrollView>
+            </Animated.View>
           </View>
         </View>
       </View>
-    ) : (
-      // Mobile Layout - Original content
-      <View style={styles.container}>
-        <Text style={styles.title}>Billing</Text>
-        <Text style={styles.subtitle}>Billing information and payment history will be displayed here.</Text>
-      </View>
-    )
-  )
-}
 
+      {/* Invoice Modal */}
+      <Modal
+        visible={showInvoiceModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowInvoiceModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Invoice Details</Text>
+              <TouchableOpacity onPress={() => setShowInvoiceModal(false)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            
+            {selectedInvoice && (
+              <View style={styles.modalBody}>
+                <View style={styles.modalInvoiceInfo}>
+                  <Text style={styles.modalInvoiceName}>{selectedInvoice.name}</Text>
+                  <Text style={styles.modalInvoiceDescription}>{selectedInvoice.description}</Text>
+                  <View style={styles.modalInvoiceDetails}>
+                    <View style={styles.modalDetailRow}>
+                      <Text style={styles.modalDetailLabel}>Amount:</Text>
+                      <Text style={styles.modalDetailValue}>{selectedInvoice.amount}</Text>
+                    </View>
+                    <View style={styles.modalDetailRow}>
+                      <Text style={styles.modalDetailLabel}>Status:</Text>
+                      <Text style={[styles.modalDetailValue, { color: getStatusColor(selectedInvoice.status) }]}>
+                        {selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1)}
+                      </Text>
+                    </View>
+                    <View style={styles.modalDetailRow}>
+                      <Text style={styles.modalDetailLabel}>Date:</Text>
+                      <Text style={styles.modalDetailValue}>{selectedInvoice.date}</Text>
+                    </View>
+                    <View style={styles.modalDetailRow}>
+                      <Text style={styles.modalDetailLabel}>Due Date:</Text>
+                      <Text style={styles.modalDetailValue}>{selectedInvoice.dueDate}</Text>
+                    </View>
+                  </View>
+                </View>
+                
+                <View style={styles.modalActions}>
+                  {selectedInvoice.status === 'pending' && (
+                    <TouchableOpacity
+                      style={[styles.modalButton, styles.payButton]}
+                      onPress={() => handlePayInvoice(selectedInvoice)}
+                    >
+                      <Ionicons name="card-outline" size={20} color="#FFFFFF" />
+                      <Text style={styles.modalButtonText}>Pay Now</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.downloadModalButton]}
+                    onPress={() => handleDownloadInvoice(selectedInvoice)}
+                  >
+                    <Ionicons name="download-outline" size={20} color="#3B5BFE" />
+                    <Text style={[styles.modalButtonText, { color: '#3B5BFE' }]}>Download</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+};
+
+export default Billing;
+
+// Styles matching student billing design
 const styles = StyleSheet.create({
-  // Web-specific styles
-  webLayout: {
-    flex: 1,
-    flexDirection: 'column',
-  },
-  webContent: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  webMainContent: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  
-  // Common styles
+  // Container styles
   container: {
     flex: 1,
-    padding: 20,
+    backgroundColor: '#F7F9FC',
   },
-  headerSection: {
-    marginBottom: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  addPaymentBtn: {
-    backgroundColor: '#3B5BFE',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  addPaymentText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  
-  // Billing item styles
-  billingItem: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  itemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  statusDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  itemInfo: {
+  contentLayout: { flex: 1, flexDirection: 'row' },
+  mainWrapper: { flex: 1, flexDirection: 'row' },
+  centerContent: { flex: 1, backgroundColor: '#F7F9FC' },
+  content: {
     flex: 1,
+    padding: 16,
   },
-  itemDescription: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  itemDate: {
-    fontSize: 14,
-    color: '#666',
-  },
-  itemAmount: {
-    alignItems: 'flex-end',
-  },
-  amountText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  itemFooter: {
+  // Page Header
+  pageHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  typeBadge: {
-    backgroundColor: '#f0f0f0',
+    marginBottom: 24,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
   },
-  typeText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
+  backBtnCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  downloadBtn: {
-    padding: 8,
+  pageTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginLeft: 16,
+    flex: 1,
+    fontFamily: 'Poppins_700Bold',
   },
-  
-  // Loading and list styles
-  loadingContainer: {
+  placeholder: {
+    width: 46,
+  },
+  loaderContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    backgroundColor: '#F7F9FC',
   },
   loadingText: {
+    marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: '#6B7280',
+    fontFamily: 'Poppins_400Regular',
   },
-  listContainer: {
-    paddingBottom: 20,
+
+  // Desktop styles
+  desktopContainer: {
+    flex: 1,
+    backgroundColor: '#F7F9FC',
   },
-  
-  // Summary section
-  summarySection: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
+  desktopLayout: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  desktopMain: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  contentColumns: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  desktopContent: {
+    flex: 1,
+    backgroundColor: '#F7F9FC',
+    padding: 24,
+  },
+  desktopHeader: {
+    marginBottom: 32,
+  },
+  desktopTitle: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 8,
+    fontFamily: 'Poppins_700Bold',
+  },
+  desktopSubtitle: {
+    fontSize: 16,
+    color: '#6B7280',
+    fontFamily: 'Poppins_400Regular',
+  },
+  desktopGrid: {
+    flexDirection: 'row',
+    gap: 24,
+    flex: 1,
+  },
+  desktopLeft: {
+    flex: 1,
+    maxWidth: 400,
+  },
+  desktopRight: {
+    flex: 1,
+  },
+
+  // Stats card
+  statsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     padding: 20,
-    marginTop: 20,
+    marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 16,
-  },
-  summaryRow: {
+  statsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    marginBottom: 20,
   },
-  summaryLabel: {
+  statsTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1F2937',
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  refreshButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 4,
+    fontFamily: 'Poppins_700Bold',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontFamily: 'Poppins_400Regular',
+  },
+  nextPayment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  nextPaymentText: {
     fontSize: 14,
-    color: '#666',
+    color: '#6B7280',
+    marginLeft: 8,
+    fontFamily: 'Poppins_400Regular',
   },
-  summaryValue: {
+
+  // Filters
+  filtersContainer: {
+    marginBottom: 20,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    marginRight: 8,
+  },
+  filterChipActive: {
+    backgroundColor: '#3B5BFE',
+  },
+  filterText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontFamily: 'Poppins_400Regular',
+  },
+  filterTextActive: {
+    color: '#FFFFFF',
+  },
+
+  // Invoices
+  invoicesContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  desktopInvoicesContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    flex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  invoicesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  invoicesTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1F2937',
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  invoicesCount: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontFamily: 'Poppins_400Regular',
+  },
+
+  // Invoice item
+  invoiceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  statusIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  invoiceInfo: {
+    flex: 1,
+  },
+  invoiceName: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+    fontFamily: 'Poppins_600SemiBold',
   },
+  invoiceDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 4,
+    fontFamily: 'Poppins_400Regular',
+  },
+  invoiceDate: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontFamily: 'Poppins_400Regular',
+  },
+  invoiceRight: {
+    alignItems: 'flex-end',
+    marginRight: 12,
+  },
+  invoiceAmount: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  invoiceStatus: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+  },
+  downloadButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+
+  // Empty state
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: 40,
   },
   emptyText: {
-    fontSize: 18,
-    color: '#666',
+    fontSize: 16,
     fontWeight: '600',
-    marginBottom: 8,
-    textAlign: 'center',
+    color: '#6B7280',
+    marginTop: 12,
+    fontFamily: 'Poppins_600SemiBold',
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
+    color: '#9CA3AF',
+    marginTop: 4,
+    fontFamily: 'Poppins_400Regular',
   },
-})
 
-export default Billing
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    margin: 20,
+    maxWidth: 400,
+    width: '100%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1F2937',
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  modalBody: {
+    flex: 1,
+  },
+  modalInvoiceInfo: {
+    marginBottom: 20,
+  },
+  modalInvoiceName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  modalInvoiceDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 16,
+    fontFamily: 'Poppins_400Regular',
+  },
+  modalInvoiceDetails: {
+    gap: 12,
+  },
+  modalDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalDetailLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontFamily: 'Poppins_400Regular',
+  },
+  modalDetailValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+    fontFamily: 'Poppins_500Medium',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+  },
+  payButton: {
+    backgroundColor: '#3B5BFE',
+  },
+  downloadModalButton: {
+    backgroundColor: '#F3F4F6',
+  },
+  modalButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#FFFFFF',
+    marginLeft: 8,
+    fontFamily: 'Poppins_500Medium',
+  },
+
+  // Thoughts panel styles
+  rightPanel: { 
+    width: 350, 
+    backgroundColor: '#fff', 
+    borderLeftWidth: 1, 
+    borderLeftColor: '#E5E7EB' 
+  },
+  rightPanelCollapsed: { width: 60 },
+  rightPanelHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    padding: 16, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#E5E7EB' 
+  },
+  rightPanelTitleContainer: { flex: 1 },
+  rightPanelTitle: { 
+    fontSize: 16, 
+    fontWeight: '600', 
+    color: '#1F2937', 
+    fontFamily: 'Poppins_600SemiBold' 
+  },
+  collapseBtn: { padding: 4 },
+  composerWrapper: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  thoughtsList: { padding: 16 },
+  thoughtsScrollView: { flex: 1 },
+  thoughtsLoadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    paddingVertical: 40 
+  },
+  thoughtsLoadingText: { 
+    marginTop: 12, 
+    fontSize: 14, 
+    color: '#4B5563',
+    fontFamily: 'Poppins_400Regular'
+  },
+  emptyStateTitle: { 
+    marginTop: 12, 
+    fontSize: 16, 
+    fontWeight: '600', 
+    color: '#1F2937',
+    fontFamily: 'Poppins_600SemiBold'
+  },
+  emptyStateText: { 
+    marginTop: 4, 
+    fontSize: 14, 
+    color: '#4B5563',
+    fontFamily: 'Poppins_400Regular'
+  },
+  postWrapper: { marginBottom: 16 },
+});
+
