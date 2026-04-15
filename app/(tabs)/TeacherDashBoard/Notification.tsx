@@ -1,16 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Platform,  
-    View, 
-    Text, 
-    StyleSheet, 
-    ScrollView, 
-    ActivityIndicator, 
-    Image, 
-    RefreshControl, 
-    TouchableOpacity, 
-    Dimensions, 
-    Modal, 
-    Animated, 
+import { Platform,
+    View,
+    Text,
+    StyleSheet,
+    ScrollView,
+    ActivityIndicator,
+    Image,
+    RefreshControl,
+    TouchableOpacity,
+    Dimensions,
+    Modal,
+    Animated,
     FlatList,
     StatusBar,
     TextInput
@@ -20,12 +20,11 @@ import axios from 'axios';
 import { BASE_URL } from '../../../config';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import {  
-    Ionicons, 
-    MaterialIcons, 
-    FontAwesome6 
+import {
+    Ionicons,
+    MaterialIcons,
+    FontAwesome6
 } from '@expo/vector-icons';
-import BackButton from '../../../components/BackButton';
 import * as Haptics from 'expo-haptics';
 
 const {height,width}=Dimensions.get('window')
@@ -52,11 +51,28 @@ const TeacherNotification = () => {
     const [filterType, setFilterType] = useState<'all' | 'unread' | 'read'>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [showSearch, setShowSearch] = useState(false);
-    
+
     // Animation values
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(50)).current;
     const scaleAnim = useRef(new Animated.Value(1)).current;
+
+    const handleBackPress = () => {
+        router.back();
+    };
+
+    // ESC key handler for web
+    useEffect(() => {
+        if (Platform.OS === 'web') {
+            const handleEsc = (e: KeyboardEvent) => {
+                if (e.key === 'Escape') {
+                    handleBackPress();
+                }
+            };
+            document.addEventListener('keydown', handleEsc);
+            return () => document.removeEventListener('keydown', handleEsc);
+        }
+    }, []);
 
     useEffect(() => {
         const loadToken = async () => {
@@ -68,16 +84,17 @@ const TeacherNotification = () => {
 
     useEffect(() => {
         // Entrance animation
+        const useNative = Platform.OS !== 'web';
         Animated.parallel([
             Animated.timing(fadeAnim, {
                 toValue: 1,
                 duration: 800,
-                useNativeDriver: true,
+                useNativeDriver: useNative,
             }),
             Animated.timing(slideAnim, {
                 toValue: 0,
                 duration: 600,
-                useNativeDriver: true,
+                useNativeDriver: useNative,
             })
         ]).start();
     }, []);
@@ -105,11 +122,13 @@ const TeacherNotification = () => {
                 timeout: 5000
             });
             
-            console.log(`✅ Teacher notifications fetched successfully: ${response.data.length} items`);
-            setNotifications(response.data);
+            // Validate response data is an array
+            const notificationsData = Array.isArray(response.data) ? response.data : [];
+            console.log(`✅ Teacher notifications fetched successfully: ${notificationsData.length} items`);
+            setNotifications(notificationsData);
             
             // Trigger haptic feedback on successful fetch
-            if (response.data.length > 0) {
+            if (notificationsData.length > 0) {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             }
         } catch (err) {
@@ -140,16 +159,17 @@ const TeacherNotification = () => {
         setRefreshing(true);
         
         // Refresh animation
+        const useNative = Platform.OS !== 'web';
         Animated.sequence([
             Animated.timing(scaleAnim, {
                 toValue: 0.95,
                 duration: 100,
-                useNativeDriver: true,
+                useNativeDriver: useNative,
             }),
             Animated.timing(scaleAnim, {
                 toValue: 1,
                 duration: 100,
-                useNativeDriver: true,
+                useNativeDriver: useNative,
             })
         ]).start();
         
@@ -285,7 +305,7 @@ const TeacherNotification = () => {
         }
     };
 
-    const filteredNotifications = notifications.filter(notification => {
+    const filteredNotifications = (Array.isArray(notifications) ? notifications : []).filter(notification => {
         const matchesFilter = filterType === 'all' || 
             (filterType === 'unread' && !notification.is_read) || 
             (filterType === 'read' && notification.is_read);
@@ -297,7 +317,7 @@ const TeacherNotification = () => {
         return matchesFilter && matchesSearch;
     });
 
-    const unreadCount = notifications.filter(n => !n.is_read).length;
+    const unreadCount = (Array.isArray(notifications) ? notifications : []).filter(n => !n.is_read).length;
 
     const renderNotificationItem = ({ item, index }: { item: Notification; index: number }) => {
         const iconColor = getNotificationColor(item.type);
@@ -388,46 +408,23 @@ const TeacherNotification = () => {
             {/* Header */}
             <View style={styles.header}>
                 <View style={styles.headerTop}>
-                    <BackButton 
-                        size={24} 
-                        color="#1F2937" 
+                    <TouchableOpacity 
+                        style={styles.backBtnCircle} 
                         onPress={() => {
                             console.log('Back button pressed in TeacherNotification');
                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            try {
-                                // Try multiple navigation methods
-                                console.log('Attempting router.back()...');
-                                router.back();
-                                
-                                // Fallback after a short delay
-                                setTimeout(() => {
-                                    console.log('Fallback: navigating to TeacherDashBoard');
-                                    router.replace('/(tabs)/TeacherDashBoard');
-                                }, 100);
-                            } catch (error) {
-                                console.error('Router back error:', error);
-                                // Immediate fallback
-                                router.replace('/(tabs)/TeacherDashBoard');
-                            }
+                            handleBackPress();
                         }}
-                    />
+                    >
+                        <Ionicons name="arrow-back" size={20} color="#1F2937" />
+                    </TouchableOpacity>
                     <Text style={styles.headerTitle}>Notifications</Text>
-                    <View style={styles.headerActions}>
-                        {unreadCount > 0 && (
-                            <TouchableOpacity 
-                                style={styles.actionButton}
-                                onPress={markAllAsRead}
-                            >
-                                <MaterialIcons name="done-all" size={20} color="#3B82F6" />
-                            </TouchableOpacity>
-                        )}
-                        <TouchableOpacity 
-                            style={styles.actionButton}
-                            onPress={() => setShowSearch(!showSearch)}
-                        >
-                            <Ionicons name="search-outline" size={20} color="#1F2937" />
-                        </TouchableOpacity>
-                    </View>
+                    <TouchableOpacity 
+                        style={styles.searchButton}
+                        onPress={() => setShowSearch(!showSearch)}
+                    >
+                        <Ionicons name="search-outline" size={20} color="#1F2937" />
+                    </TouchableOpacity>
                 </View>
                 
                 {/* Search Bar */}
@@ -614,29 +611,6 @@ const styles = StyleSheet.create({
         color: '#6B7280',
         fontFamily: 'System',
     },
-    
-    // Header
-    header: {
-        backgroundColor: '#FFFFFF',
-        borderBottomWidth: 1,
-        borderBottomColor: '#E5E7EB',
-        paddingTop: isIOS ? 50 : 30,
-        zIndex: 10,
-        elevation: 5,
-    },
-    headerTop: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingBottom: 16,
-    },
-    headerTitle: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: '#1F2937',
-        fontFamily: 'System',
-    },
     headerActions: {
         flexDirection: 'row',
         gap: 8,
@@ -649,7 +623,20 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    
+    backBtnCircle: {
+        width: 46,
+        height: 46,
+        borderRadius: 23,
+        backgroundColor: '#FFFFFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+
     // Search
     searchContainer: {
         flexDirection: 'row',

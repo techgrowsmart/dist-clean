@@ -16,6 +16,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+
+// Disable SSR for this screen to prevent Platform access during server-side rendering
+export const unstable_settings = {
+  ssr: false,
+};
+
 import{
   Platform,
   Alert, Dimensions, Image, ImageBackground, Modal, ScrollView, StyleSheet, Text,
@@ -706,10 +712,7 @@ const renderWebMainContent = () => {
       resolvePostAuthor={resolvePostAuthor}
       handleLike={handleLike}
       setPosts={setPosts}
-      onComment={(post: Post) => {
-        // Handle comment opening if needed
-        console.log('Open comments for post:', post.id);
-      }}
+      onComment={() => {}}
       isMobile={isMobile}
       showThoughtsPanel={true}
       authToken={authToken}
@@ -737,7 +740,7 @@ const renderWebMainContent = () => {
                 else if (itemName === 'Connect') setShowConnect(true);
                 else console.log('Sidebar item pressed:', itemName);
               }}
-              userEmail={userEmail || ""}
+              userEmail={storedUserEmail || ""}
               studentName={studentName || ""}
               profileImage={profileImage || null}
           >
@@ -804,9 +807,14 @@ const renderWebMainContent = () => {
   };
 
   const handleBoardSelect = (boardName: string, boardId: string) => {
-  setSelectedBoard({ boardName, boardId } as any);
-  setCurrentSection("classSelection");
-};
+    setSelectedBoard({ boardName, boardId } as any);
+    // For Universities board, route to classSelection with universities flow
+    if (boardName === 'Universities' || boardId === 'board_universities') {
+      setCurrentSection("classSelection");
+    } else {
+      setCurrentSection("classSelection");
+    }
+  };
 
 const renderContent = () => {
     switch (currentSection) {

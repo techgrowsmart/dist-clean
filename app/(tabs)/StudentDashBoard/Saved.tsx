@@ -1,10 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, Image, ScrollView, StyleSheet, Alert, Dimensions, Platform } from 'react-native';
 import { db } from '../../../firebaseConfig';
-import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, deleteDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Swipeable } from 'react-native-gesture-handler';
 import { RectButton } from 'react-native-gesture-handler';
+import axios from 'axios';
+import { BASE_URL } from '../../../config';
+import { getAuthData } from '../../../utils/authStorage';
 import { MaterialIcons } from '@expo/vector-icons'; // For the delete icon
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold, useFonts } from '@expo-google-fonts/poppins';
@@ -45,19 +48,56 @@ export default function Saved() {
     }, []);
 
     
+    // Polling-based fetch to avoid Firestore onSnapshot issues on web
     useEffect(() => {
         if (!studentEmail) return;
 
-        const q = query(collection(db, 'savedTeachers'), where('savedBy', '==', studentEmail));
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const teachers: SavedTeacher[] = [];
-            querySnapshot.forEach((doc) => {
-                teachers.push({ id: doc.id, ...doc.data() } as SavedTeacher);
-            });
-            setSavedTeachers(teachers);
-        });
+        const fetchSavedTeachers = async () => {
+            try {
+                const auth = await getAuthData();
+                if (!auth?.token) return;
 
-        return () => unsubscribe();
+                // Try API endpoint first
+                try {
+                    const response = await axios.get(
+                        `${BASE_URL}/api/favorites`,
+                        { headers: { Authorization: `Bearer ${auth.token}` } }
+                    );
+                    if (response.data?.success && response.data?.favorites) {
+                        const teachers = response.data.favorites.map((fav: any) => ({
+                            id: fav.id || fav._id || fav.teacherEmail,
+                            teacherName: fav.teacherName || fav.name || 'Unknown Teacher',
+                            teacherEmail: fav.teacherEmail || fav.email || '',
+                            teacherProfilePic: fav.teacherProfilePic || fav.profilePic || fav.profilepic || '',
+                            ...fav
+                        }));
+                        setSavedTeachers(teachers);
+                        return;
+                    }
+                } catch (apiError) {
+                    console.log('API favorites failed, falling back to Firestore:', apiError);
+                }
+
+                // Fallback to Firestore getDocs (one-time fetch)
+                const q = query(collection(db, 'savedTeachers'), where('savedBy', '==', studentEmail));
+                const querySnapshot = await getDocs(q);
+                const teachers: SavedTeacher[] = [];
+                querySnapshot.forEach((doc) => {
+                    teachers.push({ id: doc.id, ...doc.data() } as SavedTeacher);
+                });
+                setSavedTeachers(teachers);
+            } catch (error) {
+                console.error('Error fetching saved teachers:', error);
+            }
+        };
+
+        // Fetch immediately
+        fetchSavedTeachers();
+
+        // Poll every 10 seconds
+        const interval = setInterval(fetchSavedTeachers, 10000);
+
+        return () => clearInterval(interval);
     }, [studentEmail]);
 
 

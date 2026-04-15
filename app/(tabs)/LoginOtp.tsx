@@ -11,7 +11,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    TouchableWithoutFeedback,
+    Pressable,
     View,
     Dimensions,
 } from "react-native";
@@ -181,8 +181,7 @@ export default function LoginOtp() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? hp('5%') : hp('2%')}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.innerContainer}>
+      <Pressable onPress={Keyboard.dismiss} style={styles.innerContainer}>
           {isLargeScreen ? (
             // Web/Desktop Layout
             <View style={styles.webContainer}>
@@ -297,8 +296,7 @@ export default function LoginOtp() {
               )}
             </>
           )}
-        </View>
-      </TouchableWithoutFeedback>
+        </Pressable>
     </KeyboardAvoidingView>
   );
 }

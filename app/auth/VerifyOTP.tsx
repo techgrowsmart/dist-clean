@@ -20,7 +20,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    TouchableWithoutFeedback,
+    Pressable,
     View,
 } from "react-native";
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
@@ -256,8 +256,7 @@ export default function VerifyOTP() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? hp('5%') : hp('2%')}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.innerContainer}>
+      <Pressable onPress={Keyboard.dismiss} style={styles.innerContainer}>
           <View style={styles.backButtonContainer}>
             <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
               <Text style={styles.backButtonText}>← Back</Text>
@@ -308,8 +307,7 @@ export default function VerifyOTP() {
               Didn't get OTP? Resend in <Text style={styles.timerHighlight}>{String(Math.floor(timer / 60)).padStart(2, "0")}:{String(timer % 60).padStart(2, "0")}</Text>
             </Text>
           )}
-        </View>
-      </TouchableWithoutFeedback>
+        </Pressable>
     </KeyboardAvoidingView>
   );
 }

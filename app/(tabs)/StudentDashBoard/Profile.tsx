@@ -8,7 +8,7 @@ import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { doc, setDoc } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Platform,
   ActivityIndicator, Alert, BackHandler, Image, KeyboardAvoidingView,
@@ -46,6 +46,8 @@ const CLASS_OPTIONS = ['Class 6','Class 7','Class 8','Class 9','Class 10','Class
 const DEFAULT_PROFILE_IMAGE = "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png";
 
 const ALL_INDIA_BOARDS = [
+  // All Universities
+  { boardName: 'All Universities' },
   // National Boards
   { boardName: 'CBSE' },
   { boardName: 'ICSE' },
@@ -54,7 +56,7 @@ const ALL_INDIA_BOARDS = [
   { boardName: 'IB (International Baccalaureate)' },
   { boardName: 'IGCSE (Cambridge International)' },
   { boardName: 'CAIE (Cambridge Assessment International Education)' },
-  // State Boards
+  // State Boards - North India
   { boardName: 'Andhra Pradesh Board of Secondary Education (BSEAP)' },
   { boardName: 'Assam Board of Secondary Education (SEBA)' },
   { boardName: 'Bihar School Examination Board (BSEB)' },
@@ -81,6 +83,7 @@ const ALL_INDIA_BOARDS = [
   { boardName: 'Uttar Pradesh Madhyamik Shiksha Parishad (UPMSP)' },
   { boardName: 'Uttarakhand Board of School Education (UBSE)' },
   { boardName: 'West Bengal Board of Secondary Education (WBBSE)' },
+  { boardName: 'West Bengal Council of Higher Secondary Education (WBCHSE)' },
   // Union Territories
   { boardName: 'Delhi Board of Secondary Education (DBSE)' },
   { boardName: 'Jammu and Kashmir Board of School Education (JKBOSE)' },
@@ -90,6 +93,14 @@ const ALL_INDIA_BOARDS = [
   { boardName: 'Rajasthan State Open School (RSOS)' },
   { boardName: 'Madhya Pradesh State Open School (MPSOS)' },
   { boardName: 'West Bengal Council of Rabindra Open Schooling (WBCROS)' },
+  // Additional Boards
+  { boardName: 'CISCE (Council for the Indian School Certificate Examinations)' },
+  { boardName: 'Kendriya Vidyalaya Sangathan (KV)' },
+  { boardName: 'Jawahar Navodaya Vidyalaya (JNV)' },
+  { boardName: 'Sainik Schools Society' },
+  { boardName: 'National Defence Academy (NDA)' },
+  { boardName: 'Madrasa Board' },
+  { boardName: 'Sanskrit Board' },
 ];
 
 const calculateAge = (dob: string): string => {
@@ -130,6 +141,16 @@ export default function Profile() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const navigation = useNavigation();
+
+  const handleBackPress = useCallback(() => { router.push('/(tabs)/StudentDashBoard/Student'); }, [router]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') handleBackPress(); };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [handleBackPress]);
 
   useFocusEffect(React.useCallback(() => {
     const onBack = () => {
@@ -178,7 +199,7 @@ export default function Profile() {
       
       // Fetch profile only - boards are hardcoded in ALL_INDIA_BOARDS
       const profileResponse = await axios.post(
-        `${BASE_URL}/api/sudentProfile`, 
+        `${BASE_URL}/api/studentProfile`, 
         { email: auth.email }, 
         { headers }
       );
@@ -266,7 +287,8 @@ export default function Profile() {
       const formData = new FormData();
       const filename = `profile_${Date.now()}.jpg`;
       if (Platform.OS === "web") {
-        const blob = await (await fetch(uri)).blob();
+        const response = await fetch(uri);
+        const blob = await response.blob();
         formData.append("profileimage", new File([blob], filename, { type: blob.type }));
       } else {
         formData.append("profileimage", { uri, name: filename, type: 'image/jpeg' } as any);
@@ -281,66 +303,82 @@ export default function Profile() {
   };
 
   const handleSave = async () => {
-    if (!validateForm()) { 
-      Alert.alert("Missing Fields", "Please fill in all required fields."); 
-      return; 
+    if (!validateForm()) {
+      Alert.alert("Missing Fields", "Please fill in all required fields.");
+      return;
     }
-    
+
     setIsSaving(true);
-    
+
     try {
-      // Case 1: New profile image uploaded
-      if (profileImage && (profileImage.startsWith("file://") || profileImage.startsWith("blob:"))) {
-        const imageUrl = await uploadImageToS3AndUpdateProfile(profileImage);
-        if (!imageUrl) {
-          setIsSaving(false);
-          Alert.alert("Error", "Failed to upload profile image. Please try again.");
-          return;
-        }
-        await setDoc(doc(db, "users", email), { name: studentName, email, phone, profileImage: imageUrl });
-        await AsyncStorage.multiSet([["studentName", studentName], ["email", email], ["phone", phone]]);
-        setIsSaving(false);
-        Alert.alert("Success", "Profile saved successfully!", [
-          { text: "OK", onPress: () => router.push({ pathname: "/(tabs)/StudentDashBoard/Student", params: { userType: userType || "student", userEmail: email, studentName, phone } }) }
-        ]);
-        return;
-      }
-      
-      // Case 2: No new image - just update profile data
-      await setDoc(doc(db, "users", email), { name: studentName, email, phone });
       const auth = await getAuthData();
       if (!auth?.token) {
         setIsSaving(false);
         Alert.alert("Error", "Authentication required. Please login again.");
         return;
       }
-      
-      const obj = { 
-        email, 
-        name: studentName, 
-        dateofBirth: dateOfBirth, 
-        educationBoard, 
-        instituteName, 
-        classYear, 
-        preferredMedium, 
-        phone: phone, 
-        fullAddress, 
-        stateName, 
-        pincode, 
-        country 
+
+      let finalImageUrl = profileImage;
+
+      // Case 1: New profile image uploaded
+      if (profileImage && (profileImage.startsWith("file://") || profileImage.startsWith("blob:"))) {
+        finalImageUrl = await uploadImageToS3AndUpdateProfile(profileImage);
+        if (!finalImageUrl) {
+          setIsSaving(false);
+          Alert.alert("Error", "Failed to upload profile image. Please try again.");
+          return;
+        }
+      }
+
+      // Update Firebase (best effort)
+      try {
+        await setDoc(doc(db, "users", email), {
+          name: studentName,
+          email,
+          phone,
+          profileImage: finalImageUrl
+        }, { merge: true });
+      } catch (firestoreError) {
+        console.error("Firebase write error:", firestoreError);
+        // Continue even if Firebase fails - backend is the source of truth
+      }
+
+      // Save all profile data to backend
+      const obj = {
+        email,
+        name: studentName,
+        dateofBirth: dateOfBirth,
+        educationBoard,
+        instituteName,
+        classYear,
+        preferredMedium,
+        phone: phone,
+        fullAddress,
+        stateName,
+        pincode,
+        country,
+        profileimage: finalImageUrl // Include the profile image URL
       };
-      
+
       console.log("Saving profile data:", obj);
-      
-      const response = await axios.post(`${BASE_URL}/api/updateStudentProfile`, obj, { 
-        headers: { Authorization: `Bearer ${auth.token}` } 
+
+      const response = await axios.post(`${BASE_URL}/api/updateStudentProfile`, obj, {
+        headers: { Authorization: `Bearer ${auth.token}` }
       });
-      
-      console.log("Save response:", response.data);
-      
-      if (response.status === 200) {
-        await AsyncStorage.multiSet([["studentName", studentName], ["email", email], ["phone", phone]]);
+
+      console.log("Save response status:", response.status);
+      console.log("Save response data:", response.data);
+
+      // Accept any successful status code (200-299)
+      if (response.status >= 200 && response.status < 300) {
+        await AsyncStorage.multiSet([
+          ["studentName", studentName],
+          ["email", email],
+          ["phone", phone],
+          ["profileImage", finalImageUrl || ""]
+        ]);
         setIsSaving(false);
+        // Show success message before navigating
         Alert.alert("Success", "Profile saved successfully!", [
           { text: "OK", onPress: () => router.push({ pathname: "/(tabs)/StudentDashBoard/Student", params: { userType: userType || "student", userEmail: email, studentName, phone } }) }
         ]);
@@ -348,11 +386,14 @@ export default function Profile() {
         setIsSaving(false);
         Alert.alert("Error", "Failed to save profile. Please try again.");
       }
-    } catch (e) { 
-      console.error("Save error:", e); 
+    } catch (e: any) {
+      console.error("Save error:", e);
+      console.error("Error response:", e.response?.data);
+      console.error("Error status:", e.response?.status);
       setIsSaving(false);
-      Alert.alert("Error", "An error occurred while saving. Please check your connection and try again.");
-    } 
+      const errorMessage = e.response?.data?.message || e.response?.data?.error || "An error occurred while saving. Please check your connection and try again.";
+      Alert.alert("Error", errorMessage);
+    }
   };
 
   const handleImagePicker = () => setModalVisible(true);
@@ -402,7 +443,7 @@ export default function Profile() {
       return (
         <View style={webPreview.overlay}>
           {/* Bengali character background */}
-          <View style={webPreview.patternLayer} pointerEvents="none">
+          <View style={[webPreview.patternLayer, { pointerEvents: 'none' }]}>
             {Array.from({ length: 14 }).map((_, row) => (
               <View key={row} style={webPreview.patternRow}>
                 {Array.from({ length: 22 }).map((_, col) => (
@@ -951,50 +992,54 @@ export default function Profile() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  MOBILE STYLES  (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
+const { width: screenWidth } = Dimensions.get('window');
+const isSmallMobile = screenWidth < 375;
+const isMediumMobile = screenWidth >= 375 && screenWidth < 768;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   inputError: { borderColor: "red", borderWidth: 1 },
   inputDisabled: { backgroundColor: '#f0f0f0', color: '#888' },
-  errorText: { color: "red", fontSize: wp("3%"), marginBottom: 6, marginTop: -6 },
-  contentContainer: { paddingVertical: 10, paddingHorizontal: 16, paddingBottom: 20 },
-  upload: { flex: 1, alignItems: "center", justifyContent: "center", gap: wp("1.3%"), flexDirection: "row", width: 98, height: 40 },
-  imageContainer: { alignItems: "center", marginBottom: hp("1.345%"), justifyContent: "center" },
-  profileImage: { height: wp("37.33%"), width: wp("37.33%"), borderRadius: wp("50%") },
-  uploadBtn: { marginTop: 8, backgroundColor: "#5f5fff", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 5 },
-  header: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 16, marginBottom: 10, backgroundColor: "#f5f5f5", width: "100%" },
-  headerTitle: { fontSize: wp("6%"), fontWeight: "300", lineHeight: hp("8.36%"), color: "#21242d", fontFamily: "Poppins_600SemiBold", includeFontPadding: false, textAlignVertical: "center" },
-  uploadBtnText: { color: "#fff", fontWeight: "500" },
-  label: { fontSize: wp("3.2%"), fontWeight: "700", marginTop: hp("1.1%"), color: "#353945", lineHeight: hp("1.61%") },
-  input: { width: wp("87.2%"), height: hp("6.46%"), backgroundColor: "rgba(255,255,255,0)", borderRadius: wp("24%"), paddingHorizontal: wp("2.13%"), marginTop: hp("0.504%"), marginBottom: hp("2.01%"), borderWidth: wp("0.53%"), borderColor: "#e4e6ea", fontSize: wp("4.27%"), lineHeight: hp("3.23%"), color: "#000000", paddingVertical: Platform.OS === "ios" ? hp("1%") : 0 },
-  buttonRow: { flexDirection: "row", justifyContent: "space-between", marginTop: hp("2.69%") },
-  button: { backgroundColor: "#5f5fff", padding: 8, borderRadius: 50, flex: 1, alignItems: "center", justifyContent: "center", marginRight: 10, width: wp("37.06%"), height: hp("4.84%") },
-  buttonTxt: { color: "#fff", textAlign: "center", fontSize: wp("4.8%"), lineHeight: hp("2%") },
-  centeredView: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.5)" },
-  modalView: { backgroundColor: "#fff", padding: 20, borderRadius: 10, alignItems: "center", width: "90%" },
-  modalBts: { width: "90%", height: 60, backgroundColor: "#5f5fff", marginBottom: 20, alignItems: "center", justifyContent: "center" },
-  modelTxt: { fontSize: 16, lineHeight: 21, color: "#ffffff", fontWeight: "600" },
-  scrollContentContainer: { paddingVertical: 10, paddingHorizontal: 16, paddingBottom: Platform.OS === "android" ? hp("10%") : hp("5%") },
+  errorText: { color: "red", fontSize: isSmallMobile ? wp("2.8%") : wp("3%"), marginBottom: isSmallMobile ? 4 : 6, marginTop: isSmallMobile ? -4 : -6 },
+  contentContainer: { paddingVertical: isSmallMobile ? 8 : 10, paddingHorizontal: isSmallMobile ? 12 : 16, paddingBottom: isSmallMobile ? 16 : 20 },
+  upload: { flex: 1, alignItems: "center", justifyContent: "center", gap: isSmallMobile ? wp("1%") : wp("1.3%"), flexDirection: "row", width: isSmallMobile ? 88 : 98, height: isSmallMobile ? 36 : 40 },
+  imageContainer: { alignItems: "center", marginBottom: isSmallMobile ? hp("1%") : hp("1.345%"), justifyContent: "center" },
+  profileImage: { height: isSmallMobile ? wp("35%") : wp("37.33%"), width: isSmallMobile ? wp("35%") : wp("37.33%"), borderRadius: wp("50%") },
+  uploadBtn: { marginTop: isSmallMobile ? 6 : 8, backgroundColor: "#5f5fff", paddingHorizontal: isSmallMobile ? 10 : 12, paddingVertical: isSmallMobile ? 5 : 6, borderRadius: 5 },
+  header: { flexDirection: "row", alignItems: "center", paddingVertical: isSmallMobile ? 8 : 10, paddingHorizontal: isSmallMobile ? 12 : 16, marginBottom: isSmallMobile ? 8 : 10, backgroundColor: "#f5f5f5", width: "100%" },
+  headerTitle: { fontSize: isSmallMobile ? wp("5.5%") : wp("6%"), fontWeight: "300", lineHeight: isSmallMobile ? hp("7.5%") : hp("8.36%"), color: "#21242d", fontFamily: "Poppins_600SemiBold", includeFontPadding: false, textAlignVertical: "center" },
+  uploadBtnText: { color: "#fff", fontWeight: "500", fontSize: isSmallMobile ? 13 : 14 },
+  label: { fontSize: isSmallMobile ? wp("3%") : wp("3.2%"), fontWeight: "700", marginTop: isSmallMobile ? hp("0.9%") : hp("1.1%"), color: "#353945", lineHeight: isSmallMobile ? hp("1.4%") : hp("1.61%") },
+  input: { width: isSmallMobile ? wp("85%") : wp("87.2%"), height: isSmallMobile ? hp("6%") : hp("6.46%"), backgroundColor: "rgba(255,255,255,0)", borderRadius: wp("24%"), paddingHorizontal: isSmallMobile ? wp("2%") : wp("2.13%"), marginTop: isSmallMobile ? hp("0.4%") : hp("0.504%"), marginBottom: isSmallMobile ? hp("1.8%") : hp("2.01%"), borderWidth: wp("0.53%"), borderColor: "#e4e6ea", fontSize: isSmallMobile ? wp("4%") : wp("4.27%"), lineHeight: isSmallMobile ? hp("3%") : hp("3.23%"), color: "#000000", paddingVertical: Platform.OS === "ios" ? hp("1%") : 0 },
+  buttonRow: { flexDirection: "row", justifyContent: "space-between", marginTop: isSmallMobile ? hp("2.3%") : hp("2.69%") },
+  button: { backgroundColor: "#5f5fff", padding: isSmallMobile ? 6 : 8, borderRadius: 50, flex: 1, alignItems: "center", justifyContent: "center", marginRight: isSmallMobile ? 8 : 10, width: isSmallMobile ? wp("35%") : wp("37.06%"), height: isSmallMobile ? hp("4.5%") : hp("4.84%") },
+  buttonTxt: { color: "#fff", textAlign: "center", fontSize: isSmallMobile ? wp("4.5%") : wp("4.8%"), lineHeight: isSmallMobile ? hp("1.8%") : hp("2%") },
+  centeredView: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: "rgba(0,0,0,0.5)" },
+  modalView: { backgroundColor: "#fff", padding: isSmallMobile ? 16 : 20, borderRadius: isSmallMobile ? 8 : 10, alignItems: "center", width: "90%" },
+  modalBts: { width: "90%", height: isSmallMobile ? 55 : 60, backgroundColor: "#5f5fff", marginBottom: isSmallMobile ? 16 : 20, alignItems: "center", justifyContent: "center" },
+  modelTxt: { fontSize: isSmallMobile ? 15 : 16, lineHeight: isSmallMobile ? 20 : 21, color: "#ffffff", fontWeight: "600" },
+  scrollContentContainer: { paddingVertical: isSmallMobile ? 8 : 10, paddingHorizontal: isSmallMobile ? 12 : 16, paddingBottom: Platform.OS === "android" ? hp("10%") : hp("5%") },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5' },
-  loadingText: { marginTop: 10, color: '#666', fontSize: wp('4%') },
+  loadingText: { marginTop: 10, color: '#666', fontSize: isSmallMobile ? wp("3.8%") : wp('4%') },
   asterisk: { color: '#ff0000' },
   previewMainContainer: { flex: 1, backgroundColor: "#5f5fff" },
-  previewTopSection: { backgroundColor: "#5f5fff", alignItems: "center", paddingTop: hp("3%"), paddingBottom: hp("2.5%"), position: "relative" },
-  crossPreviewButton: { position: "absolute", top: hp("1%"), left: wp("5%"), zIndex: 10, height: wp("8%"), width: wp("8%"), alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.3)", borderRadius: wp("4%") },
-  editPreviewButton: { position: "absolute", top: hp("1%"), right: wp("5%"), zIndex: 10, height: wp("8%"), width: wp("8%"), alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.3)", borderRadius: wp("4%") },
-  previewHeaderText: { color: "#ffffff", fontSize: wp("3%"), fontWeight: "600", letterSpacing: 1.5, marginBottom: hp("1%"), fontFamily: "Poppins_600SemiBold" },
-  profileImagePreview: { height: wp("35%"), width: wp("35%"), borderRadius: wp("50%"), borderWidth: 3, borderColor: "rgba(255,255,255,0.3)", marginBottom: hp("1.5%") },
-  studentName: { color: "#ffffff", fontSize: wp("5.5%"), fontWeight: "600", fontFamily: "Poppins_600SemiBold", marginTop: hp("0.8%"), textAlign: "center", paddingHorizontal: wp("10%") },
-  previewCardsContainer: { paddingHorizontal: wp("6%"), paddingTop: hp("2%"), paddingBottom: hp("2%"), flex: 1 },
-  previewCardRow: { flexDirection: "row", justifyContent: "space-between", gap: wp("2.5%") },
-  previewCard: { flex: 1, backgroundColor: "#ffffff", borderRadius: wp("3%"), padding: wp("4%"), alignItems: "center", justifyContent: "center", minHeight: hp("14%"), maxHeight: hp("16%") },
-  previewCardLabel: { color: "#7a7a7a", fontSize: wp("3%"), fontWeight: "600", marginTop: hp("0.5%"), marginBottom: hp("0.3%"), fontFamily: "Poppins_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
-  previewCardValue: { color: "#000000", fontSize: wp("8%"), fontWeight: "bold", fontFamily: "Poppins_600SemiBold" },
-  previewCardSuperscript: { color: "#000000", fontSize: wp("3.5%"), fontWeight: "600", fontFamily: "Poppins_600SemiBold" },
-  previewCardValueSmall: { color: "#000000", fontSize: wp("3.5%"), fontWeight: "600", textAlign: "center", fontFamily: "Poppins_600SemiBold" },
-  previewFullWidthCard: { backgroundColor: "#e8e8ff", borderRadius: wp("3%"), padding: wp("4%"), flexDirection: "row", alignItems: "center", gap: wp("3%"), minHeight: hp("10%"), maxHeight: hp("12%"), marginTop: hp("1.5%") },
+  previewTopSection: { backgroundColor: "#5f5fff", alignItems: "center", paddingTop: isSmallMobile ? hp("2.5%") : hp("3%"), paddingBottom: isSmallMobile ? hp("2%") : hp("2.5%"), position: "relative" },
+  crossPreviewButton: { position: "absolute", top: hp("1%"), left: isSmallMobile ? wp("4%") : wp("5%"), zIndex: 10, height: isSmallMobile ? wp("7%") : wp("8%"), width: isSmallMobile ? wp("7%") : wp("8%"), alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.3)", borderRadius: wp("4%") },
+  editPreviewButton: { position: "absolute", top: hp("1%"), right: isSmallMobile ? wp("4%") : wp("5%"), zIndex: 10, height: isSmallMobile ? wp("7%") : wp("8%"), width: isSmallMobile ? wp("7%") : wp("8%"), alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.3)", borderRadius: wp("4%") },
+  previewHeaderText: { color: "#ffffff", fontSize: isSmallMobile ? wp("2.8%") : wp("3%"), fontWeight: "600", letterSpacing: 1.5, marginBottom: hp("1%"), fontFamily: "Poppins_600SemiBold" },
+  profileImagePreview: { height: isSmallMobile ? wp("32%") : wp("35%"), width: isSmallMobile ? wp("32%") : wp("35%"), borderRadius: wp("50%"), borderWidth: 3, borderColor: "rgba(255,255,255,0.3)", marginBottom: isSmallMobile ? hp("1.2%") : hp("1.5%") },
+  studentName: { color: "#ffffff", fontSize: isSmallMobile ? wp("5%") : wp("5.5%"), fontWeight: "600", fontFamily: "Poppins_600SemiBold", marginTop: hp("0.8%"), textAlign: "center", paddingHorizontal: isSmallMobile ? wp("8%") : wp("10%") },
+  previewCardsContainer: { paddingHorizontal: isSmallMobile ? wp("5%") : wp("6%"), paddingTop: hp("2%"), paddingBottom: hp("2%"), flex: 1 },
+  previewCardRow: { flexDirection: "row", justifyContent: "space-between", gap: isSmallMobile ? wp("2%") : wp("2.5%") },
+  previewCard: { flex: 1, backgroundColor: "#ffffff", borderRadius: wp("3%"), padding: isSmallMobile ? wp("3.5%") : wp("4%"), alignItems: "center", justifyContent: "center", minHeight: isSmallMobile ? hp("12%") : hp("14%"), maxHeight: isSmallMobile ? hp("14%") : hp("16%") },
+  previewCardLabel: { color: "#7a7a7a", fontSize: isSmallMobile ? wp("2.8%") : wp("3%"), fontWeight: "600", marginTop: hp("0.5%"), marginBottom: hp("0.3%"), fontFamily: "Poppins_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
+  previewCardValue: { color: "#000000", fontSize: isSmallMobile ? wp("7%") : wp("8%"), fontWeight: "bold", fontFamily: "Poppins_600SemiBold" },
+  previewCardSuperscript: { color: "#000000", fontSize: isSmallMobile ? wp("3.2%") : wp("3.5%"), fontWeight: "600", fontFamily: "Poppins_600SemiBold" },
+  previewCardValueSmall: { color: "#000000", fontSize: isSmallMobile ? wp("3.2%") : wp("3.5%"), fontWeight: "600", textAlign: "center", fontFamily: "Poppins_600SemiBold" },
+  previewFullWidthCard: { backgroundColor: "#e8e8ff", borderRadius: wp("3%"), padding: isSmallMobile ? wp("3.5%") : wp("4%"), flexDirection: "row", alignItems: "center", gap: isSmallMobile ? wp("2.5%") : wp("3%"), minHeight: isSmallMobile ? hp("9%") : hp("10%"), maxHeight: isSmallMobile ? hp("11%") : hp("12%"), marginTop: hp("1.5%") },
   previewFullWidthCardText: { flex: 1 },
-  previewFullWidthCardLabel: { color: "#7a7a7a", fontSize: wp("3%"), fontWeight: "600", marginBottom: hp("0.3%"), fontFamily: "Poppins_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
-  previewFullWidthCardValue: { color: "#000000", fontSize: wp("3.5%"), fontWeight: "500", fontFamily: "Poppins_600SemiBold" },
+  previewFullWidthCardLabel: { color: "#7a7a7a", fontSize: isSmallMobile ? wp("2.8%") : wp("3%"), fontWeight: "600", marginBottom: hp("0.3%"), fontFamily: "Poppins_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
+  previewFullWidthCardValue: { color: "#000000", fontSize: isSmallMobile ? wp("3.2%") : wp("3.5%"), fontWeight: "500", fontFamily: "Poppins_600SemiBold" },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

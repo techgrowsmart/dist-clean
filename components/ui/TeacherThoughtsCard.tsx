@@ -1,8 +1,9 @@
-import { FontAwesome } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+// TeacherThoughtsCard.tsx
+import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
-  Image,
   Platform,
   ScrollView,
   StyleSheet,
@@ -10,545 +11,615 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { BASE_URL } from '../../config';
+import TeacherPostComposer from './TeacherPostComposer';
+import UnifiedThoughtsCard, { UnifiedThoughtsBackground, UnifiedPost } from './UnifiedThoughtsCard';
 
-interface TeacherPost {
-  id: string;
-  author: { email: string; name: string; role: string; profile_pic: string };
-  content: string;
-  likes: number;
-  comments?: any[];
-  createdAt: string;
-  tags?: string[];
-  postImage?: string;
-  postImages?: string[];
-  isLiked?: boolean;
-}
-
-interface TeacherThoughtsCardProps {
-  post?: TeacherPost;
-  onLike?: (postId: string) => void;
-  onComment?: (post: TeacherPost) => void;
-  onReport?: (post: TeacherPost) => void;
-  getProfileImageSource?: (profilePic?: string) => { uri: string } | null;
-  initials?: (name: string) => string;
-  resolvePostAuthor?: (post: TeacherPost) => { name: string; pic: string | null; role: string };
-  ws?: any;
-  userProfileCache?: Map<string, { name: string; profilePic: string }>;
-}
-
-interface TeacherThoughtsBackgroundProps {
-  children: React.ReactNode;
-}
-
-export const TeacherThoughtsBackground: React.FC<TeacherThoughtsBackgroundProps> = ({ children }) => (
-  <View style={bg.root}>
-    {Platform.OS !== 'web' && (
-      <View style={bg.patternLayer} pointerEvents="none">
-        {Array.from({ length: 120 }).map((_, i) => (
-          <Text key={i} style={bg.tile}>💭</Text>
-        ))}
-      </View>
-    )}
-    {children}
-  </View>
-);
-
-const bg = StyleSheet.create({
-  root: { flex: 1, backgroundColor: 'transparent' },
-  patternLayer: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    opacity: 0,
-    zIndex: 0,
-  },
-  tile: { fontSize: 22, width: 40, height: 40, textAlign: 'center', color: '#3a5bbf' },
-});
-
-// ─── Hover wrapper (web-only) ─────────────────────────────────────────────────
-const HoverTouchable: React.FC<{
-  onPress?: () => void;
-  style?: any;
-  hitSlop?: any;
-  children: React.ReactNode;
-}> = ({ onPress, style, hitSlop, children }) => {
-  const [hovered, setHovered] = useState(false);
-
-  if (Platform.OS === 'web') {
-    return (
-      <TouchableOpacity
-        onPress={onPress}
-        hitSlop={hitSlop}
-        style={[style, hovered && { transform: [{ scale: 1.1 }] }]}
-        // @ts-ignore – web-only events
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-      >
-        {children}
-      </TouchableOpacity>
-    );
-  }
-
-  return (
-    <TouchableOpacity onPress={onPress} hitSlop={hitSlop} style={style}>
-      {children}
-    </TouchableOpacity>
-  );
+// Colors constant (mirroring from TeacherDashboard)
+const COLORS = {
+  background: '#F5F7FB',
+  cardBg: '#FFFFFF',
+  primaryBlue: '#3B5BFE',
+  gradientBlueStart: '#4F6EF7',
+  gradientBlueEnd: '#3B5BFE',
+  border: '#E5E7EB',
+  textDark: '#111827',
+  textSecondary: '#6B7280',
+  textPrimary: '#1a1a1a',
+  white: '#FFFFFF',
+  bannerTint: '#EEF2FF',
 };
 
-// ─── Main component ───────────────────────────────────────────────────────────
-const TeacherThoughtsCard: React.FC<TeacherThoughtsCardProps> = ({
-  post,
-  onLike,
-  onComment,
-  onReport,
-  getProfileImageSource,
-  initials,
-  resolvePostAuthor,
-  ws,
-  userProfileCache,
-}) => {
-  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+interface TeacherThoughtsCardProps {
+  // Data props
+  posts: UnifiedPost[];
+  postsLoading: boolean;
+  userProfileCache: Map<string, { name: string; profilePic: string }>;
+  currentUserEmail?: string;
+  
+  // Helper functions
+  getProfileImageSource: (profilePic?: string) => { uri: string } | null;
+  initials: (name: string) => string;
+  resolvePostAuthor: (post: UnifiedPost) => { name: string; pic: string | null; role: string };
+  
+  // Actions
+  handleCreatePost: (content: string, imageUri?: string | null) => Promise<void>;
+  handleDeletePost?: (postId: string) => Promise<void>;
+  handleLike?: (postId: string) => Promise<void>;
+  setPosts: React.Dispatch<React.SetStateAction<UnifiedPost[]>>;
+  onComment: (post: UnifiedPost) => void;
+  onProfileClick?: (author: { email: string; name: string; profilePic: string | null }) => void;
+  
+  // UI control props
+  isMobile?: boolean;
+  showThoughtsPanel?: boolean;
+  isThoughtsCollapsed?: boolean;
+  setIsThoughtsCollapsed?: React.Dispatch<React.SetStateAction<boolean>>;
 
-  useEffect(() => {
-    const sub = Dimensions.addEventListener('change', ({ window }) => {
-      setScreenWidth(window.width);
-    });
-    return () => sub?.remove();
-  }, []);
+  // Tooltip state from parent (to render at root level and avoid clipping)
+  showTooltip?: boolean;
+  setShowTooltip?: React.Dispatch<React.SetStateAction<boolean>>;
+}
 
-  // ── Responsive breakpoints ──────────────────────────────────────────────────
-  const isMobile       = screenWidth < 480;
-  const isTablet       = screenWidth >= 480 && screenWidth < 768;
-  const isSmallDesktop = screenWidth >= 768 && screenWidth < 1024;
-  const isDesktop      = screenWidth >= 1024 && screenWidth < 1440;
-  // isLargeDesktop: screenWidth >= 1440
+// Mobile version - thin vertical line that expands
+const MobileThoughtsPanel: React.FC<TeacherThoughtsCardProps> = (props) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const {
+    posts,
+    postsLoading,
+    userProfileCache,
+    currentUserEmail,
+    getProfileImageSource,
+    initials,
+    resolvePostAuthor,
+    handleCreatePost,
+    handleDeletePost,
+    handleLike,
+    setPosts,
+    onComment,
+    onProfileClick,
+    showTooltip,
+    setShowTooltip,
+  } = props;
 
-  // Font scale
-  const fs = {
-    xs:  isMobile ? 9  : isTablet ? 10 : isSmallDesktop ? 11 : isDesktop ? 12 : 13,
-    sm:  isMobile ? 10 : isTablet ? 11 : isSmallDesktop ? 12 : isDesktop ? 13 : 14,
-    md:  isMobile ? 12 : isTablet ? 13 : isSmallDesktop ? 13 : isDesktop ? 14 : 15,
-    lg:  isMobile ? 14 : isTablet ? 15 : isSmallDesktop ? 15 : isDesktop ? 16 : 17,
-  };
-
-  // Spacing scale
-  const sp = {
-    xs: isMobile ? 3  : isTablet ? 4  : 6,
-    sm: isMobile ? 6  : isTablet ? 8  : 10,
-    md: isMobile ? 10 : isTablet ? 12 : 14,
-  };
-
-  // Avatar
-  const avatarSize = isMobile ? 28 : isTablet ? 32 : isSmallDesktop ? 36 : isDesktop ? 38 : 42;
-
-  // Image heights
-  const imgHeight = isMobile ? 60 : isTablet ? 80 : isSmallDesktop ? 100 : 120;
-  const stripW    = isMobile ? 50 : isTablet ? 60 : isSmallDesktop ? 70 : 80;
-  const stripH    = isMobile ? 70 : isTablet ? 80 : isSmallDesktop ? 90 : 100;
-
-  // ── Default helpers ──────────────────────────────────────────────────────────
-  const defaultGetProfileImageSource = (profilePic?: string): { uri: string } | null => {
-    if (!profilePic || ['', 'null', 'undefined'].includes(profilePic.trim())) return null;
-    if (profilePic.startsWith('http') || profilePic.startsWith('file://')) return { uri: profilePic };
-    const clean = profilePic.startsWith('/') ? profilePic.substring(1) : profilePic;
-    return { uri: `${BASE_URL}/${clean}` };
-  };
-
-  const defaultInitials = (name: string): string =>
-    name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-
-  const defaultResolvePostAuthor = (p?: TeacherPost) => {
-    if (!p) return { name: 'Unknown Teacher', pic: null, role: 'teacher' };
-
-    const cached = userProfileCache?.get(p.author?.email) ?? { name: '', profilePic: '' };
-    let name: string = cached.name || p.author?.name || '';
-    let pic: string | null = cached.profilePic || p.author?.profile_pic || null;
-    const role = p.author?.role || 'teacher';
-
-    if (!name || name === 'null' || name.includes('@')) {
-      name = p.author?.email?.split('@')[0] || 'Unknown Teacher';
-      name = name
-        .split('.')
-        .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-        .join(' ');
-    }
-
-    if (pic && !pic.startsWith('http') && !pic.startsWith('/')) pic = `/${pic}`;
-    if (pic === '' || pic === 'null') pic = null;
-
-    return { name, pic, role };
-  };
-
-  // ── Resolve author ───────────────────────────────────────────────────────────
-  const { name, pic, role } =
-    resolvePostAuthor && post
-      ? resolvePostAuthor(post)
-      : defaultResolvePostAuthor(post);
-
-  const content      = post?.content ?? '';
-  const images: string[] = post?.postImages?.length
-    ? post.postImages
-    : post?.postImage
-    ? [post.postImage]
-    : [];
-  const commentCount = post?.comments?.length ?? 0;
-  const likes        = post?.likes ?? 0;
-  const isLiked      = post?.isLiked ?? false;
-  const createdAt    = post?.createdAt ?? 'Just now';
-  const postId       = post?.id ?? '';
-
-  // ── Loading skeleton ─────────────────────────────────────────────────────────
-  if (!post) {
-    return (
-      <View style={[s.card, s.loadingCard]}>
-        {/* Row: avatar + text lines */}
-        <View style={s.loadingRow}>
-          <View style={[s.loadingBox, { width: 36, height: 36, borderRadius: 18, marginRight: 10 }]} />
-          <View style={{ flex: 1 }}>
-            <View style={[s.loadingBox, { height: 14, width: '55%', marginBottom: 6 }]} />
-            <View style={[s.loadingBox, { height: 10, width: '35%' }]} />
-          </View>
-        </View>
-        {/* Body lines */}
-        <View style={[s.loadingBox, { height: 11, width: '90%', marginTop: 12, marginBottom: 6 }]} />
-        <View style={[s.loadingBox, { height: 11, width: '70%' }]} />
-      </View>
-    );
-  }
-
-  // ── Image grid ───────────────────────────────────────────────────────────────
-  const renderImages = () => {
-    if (!images.length) return null;
-
-    if (images.length <= 2) {
-      return (
-        <View style={s.imgGrid}>
-          {images.map((uri, i) => (
-            <Image
-              key={i}
-              source={{ uri }}
-              style={[
-                s.imgGridItem,
-                { height: imgHeight },
-                images.length === 1 && s.imgFull,
-              ]}
-              resizeMode="cover"
-            />
-          ))}
-        </View>
-      );
-    }
-
-    return (
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={s.imgStrip}
-        contentContainerStyle={s.imgStripContent}
-      >
-        {images.map((uri, i) => (
-          <Image
-            key={i}
-            source={{ uri }}
-            style={[s.imgStripItem, { width: stripW, height: stripH }]}
-            resizeMode="cover"
-          />
-        ))}
-      </ScrollView>
-    );
-  };
-
-  const imgSrc = getProfileImageSource
-    ? getProfileImageSource(pic ?? undefined)
-    : defaultGetProfileImageSource(pic ?? undefined);
-
-  // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <View style={s.card}>
-      {/* Header */}
-      <View style={[s.header, { marginBottom: sp.xs }]}>
-        {imgSrc ? (
-          <Image
-            source={imgSrc}
-            style={[s.avatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}
-          />
-        ) : (
-          <View
-            style={[
-              s.avatarFallback,
-              { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 },
-            ]}
-          >
-            <Text style={[s.avatarTxt, { fontSize: Math.floor(avatarSize / 2.8) }]}>
-              {initials ? initials(name) : defaultInitials(name)}
-            </Text>
+    <View style={mobileStyles.container}>
+      {/* Thin vertical line when collapsed */}
+      {!isExpanded && (
+        <TouchableOpacity
+          style={mobileStyles.line}
+          onPress={() => setIsExpanded(true)}
+          activeOpacity={0.7}
+        >
+          <View style={mobileStyles.lineInner} />
+          <Ionicons name="chatbubble" size={14} color="#3B5BFE" style={{ marginTop: 8 }} />
+        </TouchableOpacity>
+      )}
+
+      {/* Expanded panel */}
+      {isExpanded && (
+        <View style={mobileStyles.expanded}>
+          <View style={mobileStyles.header}>
+            <View style={mobileStyles.headerLeft}>
+              <Text style={mobileStyles.title} selectable={false}>GrowThoughts</Text>
+            </View>
+
+            {/* Info icon with tooltip */}
+            <View style={panelStyles.headerRightSection}>
+              <TouchableOpacity
+                style={panelStyles.infoIconContainer}
+                onPress={() => {
+                  if (setShowTooltip) {
+                    setShowTooltip(!showTooltip);
+                    if (!showTooltip) {
+                      setTimeout(() => setShowTooltip(false), 4000);
+                    }
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="information-circle-outline" size={20} color="#6B7280" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={mobileStyles.close}
+                onPress={() => setIsExpanded(false)}
+              >
+                <Ionicons name="close" size={20} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
           </View>
-        )}
 
-        <View style={s.headerText}>
-          <Text style={[s.authorName, { fontSize: fs.md }]} numberOfLines={1}>
-            {name}
-            <Text style={[s.authorRole, { fontSize: fs.xs }]}> | {role}</Text>
-          </Text>
-          <Text style={[s.timeText, { fontSize: fs.xs - 1, marginTop: sp.xs / 2 }]}>
-            {createdAt}
-          </Text>
+          <View style={mobileStyles.composer}>
+            <TeacherPostComposer
+              onCreatePost={handleCreatePost}
+              placeholder="Share your thoughts..."
+            />
+          </View>
+
+          <ScrollView style={mobileStyles.scroll} showsVerticalScrollIndicator={false}>
+            {postsLoading && posts.length === 0 && (
+              <View style={panelStyles.loadingContainer}>
+                <ActivityIndicator color={COLORS.primaryBlue} size="large" />
+                <Text style={panelStyles.loadingText} selectable={false}>
+                  Loading thoughts...
+                </Text>
+              </View>
+            )}
+            {!postsLoading && posts.length === 0 && (
+              <View style={panelStyles.emptyState}>
+                <Ionicons name="chatbubble-outline" size={40} color={COLORS.textSecondary} />
+                <Text style={panelStyles.emptyStateTitle} selectable={false}>No thoughts yet</Text>
+                <Text style={panelStyles.emptyStateText} selectable={false}>
+                  Be the first to share your thoughts!
+                </Text>
+              </View>
+            )}
+            {posts.map((post) => (
+              <View key={post.id} style={panelStyles.postWrapper}>
+                <UnifiedThoughtsCard
+                  post={post}
+                  userProfileCache={userProfileCache}
+                  currentUserEmail={currentUserEmail}
+                  getProfileImageSource={getProfileImageSource}
+                  initials={initials}
+                  resolvePostAuthor={resolvePostAuthor}
+                  isTeacherContext={true}
+                  onLike={handleLike || ((id: string) => setPosts((ps: any[]) => ps.map(p =>
+                    p.id === id
+                      ? { ...p, isLiked: !p.isLiked, likes: p.isLiked ? p.likes - 1 : p.likes + 1 }
+                      : p
+                  )))}
+                  onComment={onComment}
+                  onDelete={handleDeletePost}
+                  onReport={() => {}}
+                  onProfileClick={onProfileClick}
+                />
+              </View>
+            ))}
+          </ScrollView>
         </View>
-
-        <HoverTouchable
-          onPress={() => (onReport ? onReport(post) : undefined)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Text style={[s.dots, { fontSize: isMobile ? 14 : 16 }]}>•••</Text>
-        </HoverTouchable>
-      </View>
-
-      {/* Body */}
-      <Text
-        style={[
-          s.body,
-          {
-            fontSize: fs.md,
-            lineHeight: fs.md * 1.5,
-            marginBottom: sp.sm,
-          },
-        ]}
-      >
-        {content}
-      </Text>
-
-      {renderImages()}
-
-      {/* Footer actions */}
-      <View style={[s.footer, { paddingVertical: sp.sm }]}>
-        {/* Like */}
-        <TouchableOpacity
-          style={[s.actionBtn, { paddingVertical: sp.xs, paddingHorizontal: sp.sm }]}
-          onPress={() => (onLike ? onLike(postId) : undefined)}
-          activeOpacity={0.7}
-        >
-          <FontAwesome
-            name={isLiked ? 'thumbs-up' : 'thumbs-o-up'}
-            size={isMobile ? 9 : 11}
-            color="#4A7BF7"
-          />
-          <Text style={[s.actionTxt, isLiked && s.actionTxtActive, { fontSize: fs.sm, marginLeft: sp.xs }]}>
-            Like
-          </Text>
-          {likes > 0 && (
-            <View style={[s.countPill, { marginLeft: sp.xs }]}>
-              <Text style={[s.countTxt, { fontSize: fs.xs }]}>{likes}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        {/* Comments */}
-        <TouchableOpacity
-          style={[s.actionBtn, { paddingVertical: sp.xs, paddingHorizontal: sp.sm }]}
-          onPress={() => (onComment ? onComment(post) : undefined)}
-          activeOpacity={0.7}
-        >
-          <FontAwesome name="comment-o" size={isMobile ? 9 : 11} color="#4A7BF7" />
-          <Text style={[s.actionTxt, s.thoughtsText, { fontSize: fs.sm, marginLeft: sp.xs }]}>
-            Thoughts
-          </Text>
-          {commentCount > 0 && (
-            <View style={[s.countPill, { marginLeft: sp.xs }]}>
-              <Text style={[s.countTxt, { fontSize: fs.xs }]}>{commentCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        {/* Share */}
-        <TouchableOpacity
-          style={[s.actionBtn, { paddingVertical: sp.xs, paddingHorizontal: sp.sm }]}
-          activeOpacity={0.7}
-        >
-          <FontAwesome name="share" size={isMobile ? 9 : 11} color="#555" />
-          <Text style={[s.actionTxt, { fontSize: fs.sm, marginLeft: sp.xs }]}>Share</Text>
-        </TouchableOpacity>
-      </View>
+      )}
     </View>
   );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const s = StyleSheet.create({
-  card: {
-    backgroundColor: 'rgba(255, 255, 255, 0.97)',
-    borderRadius: 10,
-    marginHorizontal: 4,
-    marginVertical: 4,
-    paddingTop: 10,
-    paddingHorizontal: 12,
-    paddingBottom: 4,
-    width: '100%',
-    // Shadow: cross-platform
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
-      web: {
-        // @ts-ignore web-only
-        boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
-      },
-    }),
-    borderWidth: 0.5,
-    borderColor: 'rgba(0,0,0,0.04)',
-  },
+// Desktop version - full panel with collapse functionality
+const DesktopThoughtsPanel: React.FC<TeacherThoughtsCardProps> = (props) => {
+  const {
+    posts,
+    postsLoading,
+    userProfileCache,
+    currentUserEmail,
+    getProfileImageSource,
+    initials,
+    resolvePostAuthor,
+    handleCreatePost,
+    handleDeletePost,
+    handleLike,
+    setPosts,
+    onComment,
+    onProfileClick,
+    isThoughtsCollapsed = false,
+    setIsThoughtsCollapsed = () => {},
+    showTooltip,
+    setShowTooltip,
+  } = props;
 
-  // Loading skeleton
-  loadingCard: {
-    paddingVertical: 16,
-    opacity: 0.55,
-  },
-  loadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  loadingBox: {
-    backgroundColor: '#e5e7eb',
-    borderRadius: 4,
-  },
+  return (
+    <View style={[
+      desktopStyles.panel,
+      isThoughtsCollapsed && desktopStyles.panelCollapsed,
+    ]}>
+      <View style={desktopStyles.header}>
+        <View style={desktopStyles.titleContainer}>
+          {!isThoughtsCollapsed && (
+            <View style={desktopStyles.titleWithIcon}>
+              <Text style={desktopStyles.title} selectable={false}>GrowThoughts</Text>
+            </View>
+          )}
+        </View>
+        
+        {!isThoughtsCollapsed && (
+          <View style={desktopStyles.headerRight}>
+            {/* Info icon with tooltip */}
+            <TouchableOpacity
+              style={panelStyles.infoIconContainer}
+              onPress={() => {
+                if (setShowTooltip) {
+                  setShowTooltip(!showTooltip);
+                  if (!showTooltip) {
+                    setTimeout(() => setShowTooltip(false), 4000);
+                  }
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="information-circle-outline" size={20} color="#6B7280" />
+            </TouchableOpacity>
 
-  // Header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+            <TouchableOpacity
+              style={desktopStyles.collapseBtn}
+              onPress={() => setIsThoughtsCollapsed((p: boolean) => !p)}
+            >
+              <Ionicons
+                name={isThoughtsCollapsed ? 'chevron-forward' : 'chevron-back'}
+                size={16}
+                color={COLORS.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
+        )}
+        
+        {isThoughtsCollapsed && (
+          <TouchableOpacity
+            style={desktopStyles.collapseBtn}
+            onPress={() => setIsThoughtsCollapsed((p: boolean) => !p)}
+          >
+            <Ionicons
+              name={isThoughtsCollapsed ? 'chevron-forward' : 'chevron-back'}
+              size={16}
+              color={COLORS.textSecondary}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {!isThoughtsCollapsed && (
+        <>
+          <View style={desktopStyles.composerWrapper}>
+            <TeacherPostComposer
+              onCreatePost={handleCreatePost}
+              placeholder="Share your thoughts..."
+            />
+          </View>
+
+          <UnifiedThoughtsBackground>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={panelStyles.list}
+              style={panelStyles.scrollView}
+            >
+              {postsLoading && posts.length === 0 && (
+                <View style={panelStyles.loadingContainer}>
+                  <ActivityIndicator color={COLORS.primaryBlue} size="large" />
+                  <Text style={panelStyles.loadingText} selectable={false}>
+                    Loading thoughts...
+                  </Text>
+                </View>
+              )}
+
+              {!postsLoading && posts.length === 0 && (
+                <View style={panelStyles.emptyState}>
+                  <Ionicons name="chatbubble-outline" size={48} color={COLORS.textSecondary} />
+                  <Text style={panelStyles.emptyStateTitle} selectable={false}>No thoughts yet</Text>
+                  <Text style={panelStyles.emptyStateText} selectable={false}>
+                    Be the first to share your thoughts!
+                  </Text>
+                </View>
+              )}
+
+              {posts.map((post) => (
+                <View key={post.id} style={panelStyles.postWrapper}>
+                  <UnifiedThoughtsCard
+                    post={post}
+                    userProfileCache={userProfileCache}
+                    currentUserEmail={currentUserEmail}
+                    getProfileImageSource={getProfileImageSource}
+                    initials={initials}
+                    resolvePostAuthor={resolvePostAuthor}
+                    isTeacherContext={true}
+                    onLike={handleLike || ((id: string) =>
+                      setPosts((ps) =>
+                        ps.map((p) =>
+                          p.id === id
+                            ? { ...p, isLiked: !p.isLiked, likes: p.isLiked ? p.likes - 1 : p.likes + 1 }
+                            : p
+                        )
+                      )
+                    )}
+                    onComment={onComment}
+                    onDelete={handleDeletePost}
+                    onReport={() => {}}
+                    onProfileClick={onProfileClick}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+          </UnifiedThoughtsBackground>
+        </>
+      )}
+    </View>
+  );
+};
+
+// Main component - chooses between mobile and desktop
+const TeacherThoughtsCard: React.FC<TeacherThoughtsCardProps> = (props) => {
+  const { isMobile, showThoughtsPanel } = props;
+
+  // Mobile: show the mobile panel (vertical line that expands) on all platforms
+  if (isMobile) {
+    return <MobileThoughtsPanel {...props} />;
+  }
+
+  // Desktop: show the full panel only if showThoughtsPanel is true
+  if (showThoughtsPanel) {
+    return <DesktopThoughtsPanel {...props} />;
+  }
+
+  return null;
+};
+
+// Shared styles for both mobile and desktop
+const panelStyles = StyleSheet.create({
+  scrollView: {
+    flex: 1,
   },
-  avatar: {
-    marginRight: 8,
+  list: {
+    paddingBottom: 24,
+    gap: 8,
   },
-  avatarFallback: {
-    backgroundColor: '#4A7BF7',
+  postWrapper: {
+    marginBottom: 4,
+  },
+  loadingContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.12,
-        shadowRadius: 4,
-      },
-      android: { elevation: 2 },
-      web: {
-        // @ts-ignore web-only
-        boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-      },
-    }),
+    paddingVertical: 40,
   },
-  avatarTxt: {
-    color: '#fff',
-    fontWeight: '700',
-    fontFamily: 'Poppins_700Bold',
-  },
-  headerText: { flex: 1 },
-  authorName: {
-    fontWeight: '700',
-    color: '#1a1a1a',
-    fontFamily: 'Poppins_600SemiBold',
-    letterSpacing: -0.2,
-  },
-  authorRole: {
-    fontWeight: '400',
-    color: '#6b7280',
+  loadingText: {
+    fontSize: 14,
     fontFamily: 'Poppins_400Regular',
-    letterSpacing: 0.1,
+    color: COLORS.textSecondary,
+    marginTop: 10,
+    textAlign: 'center',
   },
-  timeText: {
-    color: '#9ca3af',
-    fontFamily: 'Poppins_400Regular',
-  },
-  dots: {
-    color: '#bbb',
-    paddingLeft: 6,
-    letterSpacing: 2,
-  },
-
-  // Body
-  body: {
-    color: '#222',
-    fontFamily: 'Poppins_400Regular',
-  },
-
-  // Images
-  imgGrid: {
-    flexDirection: 'row',
-    marginBottom: 6,
-    borderRadius: 6,
-    overflow: 'hidden',
-    gap: 2,
-  },
-  imgGridItem: {
-    flex: 1,
-    borderRadius: 8,
-  },
-  imgFull: {
-    // takes full flex width - parent is flex row with single child
-  },
-  imgStrip: { marginBottom: 6 },
-  imgStripContent: { gap: 3, paddingRight: 2 },
-  imgStripItem: { borderRadius: 6 },
-
-  // Footer
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderTopWidth: 0.5,
-    borderTopColor: 'rgba(0,0,0,0.05)',
-    gap: 2,
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
+  emptyState: {
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 5,
-    backgroundColor: 'rgba(74,123,247,0.03)',
-    borderWidth: 0.5,
-    borderColor: 'rgba(74,123,247,0.1)',
+    paddingVertical: 48,
   },
-  actionTxt: {
-    color: '#6b7280',
+  emptyStateTitle: {
+    fontSize: 16,
     fontFamily: 'Poppins_500Medium',
-    letterSpacing: -0.1,
+    color: COLORS.textDark,
+    marginTop: 14,
+    marginBottom: 6,
   },
-  actionTxtActive: {
-    color: '#4A7BF7',
-    fontFamily: 'Poppins_600SemiBold',
+  emptyStateText: {
+    fontSize: 13,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: 16,
   },
-  thoughtsText: {
-    color: '#4A7BF7',
-    fontWeight: '600',
-    fontFamily: 'Poppins_600SemiBold',
-    letterSpacing: -0.1,
-  },
-  countPill: {
-    backgroundColor: 'rgba(74,123,247,0.1)',
-    borderRadius: 6,
-    paddingVertical: 1,
-    paddingHorizontal: 6,
-    minWidth: 18,
+  headerRightSection: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(74,123,247,0.2)',
+    gap: 8,
+    // ✅ FIX: allow tooltip to overflow without being clipped
+    overflow: 'visible',
+    zIndex: 9999,
   },
-  countTxt: {
-    color: '#4A7BF7',
-    fontWeight: '600',
-    fontFamily: 'Poppins_600SemiBold',
-    letterSpacing: -0.1,
+  infoIconContainer: {
+    position: 'relative',
+    padding: 4,
+    // ✅ FIX: lift above cards and allow child tooltip to overflow
+    zIndex: 9999,
+    overflow: 'visible',
+  },
+  tooltip: {
+    position: 'absolute',
+    bottom: 32,
+    right: -50,
+    backgroundColor: '#1F2937',
+    borderRadius: 8,
+    padding: 10,
+    width: 220,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 100,
+    zIndex: 99999,
+  },
+  tooltipPanelLevel: {
+    position: Platform.OS === 'web' ? 'fixed' : 'absolute',
+    top: Platform.OS === 'web' ? 60 : 50,
+    right: Platform.OS === 'web' ? 20 : 16,
+    backgroundColor: '#1F2937',
+    borderRadius: 8,
+    padding: 10,
+    width: 220,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 100,
+    zIndex: 99999,
+  },
+  tooltipDesktop: {
+    position: 'absolute',
+    bottom: 32,
+    right: -50,
+    backgroundColor: '#1F2937',
+    borderRadius: 8,
+    padding: 10,
+    width: 220,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 100,
+    zIndex: 99999,
+  },
+  tooltipText: {
+    fontSize: 12,
+    color: '#fff',
+    fontFamily: 'Poppins_400Regular',
+    lineHeight: 16,
+  },
+  tooltipArrow: {
+    position: 'absolute',
+    bottom: -6,
+    right: 56,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#1F2937',
+  },
+  tooltipArrowDesktop: {
+    position: 'absolute',
+    bottom: -6,
+    right: 56,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#1F2937',
   },
 });
 
+// Mobile-specific styles
+const mobileStyles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 100,
+  },
+  line: {
+    width: 52,
+    height: '100%',
+    backgroundColor: '#FAFBFC',
+    borderLeftWidth: 1,
+    borderLeftColor: COLORS.border,
+    alignItems: 'center',
+    paddingTop: 24,
+  },
+  lineInner: {
+    width: 4,
+    height: 60,
+    backgroundColor: '#3B5BFE',
+    borderRadius: 2,
+  },
+  expanded: {
+    width: 320,
+    height: '100%',
+    backgroundColor: '#FAFBFC',
+    borderLeftWidth: 1,
+    borderLeftColor: COLORS.border,
+    flexDirection: 'column',
+    overflow: 'visible',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    // ✅ FIX: don't clip tooltip that overflows the header bar
+    overflow: 'visible',
+    zIndex: 9999,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 18,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textDark,
+  },
+  close: {
+    padding: 6,
+    borderRadius: 8,
+  },
+  headerRightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  composer: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  scroll: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+});
+
+// Desktop-specific styles - responsive with dynamic width
+const desktopStyles = StyleSheet.create({
+  panel: {
+    flex: 1,
+    minWidth: 280,
+    maxWidth: 400,
+    backgroundColor: '#FAFBFC',
+    borderLeftWidth: 1,
+    borderLeftColor: COLORS.border,
+    paddingHorizontal: 12,
+    paddingTop: 20,
+    flexDirection: 'column',
+  },
+  panelCollapsed: {
+    width: 52,
+    minWidth: 52,
+    paddingHorizontal: 8,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    // ✅ FIX: don't clip tooltip that overflows the header bar
+    overflow: 'visible',
+    zIndex: 9999,
+  },
+  titleContainer: {
+    flex: 1,
+  },
+  titleWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 18,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textDark,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    // ✅ FIX: allow tooltip to overflow this row container
+    overflow: 'visible',
+    zIndex: 9999,
+  },
+  collapseBtn: {
+    padding: 6,
+    borderRadius: 8,
+  },
+  composerWrapper: {
+    marginBottom: 16,
+  },
+});
+
+export { UnifiedThoughtsBackground as TeacherThoughtsBackground };
 export default TeacherThoughtsCard;

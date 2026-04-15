@@ -41,7 +41,12 @@ export default function LoginOptionsScreen() {
   };
 
   const handleBack = () => {
-    safeBack(router, '/login');
+    // Go back to InitialScreen instead of login to avoid redirect loop
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/auth/InitialScreen' as any);
+    }
   };
 
   if (isWeb) {
@@ -218,28 +223,7 @@ const webStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
-    ...Platform.select({
-
-      web: {
-
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
-    elevation: 16,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   leftLogoText: {
     fontSize: 40,
@@ -326,11 +310,7 @@ const webStyles = StyleSheet.create({
     padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: 'rgba(0, 0, 0, 0.05)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 6,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.05)',
   },
   roleIcon: {
     width: 64,
@@ -432,11 +412,7 @@ const styles = StyleSheet.create({
     padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: 'rgba(0, 0, 0, 0.05)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.05)',
   },
   mobileRoleIcon: {
     width: 48,

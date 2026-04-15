@@ -218,7 +218,7 @@ export const UXCard: React.FC<UXCardProps> = ({
     if (onPress) {
       Animated.spring(scaleValue, {
         toValue: 0.98,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
         friction: 8,
       }).start();
     }
@@ -228,7 +228,7 @@ export const UXCard: React.FC<UXCardProps> = ({
     if (onPress) {
       Animated.spring(scaleValue, {
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
         friction: 8,
       }).start();
     }

@@ -39,16 +39,17 @@ export default function InitialScreen() {
   }, [isWeb, router]);
 
   const animateButton = (scaleAnim: Animated.Value, callback: () => void) => {
+    const useNative = Platform.OS !== 'web';
     Animated.sequence([
       Animated.timing(scaleAnim, {
         toValue: 0.95,
         duration: 100,
-        useNativeDriver: true,
+        useNativeDriver: useNative,
       }),
       Animated.timing(scaleAnim, {
         toValue: 1,
         duration: 100,
-        useNativeDriver: true,
+        useNativeDriver: useNative,
       }),
     ]).start();
     callback();
@@ -62,7 +63,7 @@ export default function InitialScreen() {
 
   const handleLogin = () => {
     animateButton(loginScale, () => {
-      router.push('/auth/LoginOptionsScreen');
+      router.push({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } });
     });
   };
 
@@ -254,28 +255,7 @@ const webStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
-    ...Platform.select({
-
-      web: {
-
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
-    elevation: 16,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   leftLogoText: {
     fontSize: 40,
@@ -361,28 +341,7 @@ const webStyles = StyleSheet.create({
     marginBottom: 20,
     width: '100%',
     alignItems: 'center',
-    ...Platform.select({
-
-      web: {
-
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
-    elevation: 12,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   signupButtonText: {
     color: 'white',
@@ -461,28 +420,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    ...Platform.select({
-
-      web: {
-
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
-    elevation: 8,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   mobileLogoText: {
     fontSize: 24,
@@ -525,28 +463,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 360,
     alignItems: 'center',
-    ...Platform.select({
-
-      web: {
-
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
-    elevation: 8,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   signupButtonText: {
     color: 'white',

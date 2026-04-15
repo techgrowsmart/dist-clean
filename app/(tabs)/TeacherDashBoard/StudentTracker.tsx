@@ -74,24 +74,28 @@ useEffect(() => {
                 selectedClass: storedClass || "",
                 selectedSubject: storedSubject || ""
             });
-
-            console.log("Class Info:", classInfo);
-         
-            if (userEmail) {
-                const q = query(collection(db, "studentTracker"), where("teacherEmail", "==", userEmail));
-                const unsubscribe = onSnapshot(q, (snapshot) => {
-                    setStudents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Student)));
-                    setLoading(false);
-                    console.log("Fetched students:", snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                }
-            );
-                
-                return unsubscribe;
-            }
         };
-        setLoading(false);
         fetchData();
     }, []);
+
+    useEffect(() => {
+        if (!userEmail) return;
+
+        console.log("Setting up Firestore listener for:", userEmail);
+        const q = query(collection(db, "studentTracker"), where("teacherEmail", "==", userEmail));
+        const unsubscribe = onSnapshot(q, { includeMetadataChanges: false }, (snapshot) => {
+            setStudents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Student)));
+            setLoading(false);
+            console.log("Fetched students:", snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }, (error) => {
+            console.error("Firestore error:", error);
+            setLoading(false);
+        });
+
+        return () => {
+            unsubscribe();
+        };
+    }, [userEmail]);
 
 
     const handleDeleteStudent = async (studentId: string, studentEmail: string) => {

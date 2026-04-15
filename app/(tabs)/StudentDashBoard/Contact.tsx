@@ -176,31 +176,37 @@ export default function Contact() {
 
     setIsSubmitting(true);
     try {
-      // TODO: Replace with actual API endpoint
-      const response = await fetch(`${BASE_URL}/api/contact`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          category: selectedCategory,
-          message: message.trim(),
-          userType: 'student',
-          email: userEmail,
-        }),
-      });
+      // Find category label
+      const categoryLabel = categories.find(c => c.id === selectedCategory)?.label || selectedCategory;
+      
+      // Construct email body with form data
+      const emailBody = `
+Category: ${categoryLabel}
+User Email: ${userEmail || 'Not provided'}
+User Name: ${studentName || 'Not provided'}
 
-      if (response.ok) {
-        setShowSuccessModal(true);
+Message:
+${message.trim()}
+      `.trim();
+
+      // Create mailto URL with subject and body
+      const subject = encodeURIComponent(`Contact Us - ${categoryLabel}`);
+      const body = encodeURIComponent(emailBody);
+      const mailtoUrl = `mailto:support@gogrowsmart.com?subject=${subject}&body=${body}`;
+
+      // Open email client
+      const canOpen = await Linking.canOpenURL(mailtoUrl);
+      if (canOpen) {
+        await Linking.openURL(mailtoUrl);
+        // Clear form after successful email open
         setMessage('');
         setSelectedCategory('general');
       } else {
-        Alert.alert('Error', 'Failed to send message. Please try again.');
+        Alert.alert('Error', 'Unable to open email client. Please email support@gogrowsmart.com directly.');
       }
     } catch (error) {
-      console.error('Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message. Please try again.');
+      console.error('Error opening email:', error);
+      Alert.alert('Error', 'Failed to open email. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -383,7 +389,6 @@ export default function Contact() {
               <TextInput
                 style={styles.messageInput}
                 multiline
-                numberOfLines={6}
                 placeholder="Tell us more about your question or feedback..."
                 placeholderTextColor={COLORS.textMuted}
                 value={message}
@@ -445,14 +450,6 @@ export default function Contact() {
             {renderWebMainContent()}
           </View>
         </ResponsiveSidebar>
-        {/* Thoughts panel - conditionally rendered based on screen size */}
-        <>
-          {isMobile ? (
-            renderWebRightSidebar()
-          ) : (
-            <View style={{ width: '28%', minWidth: 280, maxWidth: 380 }}>{renderWebRightSidebar()}</View>
-          )}
-        </>
       </View>
     );
   }
@@ -534,7 +531,6 @@ export default function Contact() {
         <TextInput
           style={styles.messageInput}
           multiline
-          numberOfLines={6}
           placeholder="Tell us more about your question or feedback..."
           placeholderTextColor={COLORS.textMuted}
           value={message}

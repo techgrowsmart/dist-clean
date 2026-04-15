@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Platform, 
+import { Platform,
   View,
   Text,
   ScrollView,
@@ -8,7 +8,7 @@ import { Platform,
   Dimensions,
   Linking,
   Image,
-  
+
   Animated,
 } from 'react-native';
 import {   Ionicons } from '@expo/vector-icons';
@@ -17,7 +17,6 @@ import {   useRouter } from 'expo-router';
 import WebNavbar from '../../../components/ui/TeacherWebHeader';
 import WebTeacherSidebar from './WebTeacherSidebar';
 import {   TeacherThoughtsBackground } from '../../../components/ui/TeacherThoughtsCard';
-import BackButton from '../../../components/BackButton';
 
 const { width, height } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -93,12 +92,29 @@ const teacherFaqData: FAQItem[] = [
 ];
 
 const TeacherFaq = () => {
+  const router = useRouter();
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
   const [screenState, setScreenState] = useState(0); // Force re-render counter
   const [fadeAnim] = useState(new Animated.Value(0));
-  const router = useRouter();
+
+  const handleBackPress = () => {
+    router.back();
+  };
+
+  // ESC key handler for web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleBackPress();
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, []);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -191,7 +207,9 @@ const TeacherFaq = () => {
       <View key={`${Platform.OS}-${screenState}`} style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <BackButton size={24} color="#FFFFFF" onPress={() => router.back()} />
+          <TouchableOpacity style={styles.backBtnCircle} onPress={handleBackPress}>
+            <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
           <Text style={styles.headerText}>Teacher FAQ</Text>
         </View>
 
@@ -436,9 +454,20 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 16,
+    paddingTop: 60,
+    paddingBottom: 20,
+  },
+  backBtnCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   headerText: {
     fontSize: 24,

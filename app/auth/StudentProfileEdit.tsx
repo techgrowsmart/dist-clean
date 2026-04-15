@@ -261,28 +261,7 @@ const webStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
-    ...Platform.select({
-
-      web: {
-
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
-    elevation: 16,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   leftLogoText: {
     fontSize: 40,
@@ -380,33 +359,10 @@ const webStyles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     marginTop: 20,
-    ...Platform.select({
-
-      web: {
-
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
-    elevation: 12,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   saveButtonDisabled: {
     backgroundColor: '#9CA3AF',
-    shadowOpacity: 0,
-    elevation: 0,
   },
   saveButtonText: {
     color: 'white',
@@ -477,33 +433,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 20,
-    ...Platform.select({
-
-      web: {
-
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
-    elevation: 8,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   saveButtonDisabled: {
     backgroundColor: '#9CA3AF',
-    shadowOpacity: 0,
-    elevation: 0,
   },
   saveButtonText: {
     color: 'white',

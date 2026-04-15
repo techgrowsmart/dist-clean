@@ -388,7 +388,7 @@ const RightScreen: React.FC = () => {
       }
 
       const pickerResult = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1,
@@ -419,46 +419,71 @@ const RightScreen: React.FC = () => {
     try {
       setLoading(true);
       
-      const formData = new FormData();
-      formData.append('content', newPostContent);
+      let response;
       
-      // Explicitly send user information to ensure correct author data
-      formData.append('authorName', currentUser.name || 'Teacher');
-      formData.append('authorEmail', currentUser.email);
-      formData.append('authorRole', currentUser.role || 'Teacher');
-      if (currentUser.profileImage) {
-        formData.append('authorProfileImage', currentUser.profileImage);
-      }
+      // Check if image is base64 (web platform) or file path (mobile)
+      const isBase64Image = selectedImage && selectedImage.startsWith('data:image');
       
-      // Add additional user data fields to ensure backend has correct info
-      formData.append('userName', currentUser.name || 'Teacher');
-      formData.append('userEmail', currentUser.email);
-      formData.append('userRole', currentUser.role || 'Teacher');
-      formData.append('userProfileImage', currentUser.profileImage || '');
-      
-      console.log('📤 Sending complete user data:', {
-        authorName: currentUser.name,
-        authorEmail: currentUser.email,
-        authorRole: currentUser.role,
-        authorProfileImage: currentUser.profileImage
-      });
-      
-      if (selectedImage) {
-        const uri = selectedImage;
-        const fileType = uri.split('.').pop();
-        formData.append('postImage', {
-          uri: uri,
-          type: `image/${fileType}`,
-          name: `post-image.${fileType}`
-        } as any);
-      }
-
-      const response = await axios.post(`${BASE_URL}/api/posts/create`, formData, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'multipart/form-data'
+      if (isBase64Image) {
+        // Send base64 image as JSON (web platform)
+        console.log('📤 Uploading post with base64 image');
+        response = await axios.post(
+          `${BASE_URL}/api/posts/create`,
+          {
+            content: newPostContent.trim(),
+            tags: '',
+            imageUri: selectedImage  // Send base64 data as JSON field
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+      } else {
+        // Create FormData for file upload (mobile platform)
+        const formData = new FormData();
+        formData.append('content', newPostContent);
+        
+        // Explicitly send user information to ensure correct author data
+        formData.append('authorName', currentUser.name || 'Teacher');
+        formData.append('authorEmail', currentUser.email);
+        formData.append('authorRole', currentUser.role || 'Teacher');
+        if (currentUser.profileImage) {
+          formData.append('authorProfileImage', currentUser.profileImage);
         }
-      });
+        
+        // Add additional user data fields to ensure backend has correct info
+        formData.append('userName', currentUser.name || 'Teacher');
+        formData.append('userEmail', currentUser.email);
+        formData.append('userRole', currentUser.role || 'Teacher');
+        formData.append('userProfileImage', currentUser.profileImage || '');
+        
+        console.log('📤 Sending complete user data (mobile):', {
+          authorName: currentUser.name,
+          authorEmail: currentUser.email,
+          authorRole: currentUser.role,
+          authorProfileImage: currentUser.profileImage
+        });
+        
+        if (selectedImage) {
+          const uri = selectedImage;
+          const fileType = uri.split('.').pop();
+          formData.append('postImage', {
+            uri: uri,
+            type: `image/${fileType}`,
+            name: `post-image.${fileType}`
+          } as any);
+        }
+
+        response = await axios.post(`${BASE_URL}/api/posts/create`, formData, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+      }
 
       console.log('📨 Create post response:', response.data); // Debug response
       

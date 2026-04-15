@@ -56,6 +56,8 @@ const MyTuitions = () => {
   const [sidebarActiveItem, setSidebarActiveItem] = useState("My Tuitions");
   const [unreadCount, setUnreadCount] = useState(0);
   const [favoriteContacts, setFavoriteContacts] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 6;
 
   const [posts, setPosts] = useState<any[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
@@ -69,6 +71,7 @@ const MyTuitions = () => {
   const [reportType, setReportType] = useState<'post' | 'comment'>('post');
   const [reportItemId, setReportItemId] = useState('');
   const [reportReason, setReportReason] = useState('');
+  const [showConnect, setShowConnect] = useState(false);
 
   // ── Fetch profile ──
   useEffect(() => {
@@ -370,59 +373,102 @@ const MyTuitions = () => {
     </TouchableOpacity>
   );
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredContacts.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedContacts = filteredContacts.slice(startIndex, endIndex);
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
   // Web return with responsive sidebar and Thoughts
   if (Platform.OS === 'web') {
     return (
       <View style={{ flex: 1, backgroundColor: '#fff' }}>
-        <ResponsiveSidebar
-          activeItem={sidebarActiveItem}
-          onItemPress={handleSidebarItemPress}
-          userEmail={userEmail || ""}
-          studentName={studentName || ""}
-          profileImage={profileImage || null}
-        >
-          <View style={{ flex: 1 }}>
-            <View style={styles.pageTitleContainer}>
-              <BackButton onPress={handleBackPress} color="white" />
-              <Ionicons name="school" size={28} color={COLORS.textPrimary} />
-              <Text style={styles.pageTitle}>My Tuitions</Text>
-            </View>
+        {/* Web Header - outside ResponsiveSidebar like Student Dashboard */}
+        <WebNavbar
+          studentName={studentName}
+          profileImage={profileImage}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+        />
+        <View style={{ flex: 1, flexDirection: 'row', overflow: 'hidden' }}>
+          <ResponsiveSidebar
+            activeItem={sidebarActiveItem}
+            onItemPress={handleSidebarItemPress}
+            userEmail={userEmail || ""}
+            studentName={studentName || ""}
+            profileImage={profileImage || null}
+          >
+            <View style={{ flex: 1, padding: 24 }}>
+              <View style={styles.pageTitleContainer}>
+                <BackButton onPress={handleBackPress} color="white" />
+                <Ionicons name="school" size={28} color={COLORS.textPrimary} />
+                <Text style={styles.pageTitle}>My Tuitions</Text>
+              </View>
 
-            <View style={styles.gridContainerBox}>
-              <ScrollView contentContainerStyle={styles.tuitionGrid} showsVerticalScrollIndicator={false}>
-                {loading ? (
-                  <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /><Text style={styles.loadingText}>Loading your tuitions...</Text></View>
-                ) : filteredContacts.length > 0 ? (
-                  <>
-                    <View style={styles.cardsWrapper}>
-                      {filteredContacts.map((contact, index) => renderTuitionCard(contact, index))}
+              <View style={styles.gridContainerBox}>
+                <ScrollView contentContainerStyle={styles.tuitionGrid} showsVerticalScrollIndicator={false}>
+                  {loading ? (
+                    <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /><Text style={styles.loadingText}>Loading your tuitions...</Text></View>
+                  ) : paginatedContacts.length > 0 ? (
+                    <>
+                      <View style={styles.cardsWrapper}>
+                        {paginatedContacts.map((contact, index) => renderTuitionCard(contact, index))}
+                      </View>
+                      {totalPages > 1 && (
+                        <View style={styles.paginationContainer}>
+                          <TouchableOpacity 
+                            onPress={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            style={{ opacity: currentPage === 1 ? 0.5 : 1 }}
+                          >
+                            <Ionicons name="chevron-back" size={20} color={COLORS.textSecondary} />
+                          </TouchableOpacity>
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                            <TouchableOpacity 
+                              key={page} 
+                              style={[styles.pageDot, currentPage === page && styles.pageDotActive]}
+                              onPress={() => handlePageChange(page)}
+                            >
+                              <Text style={[styles.pageDotText, currentPage === page && styles.pageDotTextActive]}>{page}</Text>
+                            </TouchableOpacity>
+                          ))}
+                          <TouchableOpacity 
+                            onPress={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            style={{ opacity: currentPage === totalPages ? 0.5 : 1 }}
+                          >
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyTitle}>No Tuitions Yet</Text>
+                      <Text style={styles.emptyText}>You haven't enrolled in any tuitions yet. Start by connecting with teachers!</Text>
                     </View>
-                    <View style={styles.paginationContainer}>
-                      <TouchableOpacity><Ionicons name="chevron-back" size={20} color={COLORS.textSecondary} /></TouchableOpacity>
-                      <TouchableOpacity style={[styles.pageDot, styles.pageDotActive]}><Text style={styles.pageDotTextActive}>1</Text></TouchableOpacity>
-                      <TouchableOpacity style={styles.pageDot}><Text style={styles.pageDotText}>2</Text></TouchableOpacity>
-                      <TouchableOpacity style={styles.pageDot}><Text style={styles.pageDotText}>3</Text></TouchableOpacity>
-                      <TouchableOpacity><Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} /></TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyTitle}>No Tuitions Yet</Text>
-                    <Text style={styles.emptyText}>You haven't enrolled in any tuitions yet. Start by connecting with teachers!</Text>
-                  </View>
-                )}
-              </ScrollView>
+                  )}
+                </ScrollView>
+              </View>
             </View>
-          </View>
-        </ResponsiveSidebar>
-        {/* Thoughts panel - conditionally rendered based on screen size */}
-        <>
-          {isMobile ? (
-            renderWebRightSidebar()
-          ) : (
-            <View style={{ width: '28%', minWidth: 280, maxWidth: 380 }}>{renderWebRightSidebar()}</View>
+          </ResponsiveSidebar>
+          {/* Thoughts panel - conditionally rendered based on screen size */}
+          {!showConnect && (
+            <>
+              {isMobile ? (
+                renderWebRightSidebar()
+              ) : (
+                <View style={{ width: '28%', minWidth: 280, maxWidth: 380 }}>{renderWebRightSidebar()}</View>
+              )}
+            </>
           )}
-        </>
+        </View>
       </View>
     );
   }
@@ -479,18 +525,38 @@ const MyTuitions = () => {
                 <ScrollView contentContainerStyle={styles.tuitionGrid} showsVerticalScrollIndicator={false}>
                   {loading ? (
                     <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /><Text style={styles.loadingText}>Loading your tuitions...</Text></View>
-                  ) : filteredContacts.length > 0 ? (
+                  ) : paginatedContacts.length > 0 ? (
                     <>
                       <View style={styles.cardsWrapper}>
-                        {filteredContacts.map((contact, index) => renderTuitionCard(contact, index))}
+                        {paginatedContacts.map((contact, index) => renderTuitionCard(contact, index))}
                       </View>
-                      <View style={styles.paginationContainer}>
-                        <TouchableOpacity><Ionicons name="chevron-back" size={20} color={COLORS.textSecondary} /></TouchableOpacity>
-                        <TouchableOpacity style={[styles.pageDot, styles.pageDotActive]}><Text style={styles.pageDotTextActive}>1</Text></TouchableOpacity>
-                        <TouchableOpacity style={styles.pageDot}><Text style={styles.pageDotText}>2</Text></TouchableOpacity>
-                        <TouchableOpacity style={styles.pageDot}><Text style={styles.pageDotText}>3</Text></TouchableOpacity>
-                        <TouchableOpacity><Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} /></TouchableOpacity>
-                      </View>
+                      {totalPages > 1 && (
+                        <View style={styles.paginationContainer}>
+                          <TouchableOpacity 
+                            onPress={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            style={{ opacity: currentPage === 1 ? 0.5 : 1 }}
+                          >
+                            <Ionicons name="chevron-back" size={20} color={COLORS.textSecondary} />
+                          </TouchableOpacity>
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                            <TouchableOpacity 
+                              key={page} 
+                              style={[styles.pageDot, currentPage === page && styles.pageDotActive]}
+                              onPress={() => handlePageChange(page)}
+                            >
+                              <Text style={[styles.pageDotText, currentPage === page && styles.pageDotTextActive]}>{page}</Text>
+                            </TouchableOpacity>
+                          ))}
+                          <TouchableOpacity 
+                            onPress={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            style={{ opacity: currentPage === totalPages ? 0.5 : 1 }}
+                          >
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </>
                   ) : (
                     <View style={styles.emptyContainer}>

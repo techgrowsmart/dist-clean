@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Dimensions,
+  SafeAreaView,
 } from "react-native";
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import { BASE_URL } from "../../../config";
@@ -22,6 +24,7 @@ import {
 } from '@expo-google-fonts/open-sans';
 import {
   Poppins_400Regular,
+  Poppins_500Medium,
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
@@ -30,25 +33,57 @@ import { Montserrat_400Regular } from '@expo-google-fonts/montserrat';
 import { useFonts } from "expo-font";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import BottomNavigation from "../BottomNavigation";
 import Sidebar from "./Sidebar";
+import WebSidebar from "../../../components/ui/WebSidebar";
+import WebNavbar from "../../../components/ui/WebNavbar";
+import ResponsiveSidebar from "../../../components/ui/ResponsiveSidebar";
 import NotificationBellIcon from "../../../assets/svgIcons/NotificationBell";
 import axios from "axios";
-import { getFavoriteTeachers } from '../../../services/favoriteTeachers' 
-import { AntDesign } from '@expo/vector-icons';
+import { getFavoriteTeachers } from '../../../services/favoriteTeachers'; 
+import { AntDesign, Ionicons } from '@expo/vector-icons';
 import { favoritesEvents, FAVORITES_CHANGED_EVENT } from '../../../utils/favoritesEvents';
 import BackButton from '../../../components/BackButton';
+import { getImageSource } from '../../../utils/imageHelper';
+
+const COLORS = { primary: '#3B5BFE', lightBackground: '#F5F7FB', cardBackground: '#FFFFFF', border: '#E5E7EB', textPrimary: '#1F2937', textSecondary: '#6B7280', ratingGreen: '#22C55E', ratingLight: '#DCFCE7' };
 
 const ITEMS_PER_PAGE = 6;
 
-const Favourite = ({ onBack, onFavoritesChange }) => {
+const Favourite = () => {
   const router = useRouter();
-  const [currentPage, setCurrentPage] = useState(1);
   const [allFavourites, setAllFavourites] = useState([]);
-  
+
+  const { width: screenWidth } = Dimensions.get('window');
+  const isDesktop = screenWidth >= 1024;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
+  const isMobile = screenWidth < 768;
+
+  // Generate responsive styles based on screen width
+  const styles = getResponsiveStyles(screenWidth);
+
+  const [sidebarActiveItem, setSidebarActiveItem] = useState("Favourite");
+
+  const handleSidebarItemPress = (itemName: string) => {
+    setSidebarActiveItem(itemName);
+    if (itemName === "Home") router.push("/(tabs)/StudentDashBoard/Student");
+    if (itemName === "My Tuitions") router.push("/(tabs)/StudentDashBoard/MyTuitions");
+    if (itemName === "Connect") router.push("/(tabs)/StudentDashBoard/ConnectWeb");
+    if (itemName === "Favourite") router.push("/(tabs)/StudentDashBoard/Favourite");
+    if (itemName === "Profile") router.push("/(tabs)/StudentDashBoard/Profile");
+    if (itemName === "Billing") router.push({ pathname: "/(tabs)/Billing", params: { userEmail: storedUserEmail, userType: userRole } });
+    if (itemName === "Faq") router.push("/(tabs)/StudentDashBoard/Faq");
+    if (itemName === "Share") router.push({ pathname: "/(tabs)/StudentDashBoard/Share", params: { userEmail: storedUserEmail, studentName, profileImage } });
+    if (itemName === "Subscription") router.push({ pathname: "/(tabs)/StudentDashBoard/Subscription", params: { userEmail: storedUserEmail } });
+    if (itemName === "Terms") router.push("/(tabs)/StudentDashBoard/TermsAndConditions");
+    if (itemName === "Contact Us") router.push({ pathname: "/(tabs)/Contact" });
+    if (itemName === "Privacy Policy") router.push({ pathname: "/(tabs)/StudentDashBoard/PrivacyPolicy" });
+    if (itemName === "Log out") { AsyncStorage.clear(); router.push("/login"); }
+  };
+
   // Load all fonts
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
+    Poppins_500Medium,
     Poppins_600SemiBold,
     Poppins_700Bold,
     Roboto_500Medium,
@@ -63,11 +98,8 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [likedTeachers, setLikedTeachers] = useState<{[key: string]: boolean}>({});
+  const [currentPage, setCurrentPage] = useState(1);
   
-  // ADDED STATE VARIABLES
-  const [isSidebarVisible, setIsSidebarVisible] = useState(false);
-  const [activeSubText, setActiveSubText] = useState<string | null>("Dashboard");
-  const [activeMenu, setActiveMenu] = useState("Dashboard");
   const [userRole, setUserRole] = useState<string | null>(null);
   const [storedUserEmail, setStoredUserEmail] = useState<string | null>(null);
   
@@ -195,42 +227,6 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
     fetchFavourites();
   }, []);
 
-  const handleUnlikePress = async (teacherEmail: string) => {
-    try {
-        // Optimistic update - remove from UI immediately
-        setAllFavourites(prev => 
-            prev.filter(fav => fav.email !== teacherEmail)
-        );
-        
-        // Update liked status
-        setLikedTeachers(prev => ({
-            ...prev,
-            [teacherEmail]: false
-        }));
-        
-        // API call to remove from favorites
-        const { removeFavoriteTeacher } = await import('../../../services/favoriteTeachers');
-        await removeFavoriteTeacher(teacherEmail);
-        
-        // Emit favorites change event
-        favoritesEvents.emit(FAVORITES_CHANGED_EVENT);
-        
-        // Notify parent component of favorites change
-        if (onFavoritesChange) {
-            onFavoritesChange();
-        }
-        
-    } catch (error) {
-        console.error('Error removing favorite:', error);
-        // Revert on error
-        const fetchFavourites = async () => {
-            const favorites = await getFavoriteTeachers();
-            setAllFavourites(favorites);
-        };
-        fetchFavourites();
-        Alert.alert('Error', 'Failed to remove from favorites');
-    }
-  };
 
   const favouritesWithDetails = useMemo(() => {
     console.log("🔄 Processing allFavourites:", allFavourites);
@@ -284,9 +280,7 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
             language: teacherData.language || "",
             board: teacherData.board || "",
             isLiked: likedTeachers[teacherEmail] || true,
-            image: profilePic 
-                ? { uri: profilePic }
-                : require("../../../assets/images/Profile.png"),
+            image: getImageSource(profilePic) || require("../../../assets/images/Profile.png"),
         };
           
         console.log("✅ Final processed item:", result);
@@ -294,42 +288,85 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
     });
   }, [allFavourites, likedTeachers]);
 
+  // Pagination logic
   const totalPages = Math.ceil(favouritesWithDetails.length / ITEMS_PER_PAGE);
-  const paginatedData = favouritesWithDetails.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedFavourites = favouritesWithDetails.slice(startIndex, endIndex);
 
-  const handlePageChange = (page) => {
-    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
   };
 
-  const renderPagination = () => (
-    <View style={styles.paginationWrapper}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pagination} style={{ overflow: 'visible' }}>
-        <TouchableOpacity
-          onPress={() => handlePageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-          style={styles.arrows}
-        >
-          <Text style={styles.arrowText}>{'<'}</Text>
-        </TouchableOpacity>
+  const handleBackPress = useCallback(() => { router.push('/(tabs)/StudentDashBoard/Student'); }, [router]);
 
-        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-          <TouchableOpacity key={page} onPress={() => handlePageChange(page)} style={styles.page}>
-            <View style={[styles.pageNumber, currentPage === page && styles.activePage]}>
-              <Text style={styles.pageNum}>{page}</Text>
-            </View>
+  const handleContactPress = (item: any) => router.push({
+    pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
+    params: {
+      name: item.name,
+      email: item.email,
+      profilePic: item.profilePic,
+      board: item.board || "",
+      teachingClass: item.teachingClass || "",
+      subject: item.subject || "",
+      language: item.language || "",
+      charge: item.charge,
+      description: item.introduction || item.description || "",
+      category: item.category,
+    },
+  });
+
+  const handleFavoritePress = (itemEmail: string, event: any) => {
+    event.stopPropagation();
+    setLikedTeachers(prev => ({ ...prev, [itemEmail]: !prev[itemEmail] }));
+  };
+
+  const handleReviewPress = (item: any, event: any) => {
+    event.stopPropagation();
+    router.push({
+      pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
+      params: {
+        name: item.name,
+        email: item.email,
+        profilePic: item.profilePic,
+        showReview: "true"
+      }
+    });
+  };
+
+  const renderFavouriteCard = (item: any) => (
+    <TouchableOpacity key={item.id} style={styles.tuitionCard} onPress={() => handleContactPress(item)} activeOpacity={0.8}>
+      <View style={styles.cardImageContainer}>
+        <Image source={getImageSource(item.profilePic) || require("../../../assets/images/Profile.png")} style={styles.cardImage} />
+        <TouchableOpacity style={styles.heartButton} onPress={(e) => handleFavoritePress(item.email, e)}>
+          <Ionicons name={likedTeachers[item.email] ? "heart" : "heart-outline"} size={16} color={likedTeachers[item.email] ? "#FF0000" : "#FFFFFF"} />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.cardBody}>
+        <View style={styles.cardHeaderRow}>
+          <Text style={styles.tagText}>{item.subject || item.category || 'Teacher'}</Text>
+          <View style={styles.ratingBadge}><Ionicons name="star" size={12} color="#FFFFFF" /><Text style={styles.ratingText}>4.5</Text></View>
+        </View>
+        <Text style={styles.teacherName}>{item.name}</Text>
+        <Text style={styles.teacherDesc} numberOfLines={2}>{item.introduction || item.description || 'Professional teacher with expertise in various subjects.'}</Text>
+        <View style={styles.cardFooter}>
+          <TouchableOpacity style={styles.reviewBtn} onPress={(e) => handleReviewPress(item, e)}>
+            <Text style={styles.reviewBtnText}>Your Review</Text>
           </TouchableOpacity>
-        ))}
-
-        <TouchableOpacity
-          onPress={() => handlePageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          style={styles.rightArrow}
-        >
-          <Text style={styles.arrowText}>{'>'}</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </View>
+        </View>
+      </View>
+    </TouchableOpacity>
   );
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') handleBackPress(); };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [handleBackPress]);
 
   if (!fontsLoaded) return <Text>Loading...</Text>;
 
@@ -342,567 +379,441 @@ const Favourite = ({ onBack, onFavoritesChange }) => {
     );
   }
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.headerContainer}>
-        <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>GROWSMART</Text>
+  // Web return with ResponsiveSidebar
+  if (Platform.OS === 'web') {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#fff' }}>
+        {/* Web Header - outside ResponsiveSidebar like Student Dashboard */}
+        <WebNavbar
+          studentName={studentName}
+          profileImage={profileImage}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+        />
+        <View style={{ flex: 1, flexDirection: 'row', overflow: 'hidden' }}>
+          <ResponsiveSidebar
+            activeItem={sidebarActiveItem}
+            onItemPress={handleSidebarItemPress}
+            userEmail={storedUserEmail || ""}
+            studentName={studentName || ""}
+            profileImage={profileImage || null}
+          >
+            <View style={{ flex: 1, padding: 24 }}>
+              <View style={styles.pageTitleContainer}>
+                <BackButton onPress={handleBackPress} color="white" />
+                <Ionicons name="heart" size={28} color={COLORS.textPrimary} />
+                <Text style={styles.pageTitle}>My Favourites</Text>
+              </View>
+
+              <View style={styles.gridContainerBox}>
+                <ScrollView contentContainerStyle={styles.tuitionGrid} showsVerticalScrollIndicator={false}>
+                  {loading ? (
+                    <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /><Text style={styles.loadingText}>Loading your favourites...</Text></View>
+                  ) : paginatedFavourites.length > 0 ? (
+                    <>
+                      <View style={styles.cardsWrapper}>
+                        {paginatedFavourites.map((item) => renderFavouriteCard(item))}
+                      </View>
+                      {totalPages > 1 && (
+                        <View style={styles.paginationContainer}>
+                          <TouchableOpacity 
+                            onPress={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            style={{ opacity: currentPage === 1 ? 0.5 : 1 }}
+                          >
+                            <Ionicons name="chevron-back" size={20} color={COLORS.textSecondary} />
+                          </TouchableOpacity>
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                            <TouchableOpacity 
+                              key={page} 
+                              style={[styles.pageDot, currentPage === page && styles.pageDotActive]}
+                              onPress={() => handlePageChange(page)}
+                            >
+                              <Text style={[styles.pageDotText, currentPage === page && styles.pageDotTextActive]}>{page}</Text>
+                            </TouchableOpacity>
+                          ))}
+                          <TouchableOpacity 
+                            onPress={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            style={{ opacity: currentPage === totalPages ? 0.5 : 1 }}
+                          >
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyTitle}>No Favourites Yet</Text>
+                      <Text style={styles.emptyText}>Your favourite teachers will appear here once you add them.</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            </View>
+          </ResponsiveSidebar>
         </View>
+      </View>
+    );
+  }
 
-        <View style={styles.topRow}>
-          <TouchableOpacity 
-            onPress={() => setIsSidebarVisible(true)}
-            style={styles.profileContainer}
-          >
-            <Image
-              style={styles.profileImage}
-              source={
-                profileImage
-                  ? { uri: profileImage }
-                  : require("../../../assets/images/Profile.png")
-              }
-            />
+  // Mobile return
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      {/* ── MOBILE TOP NAVBAR ── */}
+      <View style={styles.topHeader}>
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={COLORS.textSecondary} style={styles.searchIcon} />
+          <TextInput placeholder="Search favourites" placeholderTextColor={COLORS.textSecondary} style={styles.searchInput as any} value={searchQuery} onChangeText={setSearchQuery} />
+        </View>
+        <View style={styles.profileHeaderSection}>
+          <TouchableOpacity style={styles.bellIcon} onPress={() => router.push("/(tabs)/StudentDashBoard/StudentNotification")}>
+            <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
+            {unreadCount > 0 && (
+              <View style={styles.notificationBadge}><Text style={styles.notificationText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>
+            )}
           </TouchableOpacity>
-
-          <View style={styles.centerSection}>
-            <View style={styles.searchInputContainer}>
-              <Image
-                style={styles.searchIcon}
-                source={require("../../../assets/images/Search.png")}
-              />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search favourites"
-                placeholderTextColor="#82878F"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                returnKeyType="search"
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity 
-                  onPress={() => setSearchQuery("")} 
-                  style={styles.clearButton}
-                >
-                  <Text style={styles.clearButtonText}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
-          <TouchableOpacity
-            onPress={() =>
-              router.push("/(tabs)/StudentDashBoard/StudentNotification")
-            }
-            style={styles.notificationButton}
-          >
-            <View style={{ position: "relative" }}>
-              <NotificationBellIcon size={wp("6.4%")} />
-              {unreadCount > 0 && (
-                <View style={styles.notificationBadge}>
-                  <Text style={styles.notificationText}>
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </TouchableOpacity>
+          <Text style={styles.headerUserName}>{studentName || 'Student'}</Text>
+          <Image source={profileImage ? { uri: profileImage } : require("../../../assets/images/Profile.png")} style={styles.headerAvatar} />
         </View>
       </View>
 
-      <View style={styles.contentContainer}>
-        <FlatList
-          data={paginatedData}
-          numColumns={1}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity 
-                style={styles.card}
-                onPress={() => router.push({
-                    pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
-                    params: {
-                        name: item.name,
-                        email: item.email,
-                        board: item.board || "",
-                        teachingClass: item.teachingClass || "",
-                        subject: item.subject || "",
-                        language: item.language || "",
-                        profilePic: item.profilePic,
-                        charge: item.charge,
-                        description: item.introduction || item.description || "",
-                        category: item.category,
-                    },
-                })}
-            >
-                <View style={styles.leftSection}>
-                    <Image 
-                        source={item.profilePic 
-                            ? { uri: item.profilePic } 
-                            : require("../../../assets/images/Profile.png")} 
-                        style={styles.image}
-                        defaultSource={require("../../../assets/images/Profile.png")}
-                    />
-                    <Text style={styles.name}>{item.name}</Text>
-                </View>
-                <View style={styles.rightSection}>
-                    <View style={styles.titleRow}>
-                        <Text style={styles.profession}>{item.category}</Text>
-                    </View>
-                    <Text style={styles.description} numberOfLines={3}>
-                        {item.introduction || item.description || ""}
-                    </Text>
-                    <View style={styles.ratingRow}>
-                        <Text style={styles.rating}>⭐⭐⭐⭐☆</Text>
-                        <TouchableOpacity 
-                            onPress={(e) => { 
-                                e.stopPropagation(); 
-                                handleUnlikePress(item.email); 
-                            }} 
-                            style={styles.likeButton}
-                        >
-                            <AntDesign 
-                                name="like1" 
-                                size={24} 
-                                color="#4255ff" 
-                            />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={styles.grid}
-          style={{ flex: 1 }}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>No Favourites Yet</Text>
-              <Text style={styles.emptyText}>Your favourite items will appear here once you add them.</Text>
-            </View>
-          }
+      <View style={styles.rootContainer}>
+
+        {/* ── LEFT SIDEBAR (mobile only) - hidden for now ── */}
+        <Sidebar
+          visible={false}
+          onClose={() => {}}
+          activeItem={sidebarActiveItem}
+          onItemPress={handleSidebarItemPress}
+          userEmail={storedUserEmail || ""}
+          studentName={studentName || "Student"}
+          profileImage={profileImage}
         />
 
-        {favouritesWithDetails.length > 0 && renderPagination()}
+        {/* ── MAIN AREA ── */}
+        <View style={styles.mainLayout}>
+
+          {/* ── CONTENT COLUMNS ── */}
+          <View style={styles.contentColumns}>
+
+            {/* CENTER: My Favourites Grid */}
+            <View style={styles.centerContent}>
+              <View style={styles.pageTitleContainer}>
+                <BackButton onPress={handleBackPress} color="white" />
+                <Ionicons name="heart" size={28} color={COLORS.textPrimary} />
+                <Text style={styles.pageTitle}>My Favourites</Text>
+              </View>
+
+              <View style={styles.gridContainerBox}>
+                <ScrollView contentContainerStyle={styles.tuitionGrid} showsVerticalScrollIndicator={false}>
+                  {loading ? (
+                    <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /><Text style={styles.loadingText}>Loading your favourites...</Text></View>
+                  ) : favouritesWithDetails.length > 0 ? (
+                    <>
+                      <View style={styles.cardsWrapper}>
+                        {favouritesWithDetails.map((item) => renderFavouriteCard(item))}
+                      </View>
+                      {totalPages > 1 && (
+                        <View style={styles.paginationContainer}>
+                          <TouchableOpacity 
+                            onPress={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            style={{ opacity: currentPage === 1 ? 0.5 : 1 }}
+                          >
+                            <Ionicons name="chevron-back" size={20} color={COLORS.textSecondary} />
+                          </TouchableOpacity>
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                            <TouchableOpacity 
+                              key={page} 
+                              style={[styles.pageDot, currentPage === page && styles.pageDotActive]}
+                              onPress={() => handlePageChange(page)}
+                            >
+                              <Text style={[styles.pageDotText, currentPage === page && styles.pageDotTextActive]}>{page}</Text>
+                            </TouchableOpacity>
+                          ))}
+                          <TouchableOpacity 
+                            onPress={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            style={{ opacity: currentPage === totalPages ? 0.5 : 1 }}
+                          >
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyTitle}>No Favourites Yet</Text>
+                      <Text style={styles.emptyText}>Your favourite teachers will appear here once you add them.</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            </View>
+
+          </View>
+        </View>
       </View>
-
-      <Sidebar
-        visible={isSidebarVisible}
-        onClose={() => setIsSidebarVisible(false)}
-        activeItem={activeMenu}
-        activeSubText={activeSubText}
-        setActiveSubText={setActiveSubText}
-        studentName={studentName}
-        profileImage={profileImage}
-        userEmail={storedUserEmail || ""}
-        onItemPress={(itemName: string) => {
-          setActiveMenu(itemName);
-          if (itemName === "Billing") {
-            router.push({
-              pathname: "/(tabs)/Billing",
-              params: {
-                userEmail: storedUserEmail,
-                userType: userRole,
-              },
-            });
-          }
-          if (itemName === "My Tutions") {
-            router.push("/(tabs)/StudentDashBoard/ConnectWeb");
-          }
-          if (itemName === "Faq") router.push("/(tabs)/StudentDashBoard/Faq");
-          if (itemName === "Share") {
-            router.push({
-              pathname: "/(tabs)/StudentDashBoard/Share",
-              params: { userEmail: storedUserEmail, studentName, profileImage },
-            });
-          }
-          if (itemName === "Subscription") {
-            router.push({
-              pathname: "/(tabs)/StudentDashBoard/Subscription",
-              params: { userEmail: storedUserEmail },
-            });
-          }
-          if (itemName === "Terms") {
-            router.push({
-              pathname: "/(tabs)/StudentDashBoard/TermsAndConditions",
-            });
-          }
-          if (itemName === "Contact Us") {
-            router.push({ pathname: "/(tabs)/Contact" });
-          }
-          if (itemName === "Privacy Policy") {
-            router.push({ pathname: "/(tabs)/StudentDashBoard/PrivacyPolicy" });
-          }
-        }}
-      />
-
-      <BottomNavigation userType="student" />
-    </View>
+    </SafeAreaView>
   );
 };
 export default Favourite;
-const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#fff" 
-  },
-  headerContainer: { 
-    backgroundColor: "#5f5fff", 
-    paddingHorizontal: wp("4.8%"), 
-    paddingTop: hp("5%"), 
-    paddingBottom: hp("2%"), 
-    borderBottomLeftRadius: wp("4.53%"), 
-    borderBottomRightRadius: wp("4.53%") 
-  },
-  logoContainer: {
-    alignItems: 'center',
-    width: '100%',
-    marginBottom: hp('1%'),
-  },
-  logoText: {
-    color: '#e5e7eb',
-    fontSize: wp('4%'),
-    fontWeight: '500',
-    lineHeight: hp('1.6%'),
-    textAlign: 'center',
-    letterSpacing: wp('0.2%'),
-    top: hp('2%'),
-    bottom: hp('3%'),
-    marginBottom: hp('1%'),
-  },
-  topRow: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    justifyContent: "space-between", 
-    width: "100%", 
-    paddingHorizontal: wp("4%"),
-    marginTop: hp('0.5%'),
-  },
-  profileContainer: { 
-    justifyContent: "center", 
-    alignItems: "center", 
-    marginRight: wp("2%"), 
-    borderWidth: 1, 
-    borderColor: 'white', 
-    borderRadius: 100 
-  },
-  profileImage: { 
-    width: wp("12%"), 
-    height: wp("12%"), 
-    borderRadius: wp("6%") 
-  },
-  centerSection: { 
-    flex: 1, 
-    marginHorizontal: wp("2%") 
-  },
-  searchInputContainer: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    backgroundColor: "#f1f1f1", 
-    paddingHorizontal: wp("2%"), 
-    borderRadius: wp("4.27%"), 
-    height: wp("10%") 
-  },
-  searchIcon: { 
-    width: wp("4%"), 
-    height: wp("4%"), 
-    marginRight: wp("2%"), 
-    tintColor: "#000" 
-  },
-  searchInput: { 
-    flex: 1, 
-    fontSize: wp("3.73%"), 
-    color: "#000", 
-    height: "100%", 
-    borderWidth: 0, 
-    outlineWidth: 0, 
-    width: "100%", 
-    paddingVertical: 0, 
-    paddingRight: wp("2%"), 
-    borderRadius: wp("4.27%"), 
-    textAlign: "left", 
-    backgroundColor: "transparent"
-  },
-  clearButton: { 
-    padding: wp("1%"), 
-    borderRadius: wp("2%") 
-  },
-  clearButtonText: { 
-    fontSize: wp("3.2%"), 
-    color: "#82878F", 
-    fontWeight: "bold" 
-  },
-  notificationButton: { 
-    justifyContent: "center", 
-    alignItems: "center", 
-    marginLeft: wp("2%") 
-  },
-  notificationBadge: { 
-    position: "absolute", 
-    top: -hp("0.5%"), 
-    right: -wp("1%"), 
-    backgroundColor: "#ff3b30", 
-    borderRadius: wp("3%"), 
-    minWidth: wp("5%"), 
-    height: wp("5%"), 
-    justifyContent: "center", 
-    alignItems: "center" 
-  },
-  notificationText: { 
-    color: "#fff", 
-    fontSize: wp("2.67%"), 
-    fontWeight: "bold", 
-    textAlign: "center" 
-  },
-  contentContainer: { 
-    flex: 1, 
-    paddingHorizontal: wp("4.27%"), 
-    paddingTop: hp("2.69%"), 
-    paddingBottom: 0 
-  },
-  header: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    marginBottom: hp("2.15%"), 
-    justifyContent: "space-between", 
-    paddingHorizontal: wp("4.27%"), 
-    paddingTop: hp("2.69%") 
-  },
-  back: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-start",
-  },
-  title: {
-    fontSize: wp("4.27%"),
-    fontWeight: "bold",
-    marginLeft: wp("2.4%"),
-    color: "#0d0c12",
-  },
-  totalCount: {
-    fontSize: wp("3.73%"),
-    color: "#4255ff",
-    textAlign: "right",
-  },
-  grid: { 
-    paddingBottom: hp('20%')
-  },
-  card: { 
-    flexDirection: "row", 
-    backgroundColor: "#ffffff", 
-    padding: wp('4.27%'), 
-    borderRadius: wp('4.27%'), 
-    marginVertical: hp('1.08%'), 
-    alignItems: "flex-start", 
-    gap: wp('4.27%'), 
-    borderWidth: 1, 
-    borderColor: "#edeeee" 
-  },
-  leftSection: { 
-    alignItems: "center", 
-    width: wp('28.8%'), 
-    height: hp('17.9%'), 
-    backgroundColor: "#ffffff", 
-    padding: wp('2.67%'), 
-    borderRadius: wp('4.27%'), 
-    borderWidth: 1, 
-    borderColor: "#faf5e6" 
-  },
-  image: { 
-    width: wp('24.5%'), 
-    height: wp('24.5%'), 
-    borderRadius: wp('2.13%'), 
-    marginBottom: hp('1.07%') 
-  },
-  name: { 
-    fontSize: wp('4.27%'), 
-    fontWeight: "600", 
-    textAlign: "center", 
-    color: "#0d0c12",
-    fontFamily: "OpenSans_400Regular"
-  },
-  rightSection: { 
-    flex: 1 
-  },
-  titleRow: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    marginBottom: hp('0.8%') 
-  },
-  profession: { 
-    fontSize: wp('4.27%'), 
-    fontWeight: "bold", 
-    color: "#0d0c12",
-    fontFamily: "Roboto_500Medium"
-  },
-  description: { 
-    fontSize: wp('3.73%'), 
-    color: "#555", 
-    marginBottom: hp('1.07%'), 
-    lineHeight: wp('4.5%'),
-    fontFamily: "OpenSans_400Regular"
-  },
-  ratingRow: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    alignItems: "center" 
-  },
-  rating: { 
-    fontSize: wp('4.27%'), 
-    color: "#f1c40f" 
-  },
-  likeButton: { 
-    padding: wp('1%') 
-  },
-  emptyContainer: { 
-    flex: 1, 
-    justifyContent: "center", 
-    alignItems: "center", 
-    marginTop: hp('10%') 
-  },
-  emptyTitle: { 
-    fontSize: wp('4.27%'), 
-    fontWeight: "bold", 
-    color: "#0d0c12", 
-    marginBottom: hp('1.08%'),
-    fontFamily: "Poppins_600SemiBold"
-  },
-  emptyText: { 
-    fontSize: wp('3.73%'), 
-    color: "#666", 
-    textAlign: "center",
-    fontFamily: "OpenSans_400Regular"
-  },
-  paginationWrapper: { 
-    width: "100%", 
-    alignItems: "center", 
-    justifyContent: "center", 
-    paddingBottom: hp("15%"), 
-    gap: wp("2.66%"), 
-    overflow: 'visible', 
-    position: 'absolute', 
-    bottom: hp("1%"), 
-    left: 0, 
-    right: 0, 
-    backgroundColor: '#fff', 
-    paddingTop: hp('1%') 
-  },
-  pagination: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    justifyContent: "center", 
-    gap: wp("2%"), 
-    overflow: 'visible' 
-  },
-  page: { 
-    alignItems: "center", 
-    justifyContent: "center", 
-    overflow: 'visible' 
-  },
-  pageNumber: { 
-    alignItems: "center", 
-    justifyContent: "center", 
-    height: wp("8%"), 
-    width: wp("8%"), 
-    paddingHorizontal: wp("2.13%"), 
-    borderRadius: 5, 
-    backgroundColor: "#ffffff", 
-    marginHorizontal: 0, 
-    ...Platform.select({
- 
-      web: {
- 
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
- 
-      },
- 
-      default: {
- 
-        shadowColor: '#000',
- 
-        shadowOffset: { width: 0, height: 4 },
- 
-        shadowOpacity: 0.3,
- 
-        shadowRadius: 8,
- 
-      },
- 
-    }),
-    elevation: 4
-  },
-  pageNum: { 
-    fontSize: wp("4.27%"), 
-    color: "#000000ff", 
-    fontFamily: "OpenSans_600SemiBold"
-  },
-  activePage: { 
-    backgroundColor: "#f0f0f0",
-    elevation: 5
-  },
-  arrowText: { 
-    fontSize: wp("5%"), 
-    color: "#000000", 
-    fontFamily: "OpenSans_600SemiBold", 
-    textAlign: 'center', 
-    fontWeight: '600' 
-  },
-  arrows: { 
-    height: wp("8%"), 
-    width: wp("8%"), 
-    alignItems: "center", 
-    justifyContent: "center", 
-    borderRadius: wp("1.33%"), 
-    backgroundColor: "#ffffff", 
-    marginHorizontal: wp("1.06%"), 
-    elevation: 4,
-    ...Platform.select({
 
-      web: {
+// ─── RESPONSIVE STYLE HELPER ──────────────────────────────────────────────────────────
+const getResponsiveStyles = (screenWidth: number) => {
+  const isMobile = screenWidth < 768;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
+  const isSmallMobile = screenWidth < 375;
+  const isMediumMobile = screenWidth >= 375 && screenWidth < 768;
 
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
-  },
-  rightArrow: { 
-    height: wp("8%"), 
-    width: wp("8%"), 
-    alignItems: "center", 
-    justifyContent: "center", 
-    borderRadius: wp("1.33%"), 
-    backgroundColor: "#ffffff", 
-    marginHorizontal: wp("1.06%"), 
-    elevation: 4,
-    ...Platform.select({
-
-      web: {
-
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
-  },
-});
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: COLORS.cardBackground },
+    loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    rootContainer: { flex: 1, flexDirection: 'row', backgroundColor: COLORS.cardBackground },
+    mainLayout: { flex: 1, backgroundColor: COLORS.lightBackground },
+    topHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: isSmallMobile ? 10 : isMobile ? 14 : 32, paddingVertical: isSmallMobile ? 8 : isMobile ? 10 : 20, backgroundColor: COLORS.cardBackground, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+    searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.lightBackground, borderRadius: isMobile ? 16 : 30, paddingHorizontal: isSmallMobile ? 10 : 14, height: isSmallMobile ? 36 : isMediumMobile ? 40 : 44, flex: 1, maxWidth: isSmallMobile ? '45%' : isMobile ? '50%' : '40%', marginRight: isSmallMobile ? 6 : isMobile ? 8 : 12 },
+    searchIcon: { marginRight: isSmallMobile ? 6 : 8 },
+    searchInput: { flex: 1, fontFamily: 'Poppins_400Regular', fontSize: isSmallMobile ? 12 : isMobile ? 13 : 14, color: COLORS.textPrimary },
+    profileHeaderSection: { flexDirection: 'row', alignItems: 'center' },
+    bellIcon: { marginRight: isSmallMobile ? 8 : isMobile ? 10 : 20, padding: isSmallMobile ? 5 : isMobile ? 6 : 8, backgroundColor: COLORS.lightBackground, borderRadius: 16 },
+    notificationBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: 'red', borderRadius: 8, minWidth: isSmallMobile ? 16 : 18, height: isSmallMobile ? 16 : 18, justifyContent: 'center', alignItems: 'center' },
+    notificationText: { color: 'white', fontSize: isSmallMobile ? 9 : 10, fontWeight: 'bold' },
+    headerUserName: { fontFamily: 'Poppins_500Medium', fontSize: isSmallMobile ? 11 : isMobile ? 12 : 14, color: COLORS.textPrimary, marginRight: isSmallMobile ? 6 : isMobile ? 8 : 12, maxWidth: isSmallMobile ? 60 : isMobile ? 80 : 120 },
+    headerAvatar: { width: isSmallMobile ? 32 : isMobile ? 36 : 40, height: isSmallMobile ? 32 : isMobile ? 36 : 40, borderRadius: isSmallMobile ? 16 : isMobile ? 18 : 20 },
+    contentColumns: { flex: 1, flexDirection: isMobile ? 'column' : 'row' },
+    centerContent: { flex: 1, paddingTop: isSmallMobile ? 10 : isMobile ? 14 : 32, paddingHorizontal: isSmallMobile ? 10 : isMobile ? 14 : 32, paddingBottom: isSmallMobile ? 14 : isMobile ? 20 : 24 },
+    pageTitleContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: isSmallMobile ? 12 : isMobile ? 16 : 24 },
+    pageTitle: { fontFamily: 'Poppins_700Bold', fontSize: isSmallMobile ? 18 : isMobile ? 20 : 24, color: COLORS.textPrimary, marginLeft: 10 },
+    container: {
+      flex: 1,
+      backgroundColor: COLORS.cardBackground,
+    },
+    contentContainer: {
+      flex: 1,
+      backgroundColor: COLORS.lightBackground,
+      paddingHorizontal: isSmallMobile ? 12 : isMobile ? 14 : 32,
+      paddingTop: isSmallMobile ? 12 : isMobile ? 16 : 32,
+      paddingBottom: isSmallMobile ? 16 : isMobile ? 20 : 24,
+    },
+    gridContainerBox: {
+      flex: 1,
+      backgroundColor: COLORS.cardBackground,
+      borderRadius: isSmallMobile ? 10 : isMobile ? 12 : 20,
+      borderWidth: 1,
+      borderColor: '#E4ECF7',
+      padding: isSmallMobile ? 10 : isMobile ? 12 : 24,
+      ...Platform.select({
+        web: { boxShadow: '0 4px 10px rgba(0,0,0,0.02)' },
+        default: { shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 10 }
+      })
+    },
+    tuitionGrid: {
+      paddingBottom: 16,
+    },
+    cardsWrapper: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: isMobile ? 'center' : 'space-between',
+      gap: isSmallMobile ? 10 : isMobile ? 12 : 16,
+    },
+    tuitionCard: {
+      width: isSmallMobile ? '100%' : isMobile ? '100%' : isTablet ? '48%' : '31%',
+      minWidth: isSmallMobile ? '100%' : isMobile ? 280 : 180,
+      marginBottom: isSmallMobile ? 10 : isMobile ? 12 : 16,
+      backgroundColor: COLORS.cardBackground,
+      borderRadius: isSmallMobile ? 12 : 14,
+      borderWidth: 1,
+      borderColor: COLORS.border,
+      overflow: 'hidden',
+    },
+    cardImageContainer: {
+      width: '100%',
+      height: isSmallMobile ? 160 : isMobile ? 180 : 180,
+      position: 'relative',
+    },
+    cardImage: {
+      width: '100%',
+      height: '100%',
+    },
+    heartButton: {
+      position: 'absolute',
+      top: isSmallMobile ? 8 : 12,
+      right: isSmallMobile ? 8 : 12,
+      backgroundColor: 'rgba(0,0,0,0.3)',
+      borderRadius: isSmallMobile ? 12 : 16,
+      padding: isSmallMobile ? 4 : 6,
+    },
+    cardBody: {
+      padding: isSmallMobile ? 12 : isMobile ? 14 : 16,
+    },
+    cardHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: isSmallMobile ? 6 : 8,
+    },
+    tagText: {
+      color: COLORS.primary,
+      fontFamily: 'Poppins_600SemiBold',
+      fontSize: isSmallMobile ? 9 : 10,
+      letterSpacing: 0.5,
+    },
+    ratingBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: COLORS.ratingGreen,
+      paddingHorizontal: isSmallMobile ? 6 : 8,
+      paddingVertical: 2,
+      borderRadius: isSmallMobile ? 8 : 10,
+    },
+    ratingText: {
+      color: '#FFFFFF',
+      fontFamily: 'Poppins_600SemiBold',
+      fontSize: isSmallMobile ? 10 : 11,
+      marginLeft: isSmallMobile ? 3 : 4,
+    },
+    teacherName: {
+      fontFamily: 'Poppins_600SemiBold',
+      fontSize: isSmallMobile ? 13 : isMobile ? 14 : 14,
+      color: COLORS.textPrimary,
+      marginBottom: isSmallMobile ? 3 : 4,
+    },
+    teacherDesc: {
+      fontFamily: 'Poppins_400Regular',
+      fontSize: isSmallMobile ? 10 : isMobile ? 11 : 11,
+      color: COLORS.textSecondary,
+      lineHeight: isSmallMobile ? 14 : 16,
+      marginBottom: isSmallMobile ? 12 : 16,
+    },
+    cardFooter: {
+      alignItems: 'flex-end',
+    },
+    reviewBtn: {
+      backgroundColor: COLORS.ratingLight,
+      paddingHorizontal: isSmallMobile ? 12 : 16,
+      paddingVertical: isSmallMobile ? 5 : 6,
+      borderRadius: isSmallMobile ? 16 : 20,
+    },
+    reviewBtnText: {
+      color: COLORS.textPrimary,
+      fontFamily: 'Poppins_500Medium',
+      fontSize: isSmallMobile ? 11 : 12,
+    },
+    paginationContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: isSmallMobile ? 16 : isMobile ? 20 : 32,
+      gap: isSmallMobile ? 6 : 8,
+    },
+    pageDot: {
+      width: isSmallMobile ? 28 : 32,
+      height: isSmallMobile ? 28 : 32,
+      borderRadius: isSmallMobile ? 6 : 8,
+      backgroundColor: COLORS.lightBackground,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    pageDotActive: {
+      backgroundColor: COLORS.textSecondary,
+    },
+    pageDotText: {
+      fontFamily: 'Poppins_600SemiBold',
+      fontSize: isSmallMobile ? 13 : 14,
+      color: COLORS.textPrimary,
+    },
+    pageDotTextActive: {
+      fontFamily: 'Poppins_600SemiBold',
+      fontSize: isSmallMobile ? 13 : 14,
+      color: '#FFFFFF',
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: isSmallMobile ? 30 : 50,
+    },
+    loadingText: {
+      fontSize: isSmallMobile ? 14 : 16,
+      fontFamily: 'Poppins_400Regular',
+      color: COLORS.textSecondary,
+      marginTop: 10,
+    },
+    emptyContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: isSmallMobile ? 16 : isMobile ? 20 : 40,
+      marginTop: isSmallMobile ? 30 : 50,
+    },
+    emptyTitle: {
+      fontSize: isSmallMobile ? 18 : 20,
+      fontFamily: 'Poppins_600SemiBold',
+      color: COLORS.textPrimary,
+      marginBottom: isSmallMobile ? 8 : 10,
+      textAlign: 'center',
+    },
+    emptyText: {
+      fontSize: isSmallMobile ? 13 : 14,
+      fontFamily: 'Poppins_400Regular',
+      color: COLORS.textSecondary,
+      textAlign: 'center',
+      lineHeight: isSmallMobile ? 18 : 20,
+    },
+    paginationWrapper: {
+      marginTop: hp('2%'),
+      marginBottom: hp('2%'),
+    },
+    pagination: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: wp('2%'),
+    },
+    arrows: {
+      backgroundColor: '#f0f0f0',
+      borderRadius: wp('2%'),
+      width: wp('8%'),
+      height: hp('5%'),
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    rightArrow: {
+      backgroundColor: '#f0f0f0',
+      borderRadius: wp('2%'),
+      width: wp('8%'),
+      height: hp('5%'),
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    arrowText: {
+      fontSize: wp('4%'),
+      color: '#333',
+      fontWeight: 'bold',
+    },
+    page: {
+      marginHorizontal: wp('1%'),
+    },
+    pageNumber: {
+      width: wp('8%'),
+      height: hp('5%'),
+      borderRadius: wp('2%'),
+      backgroundColor: '#fff',
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: '#ddd',
+    },
+    activePage: {
+      backgroundColor: '#4255FF',
+      borderWidth: 0,
+    },
+    pageNum: {
+      fontSize: wp('3.2%'),
+      color: '#333',
+      fontWeight: '600',
+    },
+  });
+};

@@ -110,6 +110,9 @@ export default function TeachersList({
   const yearName = params.yearName as string;
   const year = params.year as string;
   const yearIndex = params.yearIndex as string;
+
+  // Skill flow params
+  const skill = params.skill as string;
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_600SemiBold,
@@ -161,9 +164,9 @@ export default function TeachersList({
 
   useEffect(() => {
     console.log("🚀 useEffect triggered!");
-    console.log("📋 Props received:", { boardName, selectedClass, selectedSubject, showAllTutors, isUniversityFlow, universityName, yearName });
+    console.log("📋 Props received:", { boardName, selectedClass, selectedSubject, showAllTutors, isUniversityFlow, universityName, yearName, skill });
     fetchTeachers();
-  }, [boardName, selectedClass, selectedSubject, showAllTutors, isUniversityFlow, universityName, yearName]);
+  }, [boardName, selectedClass, selectedSubject, showAllTutors, isUniversityFlow, universityName, yearName, skill]);
 
   // Fetch posts for ThoughtsCard (web only)
   useEffect(() => {
@@ -230,6 +233,48 @@ export default function TeachersList({
   }, [onBack, router]);
 
   const fetchTeachers = async () => {
+    // Skill flow: fetch teachers by skill
+    if (skill) {
+      setLoading(true);
+      try {
+        const auth = await getAuthData();
+        if (!auth || !auth.token) {
+          console.error("No authentication token found");
+          setLoading(false);
+          return;
+        }
+        const headers = {
+          Authorization: `Bearer ${auth.token}`,
+          "Content-Type": "application/json",
+        };
+        console.log("📡 Fetching skill teachers:", { skill });
+        const res = await fetch(`${BASE_URL}/api/teachers/skill`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            selectedSkill: skill
+          }),
+        });
+        const data = await res.json();
+        console.log("🔍 SKILL TEACHERS API RESPONSE:", JSON.stringify(data, null, 2));
+        
+        if (Array.isArray(data)) {
+          setTeachers(data);
+        } else {
+          setTeachers([]);
+        }
+        setCurrentPage(1);
+        setLoading(false);
+        return;
+      } catch (error) {
+        console.error("Error fetching skill teachers:", error);
+        setTeachers([]);
+        setCurrentPage(1);
+        setLoading(false);
+        return;
+      }
+    }
+
     // If showAllTutors is true, fetch all subject teachers regardless of board/class/subject
     if (showAllTutors) {
       setLoading(true);
@@ -289,7 +334,7 @@ export default function TeachersList({
           "Content-Type": "application/json",
         };
         console.log("📡 Fetching university teachers:", { university: universityName, year: yearName, subject: selectedSubject });
-        const res = await fetch(`${BASE_URL}/api/teachers/universities/teachers`, {
+        const res = await fetch(`${BASE_URL}/api/universities/teachers`, {
           method: "POST",
           headers,
           body: JSON.stringify({
@@ -920,17 +965,11 @@ export default function TeachersList({
                 <View style={styles.pageNavHeader}>
                   <TouchableOpacity 
                     style={styles.backButton} 
-                    onPress={() => {
-                      if (onBack) {
-                        onBack();
-                      } else {
-                        router.back();
-                      }
-                    }}
+                    onPress={() => router.back()}
                   >
                     <Ionicons name="arrow-back" size={20} color={COLORS.textPrimary} />
                   </TouchableOpacity>
-                  <Text style={styles.pageTitle}>{selectedSubject} Teachers</Text>
+                  <Text style={styles.pageTitle}>{skill ? `${skill} Teachers` : `${selectedSubject} Teachers`}</Text>
                 </View>
 
                 <View style={styles.webTeachersHeader}>
@@ -985,7 +1024,7 @@ export default function TeachersList({
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#4255ff" />
         </TouchableOpacity>
-        <Text style={styles.mobileHeaderTitle}>Teachers</Text>
+        <Text style={styles.mobileHeaderTitle}>{skill ? `${skill} Teachers` : 'Teachers'}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -1046,6 +1085,10 @@ const webCardStyles = StyleSheet.create({
     backgroundColor: 'rgba(110,110,110,0.72)',
     borderRadius: 22,
     padding: 9,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   info: {
     padding: 16,
@@ -1350,7 +1393,11 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 12,
-    padding: 4,
+    padding: 8,
+    minWidth: 40,
+    minHeight: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   name: {
     fontSize: 16,

@@ -232,15 +232,15 @@ const StudentsListWeb: React.FC<StudentsListWebProps> = ({
       <View style={styles.contentLayout}>
         {/* Sidebar */}
         {!isMobile && (
-          <TeacherWebSidebar 
-            activeItem={activeItem} 
-            onItemPress={handleSidebarSelect} 
-            userEmail={userEmail || ''} 
+          <TeacherWebSidebar
+            activeItem={activeItem}
+            onItemPress={handleSidebarSelect}
+            userEmail={userEmail || ''}
             teacherName={teacherName}
             profileImage={profileImage}
             subjectCount={0}
             studentCount={safeStudents.length}
-            revenue="₹8.9K"
+            revenue="₹0"
             isSpotlight={false}
           />
         )}
@@ -281,7 +281,7 @@ const StudentsListWeb: React.FC<StudentsListWebProps> = ({
                     <Text style={styles.emptyStateSubtext}>Your enrolled students will appear here</Text>
                   </View>
                 ) : (
-                  students.map((student, index) => (
+                  safeStudents.map((student, index) => (
                     <View key={index} style={styles.studentCard}>
                       <View style={styles.studentInfo}>
                         <View style={styles.avatar}>

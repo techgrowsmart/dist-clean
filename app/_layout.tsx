@@ -9,59 +9,21 @@ import 'react-native-reanimated';
 import React from 'react';
 import { useColorScheme } from '../hooks/useColorScheme';
 import axios from "axios";
-import { Platform } from 'react-native';
 import Toast from "react-native-toast-message";
-import { View ,Text} from 'react-native';
-import { TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Platform } from 'react-native';
 
 // Import polyfills for web environment
 import '../polyfills';
 
 // Global styles to prevent unwanted cursor behavior
-const GlobalStyles = Platform.OS === 'web' ? `
-  * {
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
-  }
-  
-  input, textarea, [contenteditable="true"] {
-    -webkit-user-select: text;
-    -moz-user-select: text;
-    -ms-user-select: text;
-    user-select: text;
-  }
-  
-  /* Allow text selection for specific interactive elements that need it */
-  [data-selectable="true"] {
-    -webkit-user-select: text;
-    -moz-user-select: text;
-    -ms-user-select: text;
-    user-select: text;
-  }
-  
-  /* Prevent cursor from appearing on non-input elements */
-  *:not(input):not(textarea):not([contenteditable="true"]) {
-    cursor: default;
-  }
-  
-  button, a, [role="button"], [onclick] {
-    cursor: pointer;
-  }
-  
-  /* Ensure proper cursor for dropdowns and selects */
-  select, option {
-    cursor: pointer;
-  }
-` : '';
+const GlobalStyles = '';
 
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  const systemColorScheme = useColorScheme();
+  const [isMounted, setIsMounted] = React.useState(false);
   const [loaded, fontError] = useFonts({
     Inter_400Regular,
     RedHatDisplay_400Regular,
@@ -73,12 +35,15 @@ export default function RootLayout() {
   const fontsReady = loaded || fontError;
 
   useEffect(() => {
+    // Set mounted state after component mounts
+    setIsMounted(true);
+    
     if (fontsReady) {
       SplashScreen.hideAsync();
     }
 
     // Inject global styles for web to prevent unwanted cursor behavior
-    if (Platform.OS === 'web' && GlobalStyles) {
+    if (typeof Platform !== 'undefined' && Platform.OS === 'web' && GlobalStyles) {
       const styleElement = document.createElement('style');
       styleElement.textContent = GlobalStyles;
       document.head.appendChild(styleElement);
@@ -129,16 +94,29 @@ export default function RootLayout() {
 
       try {
         const response = await origFetch(url, options);
-        const cloned = response.clone();
 
-        try {
-          const json = await cloned.json();
-          console.log("📥 [Fetch Response]:", url);
-          console.log("   Body:", json);
-        } catch {
-          const text = await cloned.text();
-          console.log("📥 [Fetch Response]:", url);
-          console.log("   Body:", text);
+        // Only log response for API calls, not Firestore WebChannel streams
+        const urlStr = typeof url === 'string' ? url : url.toString();
+        if (!urlStr.includes('firestore.googleapis.com') && !urlStr.includes('webchannel')) {
+          const cloned = response.clone();
+          const contentType = response.headers.get('content-type') || '';
+
+          try {
+            if (contentType.includes('application/json')) {
+              const json = await cloned.json();
+              console.log("📥 [Fetch Response]:", url);
+              console.log("   Body:", json);
+            } else {
+              const text = await cloned.text();
+              // Only log text if it's not too large (avoid binary data)
+              if (text.length < 1000) {
+                console.log("📥 [Fetch Response]:", url);
+                console.log("   Body:", text.substring(0, 200));
+              }
+            }
+          } catch (parseErr) {
+            // Silently ignore parse errors - response body may not be readable
+          }
         }
 
         return response;
@@ -159,17 +137,25 @@ export default function RootLayout() {
     return <View style={{ flex: 1, backgroundColor: '#ffffff' }} />;
   }
 
+  // Prevent rendering during SSR or before mount
+  if (!isMounted) {
+    return <View style={{ flex: 1, backgroundColor: '#ffffff' }} />;
+  }
 
-  return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
-      <Toast />
-    </ThemeProvider>
-  );
+  try {
+    return (
+      <ThemeProvider value={systemColorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="+not-found" />
+        </Stack>
+        <StatusBar style="auto" />
+        <Toast />
+      </ThemeProvider>
+    );
+  } catch (e) {
+    return <View style={{ flex: 1, backgroundColor: '#ffffff' }} />;
+  }
 }

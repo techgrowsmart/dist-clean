@@ -693,7 +693,6 @@ useEffect(() => {
 
         console.log("✅ Reviews:", res.data.reviews);
         setReviews(res.data.reviews || []);
-        setReviews(res.data.reviews || []);
 
         const ratings = res.data.reviews.map((r: any) => Number(r.rating));
         const total = ratings.length;
@@ -1692,7 +1691,7 @@ const validateTimeRange = () => {
 </View>
 
                 {/* Timing */}
-                <View style={styles.timecontainer} style={{pointerEvents:"box-none"}}>
+                <View style={[styles.timecontainer, { pointerEvents: "box-none" }]}>
                   <TouchableOpacity
                     // Replace these three onPress handlers:
                     onPress={() => {
@@ -2271,6 +2270,7 @@ const styles = StyleSheet.create({
   webContent: {
     flex: 1,
     flexDirection: 'row',
+    gap: 8,
   },
   webMainContent: {
     flex: 1,

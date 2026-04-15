@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, RefreshControl, Platform, Dimensions } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, RefreshControl, Platform, Dimensions, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { getAuthData } from '../../../utils/authStorage';
 import axios from 'axios';
@@ -51,6 +51,7 @@ const StudentsEnrolled = () => {
   const [sidebarActiveItem, setSidebarActiveItem] = useState("My Students");
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [isWeb, setIsWeb] = useState(Platform.OS === 'web');
+  const [searchQuery, setSearchQuery] = useState('');
   
   // Responsive state
   const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
@@ -312,7 +313,25 @@ const StudentsEnrolled = () => {
     }
   };
   
-  // Fetch enrolled students
+  // Back handler
+  const handleBackPress = () => {
+    router.back();
+  };
+
+  // ESC key handler for web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleBackPress();
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, []);
+
+  // Fetch enrolled students using the same API as ConnectWeb
   const fetchStudents = async () => {
     try {
       const authData = await getAuthData();
@@ -321,47 +340,62 @@ const StudentsEnrolled = () => {
         setAuth(authData);
         setTeacherName(authData.name || '');
         setProfileImage(authData.profileImage || null);
-        
-        // Try multiple endpoints for student data
+
         let studentData = [];
-        
+
         try {
-          // First try the enrolled students endpoint
-          const response = await axios.get(`${BASE_URL}/api/teacher/enrolled-students`, {
-            headers: { 'Authorization': `Bearer ${authData.token}` }
-          });
-          
-          if (response.data.success && response.data.data) {
-            studentData = response.data.data;
+          // Use the same API endpoint as ConnectWeb - /api/firebase-contacts
+          const response = await axios.post(
+            `${BASE_URL}/api/firebase-contacts`,
+            { userEmail: authData.email, type: 'teacher' },
+            {
+              headers: {
+                'Authorization': `Bearer ${authData.token}`,
+                'Content-Type': 'application/json'
+              },
+              timeout: 10000
+            }
+          );
+
+          if (response.data?.success && response.data?.contacts) {
+            // Map contacts to student format
+            studentData = response.data.contacts.map((contact: any) => ({
+              id: contact.id || contact._id || contact.email || Math.random().toString(36),
+              name: contact.studentName || contact.contactName || contact.name || 'Unknown Student',
+              email: contact.studentEmail || contact.contactEmail || contact.email || '',
+              profile_pic: contact.studentProfilePic || contact.contactProfilePic || contact.profilePic || contact.profile_pic || '',
+              enrolled_date: contact.enrolledDate || contact.enrolled_date || contact.createdAt || contact.timestamp || new Date().toISOString(),
+              status: contact.status || 'active',
+              className: contact.className || contact.classname || contact.class || '',
+              subject: contact.subject || contact.subjectName || ''
+            }));
           }
-        } catch (error) {
-          console.log('Enrolled students endpoint failed, trying contacts endpoint...');
-          
+        } catch (firebaseError) {
+          console.log('Firebase contacts endpoint failed, trying fallback...', firebaseError);
+
           try {
-            // Fallback to contacts endpoint (which was used in dashboard)
-            const contactsResponse = await axios.post(
-              `${BASE_URL}/api/contacts`,
-              { userEmail: authData.email, type: authData.role },
-              { headers: { 'Authorization': `Bearer ${authData.token}`, 'Content-Type': 'application/json' } }
-            );
-            
-            if (contactsResponse.data.success && contactsResponse.data.contacts) {
-              studentData = contactsResponse.data.contacts.map((contact: any) => ({
-                id: contact.id,
-                name: contact.studentName || contact.name,
-                email: contact.studentEmail || contact.email,
-                profile_pic: contact.studentProfilePic || contact.profilePic || contact.profile_pic,
-                enrolled_date: contact.enrolled_date || contact.createdAt || new Date().toISOString(),
-                status: contact.status || 'active'
+            // Fallback: try the enrolled students endpoint
+            const response = await axios.get(`${BASE_URL}/api/teacher/enrolled-students`, {
+              headers: { 'Authorization': `Bearer ${authData.token}` }
+            });
+
+            if (response.data?.success && response.data?.data) {
+              studentData = response.data.data.map((student: any) => ({
+                id: student.id || student._id || student.email || Math.random().toString(36),
+                name: student.name || student.studentName || student.fullName || student.userName || 'Unknown Student',
+                email: student.email || student.studentEmail || '',
+                profile_pic: student.profile_pic || student.profilePic || student.profileimage || student.studentProfilePic || '',
+                enrolled_date: student.enrolled_date || student.enrolledDate || student.createdAt || student.joinDate || new Date().toISOString(),
+                status: student.status || 'active'
               }));
             }
-          } catch (contactsError) {
-            console.log('Contacts endpoint also failed, using mock data');
-            // Use mock data for demonstration
+          } catch (fallbackError) {
+            console.log('Fallback endpoint also failed:', fallbackError);
             studentData = [];
           }
         }
-        
+
+        console.log('Students loaded:', studentData.length, studentData);
         setStudents(studentData);
         
         // Also fetch posts if authenticated
@@ -448,6 +482,12 @@ const StudentsEnrolled = () => {
     );
   }
 
+  // Filter students based on search query
+  const filteredStudents = students.filter(student =>
+    student.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    student.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <View style={styles.container}>
       {/* ── Top header ── */}
@@ -461,6 +501,8 @@ const StudentsEnrolled = () => {
           activeItem={sidebarActiveItem}
           onItemPress={handleSelect}
           userEmail={auth?.email || ''}
+          studentCount={students.length}
+          subjectCount={0}
         />
 
         {/* ── Main wrapper: center + right panel in a ROW ── */}
@@ -484,44 +526,81 @@ const StudentsEnrolled = () => {
                 isMobile && styles.pageHeaderMobile,
                 isSmallMobile && styles.pageHeaderSmallMobile
               ]}>
-                <View style={styles.pageHeaderContent}>
-                  <Text style={[
-                    styles.pageTitle,
-                    isMobile && styles.pageTitleMobile,
-                    isSmallMobile && styles.pageTitleSmallMobile
-                  ]} selectable={false}>Enrolled Students</Text>
-                  <Text style={[
-                    styles.pageSubtitle,
-                    isMobile && styles.pageSubtitleMobile
-                  ]} selectable={false}>
-                    Manage and view your enrolled students
-                  </Text>
-                </View>
-                {students.length > 0 && (
-                  <View style={[
-                    styles.statsBadge,
-                    isMobile && styles.statsBadgeMobile
-                  ]}>
+                <View style={styles.pageHeaderLeft}>
+                  <TouchableOpacity
+                    style={styles.backBtn}
+                    onPress={handleBackPress}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="arrow-back" size={24} color={COLORS.textDark} />
+                  </TouchableOpacity>
+                  <View style={styles.pageHeaderContent}>
                     <Text style={[
-                      styles.statsBadgeText,
-                      isMobile && styles.statsBadgeTextMobile
-                    ]}>{students.length} Students</Text>
+                      styles.pageTitle,
+                      isMobile && styles.pageTitleMobile,
+                      isSmallMobile && styles.pageTitleSmallMobile
+                    ]} selectable={false}>Enrolled Students</Text>
+                    <Text style={[
+                      styles.pageSubtitle,
+                      isMobile && styles.pageSubtitleMobile
+                    ]} selectable={false}>
+                      Manage and view your enrolled students
+                    </Text>
                   </View>
-                )}
+                </View>
+                <View style={[
+                  styles.statsBadge,
+                  isMobile && styles.statsBadgeMobile
+                ]}>
+                  <Text style={[
+                    styles.statsBadgeText,
+                    isMobile && styles.statsBadgeTextMobile
+                  ]}>{students.length} Students</Text>
+                </View>
               </View>
+
+              {/* Mobile Search Bar */}
+              {isMobile && (
+                <View style={styles.mobileSearchContainer}>
+                  <View style={styles.mobileSearchBar}>
+                    <Ionicons name="search" size={20} color={COLORS.textSecondary} style={{ marginRight: 10 }} />
+                    <TextInput
+                      style={styles.mobileSearchInput}
+                      placeholder="Search students"
+                      placeholderTextColor={COLORS.textSecondary}
+                      value={searchQuery}
+                      onChangeText={setSearchQuery}
+                    />
+                  </View>
+                </View>
+              )}
 
               {loading ? (
                 <View style={styles.loaderContainer}>
                   <ActivityIndicator size="large" color={COLORS.primaryBlue} />
                   <Text style={styles.loadingText} selectable={false}>Loading students...</Text>
                 </View>
-              ) : students.length > 0 ? (
-                /* Students List */
-                <View style={styles.studentsContainer}>
-                  {students.map((student, index) => (
-                    <StudentCard key={student.id || index} student={student} isMobile={isMobile} />
-                  ))}
-                </View>
+              ) : filteredStudents.length > 0 ? (
+                /* Students List - Grid for Mobile, List for Web */
+                isMobile ? (
+                  <FlatList
+                    data={filteredStudents}
+                    keyExtractor={(item, index) => `${item.id || item.email || item.name}-${index}`}
+                    renderItem={({ item }) => (
+                      <MobileStudentCard student={item} screenWidth={screenWidth} />
+                    )}
+                    numColumns={2}
+                    columnWrapperStyle={styles.mobileGridRow}
+                    contentContainerStyle={styles.mobileGridContainer}
+                    showsVerticalScrollIndicator={false}
+                  />
+                ) : (
+                  <View style={styles.studentsContainer}>
+                    {students.map((student, index) => (
+                      <StudentCard key={student.id || index} student={student} isMobile={isMobile} />
+                    ))}
+                  </View>
+                )
               ) : (
                 /* Empty State */
                 <View style={[
@@ -564,13 +643,6 @@ const StudentsEnrolled = () => {
                   ]} selectable={false}>
                     You haven't enrolled any students yet. Start by sharing your course or subject link.
                   </Text>
-                  
-                    <Ionicons 
-                      name="share-outline" 
-                      size={isMobile ? 18 : 20} 
-                      color={COLORS.white} 
-                      style={{ marginRight: 8 }} 
-                    />
                 </View>
               )}
                 </ScrollView>
@@ -585,33 +657,105 @@ const StudentsEnrolled = () => {
   );
 };
 
+// --- Mobile Student Card (Grid Style) ---
+const MobileStudentCard = ({ student, screenWidth }: { student: any; screenWidth: number }) => {
+  const CARD_WIDTH = (screenWidth - 45) / 2;
+
+  // Get profile pic from various possible field names
+  const profilePic = student.profile_pic || student.profilePic || student.profileImage || '';
+
+  // Construct proper image URL
+  const getImageUrl = (pic: string) => {
+    if (!pic) return DEFAULT_STUDENT_PIC;
+    if (pic.startsWith('http')) return pic;
+    if (pic.startsWith('/')) return `${BASE_URL}${pic}`;
+    return `${BASE_URL}/${pic}`;
+  };
+
+  return (
+    <View style={[styles.mobileStudentCard, { width: CARD_WIDTH }]}>
+      <Image
+        source={{ uri: getImageUrl(profilePic) }}
+        style={styles.mobileStudentImage}
+        resizeMode="cover"
+        defaultSource={{ uri: DEFAULT_STUDENT_PIC }}
+      />
+      <Text style={styles.mobileStudentName} numberOfLines={2}>
+        {student.name || 'Unknown Student'}
+      </Text>
+      {(student.className || student.subject) && (
+        <Text style={styles.mobileStudentSubject} numberOfLines={1}>
+          {student.className}{student.className && student.subject ? ' - ' : ''}{student.subject}
+        </Text>
+      )}
+    </View>
+  );
+};
+
+// Default student profile image
+const DEFAULT_STUDENT_PIC = 'https://cdn-icons-png.flaticon.com/512/4140/4140048.png';
+
 // --- Student Card Component ---
 const StudentCard = ({ student, isMobile }: { student: any; isMobile: boolean }) => {
+  const router = useRouter();
+
+  // Get profile pic from various possible field names
+  const profilePic = student.profile_pic || student.profilePic || student.profileImage || '';
+
+  // Construct proper image URL
+  const getImageUrl = (pic: string) => {
+    if (!pic) return DEFAULT_STUDENT_PIC;
+    if (pic.startsWith('http')) return pic;
+    if (pic.startsWith('/')) return `${BASE_URL}${pic}`;
+    return `${BASE_URL}/${pic}`;
+  };
+
+  // Handle view profile - navigate to student profile
+  const handleViewProfile = () => {
+    // Navigate to student profile or show modal with student details
+    router.push({
+      pathname: '/StudentProfile',
+      params: {
+        email: student.email,
+        name: student.name,
+        profilePic: profilePic,
+        className: student.className || '',
+        subject: student.subject || '',
+        enrolledDate: student.enrolled_date || ''
+      }
+    });
+  };
+
+  // Handle message - navigate to ConnectWeb with this student selected
+  const handleMessage = () => {
+    router.push({
+      pathname: '/TeacherDashBoard/ConnectWeb',
+      params: {
+        selectedStudentEmail: student.email,
+        selectedStudentName: student.name
+      }
+    });
+  };
+
   return (
     <View style={[styles.studentCard, isMobile && styles.studentCardMobile]}>
       <View style={styles.studentInfo}>
         <View style={styles.avatarContainer}>
-          {student.profile_pic ? (
-            <Image 
-              source={{ 
-                uri: student.profile_pic.startsWith('http') 
-                  ? student.profile_pic 
-                  : `${BASE_URL}/${student.profile_pic}` 
-              }} 
-              style={styles.avatar} 
-            />
-          ) : (
-            <View style={[styles.avatar, styles.avatarFallback]}>
-              <Text style={styles.avatarText}>
-                {student.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-              </Text>
-            </View>
-          )}
+          <Image
+            source={{ uri: getImageUrl(profilePic) }}
+            style={styles.avatar}
+            defaultSource={{ uri: DEFAULT_STUDENT_PIC }}
+          />
         </View>
-        
+
         <View style={styles.studentDetails}>
           <Text style={styles.studentName} selectable={false}>{student.name}</Text>
           <Text style={styles.studentEmail} selectable={false}>{student.email}</Text>
+          {(student.className || student.subject) && (
+            <Text style={styles.classSubject} selectable={false}>
+              {student.className}{student.className && student.subject ? ' - ' : ''}{student.subject}
+            </Text>
+          )}
           <View style={styles.studentMeta}>
             <Text style={styles.enrolledDate} selectable={false}>
               Enrolled: {new Date(student.enrolled_date || student.createdAt).toLocaleDateString()}
@@ -624,13 +768,9 @@ const StudentCard = ({ student, isMobile }: { student: any; isMobile: boolean })
           </View>
         </View>
       </View>
-      
+
       <View style={styles.studentActions}>
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="person-outline" size={16} color={COLORS.white} style={{ marginRight: 6 }} />
-          <Text style={styles.actionButtonText} selectable={false}>View Profile</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionButton, styles.messageButton]}>
+        <TouchableOpacity style={[styles.actionButton, styles.messageButton]} onPress={handleMessage}>
           <Ionicons name="chatbubble-outline" size={16} color={COLORS.primaryBlue} />
         </TouchableOpacity>
       </View>
@@ -700,6 +840,25 @@ const styles = StyleSheet.create({
   },
   pageHeaderContent: {
     flex: 1,
+  },
+  pageHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    flex: 1,
+  },
+  backBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
   pageTitle: {
     fontSize: 28,
@@ -823,6 +982,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
     color: COLORS.textSecondary,
+    marginBottom: 4,
+  },
+  classSubject: {
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    color: COLORS.primaryBlue,
     marginBottom: 8,
   },
   studentMeta: {
@@ -1119,6 +1284,76 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     color: COLORS.textSecondary,
     textAlign: 'center',
+  },
+
+  // ── Mobile Grid Styles ────────────────────────────────────────────────────
+  mobileSearchContainer: {
+    paddingHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  mobileSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 48,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  mobileSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textDark,
+  },
+  mobileGridContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  mobileGridRow: {
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  mobileStudentCard: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+    }),
+    elevation: 2,
+  },
+  mobileStudentImage: {
+    width: '100%',
+    aspectRatio: 3/4,
+    borderRadius: 8,
+    marginBottom: 10,
+    backgroundColor: COLORS.border,
+  },
+  mobileStudentName: {
+    fontSize: 14,
+    fontFamily: 'Poppins_500Medium',
+    color: COLORS.textDark,
+    textAlign: 'left',
+  },
+  mobileStudentSubject: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.primaryBlue,
+    textAlign: 'left',
+    marginTop: 2,
   },
 });
 

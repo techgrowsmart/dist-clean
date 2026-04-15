@@ -1,6 +1,6 @@
-import { Platform } from 'react-native'; 
+import { Platform } from 'react-native';
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
+import {
   StyleSheet,
   View,
   Text,
@@ -13,8 +13,8 @@ import {
   Alert,
   Modal,
   BackHandler,
-  Animated,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import { useFonts } from 'expo-font';
@@ -23,10 +23,11 @@ import { FontAwesome5, MaterialCommunityIcons, Ionicons } from '@expo/vector-ico
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import moment from 'moment';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import TeacherWebHeader from '../../../components/ui/TeacherWebHeader';
 import TeacherWebSidebar from '../../../components/ui/TeacherWebSidebar';
-import TeacherThoughtsCard, { TeacherThoughtsBackground } from '../../../components/ui/TeacherThoughtsCard';
-import TeacherPostComposer from '../../../components/ui/TeacherPostComposer';
+import SubjectCard from '../../../components/SubjectCard';
 import { useRouter } from 'expo-router';
 import { BASE_URL } from '../../../config';
 import { getAuthData } from '../../../utils/authStorage';
@@ -61,6 +62,8 @@ interface Tuition {
   day: string;
   board: string;
   skill: string;
+  university: string;
+  year: string;
 }
 
 interface EducationData {
@@ -116,6 +119,7 @@ export default function ProfileWeb() {
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState('');
   const [windowWidth, setWindowWidth] = useState(Dimensions.get('window').width);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Loading States
   const [isLoading, setIsLoading] = useState(true);
@@ -124,9 +128,12 @@ export default function ProfileWeb() {
 
   // Form Data
   const [university, setUniversity] = useState('');
+  const [pastUniversity, setPastUniversity] = useState('');
+  const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
   const [introduction, setIntroduction] = useState('');
   const [workExperience, setWorkExperience] = useState('');
+  const [workExperiences, setWorkExperiences] = useState<string[]>(['', '', '', '', '']);
   const [selectedCategory, setSelectedCategory] = useState('Subject teacher');
   const [selectedBoard, setSelectedBoard] = useState('CBSE');
   const [selectedClass, setSelectedClass] = useState('');
@@ -145,9 +152,9 @@ export default function ProfileWeb() {
     { subject: '', college: '', year: '' },
   ]);
   const [tuitions, setTuitions] = useState<Tuition[]>([
-    { class: '', subject: '', timeFrom: '', timeTo: '', charge: '', day: '', board: '', skill: '' },
-    { class: '', subject: '', timeFrom: '', timeTo: '', charge: '', day: '', board: '', skill: '' },
-    { class: '', subject: '', timeFrom: '', timeTo: '', charge: '', day: '', board: '', skill: '' },
+    { class: '', subject: '', timeFrom: '', timeTo: '', charge: '', day: '', board: '', skill: '', university: '', year: '' },
+    { class: '', subject: '', timeFrom: '', timeTo: '', charge: '', day: '', board: '', skill: '', university: '', year: '' },
+    { class: '', subject: '', timeFrom: '', timeTo: '', charge: '', day: '', board: '', skill: '', university: '', year: '' },
   ]);
   const [tuitionCount, setTuitionCount] = useState(1);
 
@@ -157,19 +164,9 @@ export default function ProfileWeb() {
   const [classes, setClasses] = useState<any[]>([]);
   const [subject, setSubject] = useState<any[]>([]);
   const [skillItems, setSkillItems] = useState([]);
-  const [boardItems, setBoardItems] = useState([]);
-  const [classItems, setClassItems] = useState([]);
-  const [subjectItems, setSubjectItems] = useState([]);
-  const [subjectClassItems, setSubjectClassItems] = useState([]);
 
   // Modal States
   const [imageModalVisible, setImageModalVisible] = useState(false);
-  const [timingModalVisible, setTimingModalVisible] = useState(false);
-  const [selectedTimingIndex, setSelectedTimingIndex] = useState<number | null>(null);
-  const [selectedDays, setSelectedDays] = useState<string[]>([]);
-  const [tempDay, setTempDay] = useState('');
-  const [tempTimeFrom, setTempTimeFrom] = useState('');
-  const [tempTimeTo, setTempTimeTo] = useState('');
 
   // Reviews Data
   const [reviews, setReviews] = useState([]);
@@ -188,6 +185,12 @@ export default function ProfileWeb() {
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       setWindowWidth(window.width);
+      // Auto-collapse sidebar on mobile, expand on desktop
+      if (window.width < 768) {
+        setSidebarCollapsed(true);
+      } else {
+        setSidebarCollapsed(false);
+      }
     });
     return () => subscription.remove();
   }, []);
@@ -264,6 +267,17 @@ export default function ProfileWeb() {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
+  // Helper function to format 24-hour time to 12-hour AM/PM format
+  const formatTimeDisplay = (timeStr: string): string => {
+    if (!timeStr) return '';
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    if (isNaN(hours) || isNaN(minutes)) return timeStr;
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+    const displayMinutes = minutes.toString().padStart(2, '0');
+    return `${displayHours}:${displayMinutes} ${period}`;
+  };
+
   const fetchUserProfile = async (token: string, email: string) => {
     try {
       if (userProfileCache.has(email)) return userProfileCache.get(email)!;
@@ -278,8 +292,8 @@ export default function ProfileWeb() {
         setUserProfileCache(prev => new Map(prev.set(email, profileData)));
         return profileData;
       }
-    } catch {
-      console.error('Error fetching user profile:', error);
+    } catch (error: any) {
+      console.warn('Error fetching user profile:', error?.message || error);
     }
     return { name: 'Unknown User', profilePic: '' };
   };
@@ -291,14 +305,16 @@ export default function ProfileWeb() {
       const res = await api.get(
         "/api/posts/all"
       );
-      if (res.success) {
+      if (res.success && Array.isArray(res.data)) {
         // Get unique emails from all posts and fetch their profiles
         const uniqueEmails = [...new Set(res.data.map((p: any) => p.author?.email as string).filter((email: string) => Boolean(email)))];
         await Promise.all(uniqueEmails.map((email: string) => fetchUserProfile(token, email)));
         setPosts(res.data);
+      } else {
+        setPosts([]);
       }
-    } catch (error) {
-      console.error('Error fetching posts:', error);
+    } catch (error: any) {
+      console.warn('Error fetching posts:', error?.message || error);
       setPosts([]);
     } finally {
       setPostsLoading(false);
@@ -350,8 +366,8 @@ export default function ProfileWeb() {
     }
   };
 
-  const isMobile = windowWidth < 1024;
-  const isTablet = windowWidth >= 768 && windowWidth < 1200;
+  const isMobile = windowWidth < 768;
+  const isTablet = windowWidth >= 768 && windowWidth < 1024;
 
   // Handle sidebar navigation
   const handleSidebarSelect = useCallback((item: string) => {
@@ -386,7 +402,7 @@ export default function ProfileWeb() {
       );
       if (response.data?.status) setUserStatus(response.data.status);
     } catch (error: any) {
-      console.error("Error fetching user status:", error?.message || error);
+      console.warn("Error fetching user status:", error?.message || error);
     }
   }, []);
 
@@ -417,7 +433,12 @@ export default function ProfileWeb() {
           setIntroduction(profileData.introduction || '');
           setWorkExperience(profileData.workExperience || '');
           setUniversity(profileData.university || '');
+          setPastUniversity(profileData.pastUniversity || '');
+          setLocation(profileData.location || '');
           setSelectedCategory(profileData.category || 'Subject teacher');
+          if (profileData.workExperiences && Array.isArray(profileData.workExperiences)) {
+            setWorkExperiences(profileData.workExperiences);
+          }
           setTeachingMode(Array.isArray(profileData.teachingMode) ? profileData.teachingMode : ['Online']);
           
           const qualificationsData = Array.isArray(profileData.qualifications) ? profileData.qualifications : [];
@@ -429,7 +450,7 @@ export default function ProfileWeb() {
           const tuitionsData = Array.isArray(profileData.tuitions) ? profileData.tuitions : [];
           setTuitionCount(tuitionsData.length > 0 ? tuitionsData.length : 1);
           const defaultTuitions = Array(3).fill(null).map(() => ({
-            class: '', subject: '', timeFrom: '', timeTo: '', charge: '', day: '', board: '', skill: ''
+            class: '', subject: '', timeFrom: '', timeTo: '', charge: '', day: '', board: '', skill: '', university: '', year: ''
           }));
           tuitionsData.forEach((savedTuition: any, index: number) => {
             if (index < 3) defaultTuitions[index] = { ...defaultTuitions[index], ...savedTuition, charge: savedTuition.charge || '' };
@@ -456,7 +477,8 @@ export default function ProfileWeb() {
 
       const storedData = await AsyncStorage.multiGet([
         "teacherName", "email", "profileImage", "introduction", "workexperience",
-        "category", "teachingmode", "tutions", "qualifications", "university"
+        "category", "teachingmode", "tutions", "qualifications", "university",
+        "pastUniversity", "location", "workExperiences"
       ]);
       const data = Object.fromEntries(storedData);
       setIsExistingProfile(true);
@@ -466,7 +488,15 @@ export default function ProfileWeb() {
       setIntroduction(data.introduction || '');
       setWorkExperience(data.workexperience || '');
       setUniversity(data.university || '');
+      setPastUniversity(data.pastUniversity || '');
+      setLocation(data.location || '');
       setSelectedCategory(data.category || 'Subject teacher');
+      try {
+        const parsedWorkExps = JSON.parse(data.workExperiences || '[]');
+        if (Array.isArray(parsedWorkExps) && parsedWorkExps.length > 0) {
+          setWorkExperiences(parsedWorkExps);
+        }
+      } catch {}
       
       try {
         setTeachingMode(JSON.parse(data.teachingmode || '["Online"]'));
@@ -480,7 +510,7 @@ export default function ProfileWeb() {
         const validTuitions = parsedTuitions.filter((t: any) => t.class || t.subject || t.skill || t.timeFrom || t.timeTo || t.board || t.day);
         setTuitionCount(validTuitions.length > 0 ? validTuitions.length : 1);
         const defaultTuitions = Array(3).fill(null).map(() => ({
-          class: '', subject: '', timeFrom: '', timeTo: '', charge: '', day: '', board: '', skill: ''
+          class: '', subject: '', timeFrom: '', timeTo: '', charge: '', day: '', board: '', skill: '', university: '', year: ''
         }));
         parsedTuitions.forEach((savedTuition: any, index: number) => {
           if (index < 3) defaultTuitions[index] = { ...defaultTuitions[index], ...savedTuition, charge: savedTuition.charge || '' };
@@ -513,7 +543,9 @@ export default function ProfileWeb() {
       ratings.forEach(rating => { if (rating >= 1 && rating <= 5) countByStars[rating as keyof typeof countByStars]++; });
       setRatingsCount(countByStars);
     } catch (error: any) {
-      console.error("Failed to fetch reviews:", error?.message || error);
+      console.warn("Failed to fetch reviews:", error?.message || error);
+      setReviews([]);
+      setRatingsCount({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 });
     } finally {
       setReviewsLoading(false);
     }
@@ -533,8 +565,10 @@ export default function ProfileWeb() {
       }
       const skillList = skills.map((s: any) => ({ label: s.name, value: s.name }));
       setSkillItems(skillList);
-    } catch (error) {
-      console.error("Failed to fetch education structure:", error);
+    } catch (error: any) {
+      console.warn("Failed to fetch education structure:", error?.message || error);
+      setEducationData([]);
+      setSkillItems([]);
     }
   }, []);
 
@@ -582,26 +616,25 @@ export default function ProfileWeb() {
   const validateForm = useCallback(() => {
     const newErrors: FormErrors = {};
     if (!selectedCategory || selectedCategory === "") newErrors.selectedCategory = "Please select category.";
-    if (selectedCategory === "Subject teacher") {
-      if (!selectedBoard) newErrors.selectedBoard = "Please select the board.";
-      if (!selectedClass) newErrors.selectedClass = "Please select the class.";
-      if (!selectedSubject) newErrors.selectedSubject = "Please select the subject.";
-    }
-    if (selectedCategory === "Skill teacher") {
-      if (!selectedSkill) newErrors.selectedSkill = "Please select the skill.";
-    }
     if (!introduction.trim()) newErrors.introduction = "Please enter your introduction.";
     if (!qualifications[0]?.subject?.trim()) newErrors.qualification_subject_0 = "Enter subject for qualification";
     if (!qualifications[0]?.college?.trim()) newErrors.qualification_college_0 = "Enter college name for qualification";
     if (!qualifications[0]?.year?.trim()) newErrors.qualification_year_0 = "Enter year for qualification";
     
+    // Validate each tuition entry - SubjectCard data
     for (let i = 0; i < tuitionCount; i++) {
       const t = tuitions[i];
       const prefix = "tuition_" + i;
       if (selectedCategory === "Subject teacher") {
         if (!t.board?.trim()) newErrors[prefix + "_board"] = "Select board for tuition " + (i + 1);
         if (!t.subject?.trim()) newErrors[prefix + "_subject"] = "Select subject for tuition " + (i + 1);
-        if (!t.class?.trim()) newErrors[prefix + "_class"] = "Select class for tuition " + (i + 1);
+        // For Universities, require university/year instead of class
+        if (t.board === 'Universities') {
+          if (!t.university?.trim()) newErrors[prefix + "_university"] = "Select university for tuition " + (i + 1);
+          if (!t.year?.trim()) newErrors[prefix + "_year"] = "Select year for tuition " + (i + 1);
+        } else {
+          if (!t.class?.trim()) newErrors[prefix + "_class"] = "Select class for tuition " + (i + 1);
+        }
       } else if (selectedCategory === "Skill teacher") {
         if (!t.skill?.trim()) newErrors[prefix + "_skill"] = "Select skill for tuition " + (i + 1);
       }
@@ -612,14 +645,20 @@ export default function ProfileWeb() {
     if (!teachingMode || teachingMode.length === 0) newErrors.teachingMode = "Please select at least one mode of teaching.";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [selectedCategory, selectedBoard, selectedClass, selectedSubject, selectedSkill, introduction, qualifications, tuitionCount, tuitions, teachingMode]);
+  }, [selectedCategory, introduction, qualifications, tuitionCount, tuitions, teachingMode]);
 
   // Save Profile
   const handleSave = useCallback(async () => {
+    console.log('🔘 Save button clicked!');
+    console.log('📋 Current tuitions data:', JSON.stringify(tuitions, null, 2));
+    console.log('📊 Tuition count:', tuitionCount);
+    
     if (!validateForm()) {
-      Alert.alert("Missing Fields", "Please fill in all required fields.");
+      console.log('❌ Validation failed:', errors);
+      Alert.alert("Missing Fields", "Please fill in all required fields. Check tuitions and other required fields.");
       return;
     }
+    console.log('✅ Validation passed');
     
     setIsSaving(true);
     try {
@@ -636,31 +675,40 @@ export default function ProfileWeb() {
         imageUrl = await uploadImageToS3AndUpdateProfile(profileImage, email, teacherName);
       }
 
-      const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
       const filteredQualifications = qualifications.filter(q => q.subject || q.college || q.year);
-      const cleanedTuitions = tuitions.slice(0, tuitionCount).map(t => {
+      const cleanedTuitions = tuitions.slice(0, tuitionCount).map((t, idx) => {
+        console.log(`📝 Processing tuition ${idx}:`, t);
         if (selectedCategory === "Skill teacher") {
           return { skill: t.skill, timeFrom: t.timeFrom, timeTo: t.timeTo, charge: t.charge || "", day: t.day };
+        } else if (t.board === 'Universities') {
+          return { university: t.university, year: t.year, subject: t.subject, board: t.board, timeFrom: t.timeFrom, timeTo: t.timeTo, charge: t.charge || "", day: t.day };
         } else {
           return { class: t.class, subject: t.subject, board: t.board, timeFrom: t.timeFrom, timeTo: t.timeTo, charge: t.charge || "", day: t.day };
         }
       });
+      console.log('✨ Cleaned tuitions:', JSON.stringify(cleanedTuitions, null, 2));
 
-      const response = await api.post(
-        "/api/teacherss",
-        {
-          fullName: teacherName,
-          email,
-          profilePic: imageUrl,
-          introduction,
-          qualifications: filteredQualifications,
-          category: selectedCategory,
-          tuitions: cleanedTuitions,
-          teachingMode,
-          workExperience,
-          university,
-        }
-      );
+      const profileData = {
+        fullName: teacherName,
+        email,
+        profilePic: imageUrl,
+        introduction,
+        qualifications: filteredQualifications,
+        category: selectedCategory,
+        tuitions: cleanedTuitions,
+        teachingMode,
+        workExperience,
+        university,
+      };
+
+      console.log('📤 Sending profile data:', JSON.stringify(profileData, null, 2));
+
+      const response = await api.post("/api/teacherss", profileData);
+      console.log('✅ Profile saved response:', response);
+
+      if (!response.success || response.data?.error) {
+        throw new Error(response.data?.error || response.data?.message || 'Failed to save profile');
+      }
 
       await AsyncStorage.multiSet([
         ["teacherName", teacherName],
@@ -678,13 +726,34 @@ export default function ProfileWeb() {
       Alert.alert("Success", "Profile saved successfully!");
       setIsEditable(false);
     } catch (error: any) {
-      console.error("Error saving profile:", error);
-      const errorMessage = error?.response?.data?.message || error?.message || "Failed to save profile. Please try again.";
+      console.error("❌ Error saving profile:", error);
+      const errorMessage = error?.message || "Failed to save profile. Please try again.";
       Alert.alert("Error", errorMessage);
     } finally {
       setIsSaving(false);
     }
   }, [validateForm, profileImage, teacherName, qualifications, tuitionCount, tuitions, selectedCategory, introduction, teachingMode, workExperience, university, uploadImageToS3AndUpdateProfile]);
+
+  // --- Specific Components ---
+
+  const EduListItem = ({ label, education, year, striped, iconColor, iconName, iconGlyphColor }: any) => (
+    <View style={[styles.eduItem, striped && { backgroundColor: '#F9FAFB' }]}>
+      <View style={[styles.eduItemIconCircle, { backgroundColor: iconColor }]}>
+        <Ionicons name={iconName} size={14} color={iconGlyphColor} />
+      </View>
+      <View style={styles.eduItemContent}>
+        <Text style={styles.eduItemLabel}>{label}</Text>
+        <Text style={styles.eduItemDetail}>{education}</Text>
+      </View>
+      <Text style={styles.eduItemYear}>{year}</Text>
+    </View>
+  );
+
+  const WorkExpTile = ({ color, text }: { color: string; text?: string }) => (
+    <View style={[styles.expTile, { backgroundColor: color }]}>
+      <Text style={styles.expTileText}>{text || 'Add your Work Experience'}</Text>
+    </View>
+  );
 
   // Update Qualification
   const updateQualification = useCallback((index: number, field: keyof Qualification, value: string) => {
@@ -704,25 +773,86 @@ export default function ProfileWeb() {
       return updated;
     });
   }, []);
-
-  // Add Tuition
-  const addTuition = useCallback(() => {
-    setTuitionCount(prev => prev + 1);
-    setTuitions(prev => [...prev, { class: '', subject: '', timeFrom: '', timeTo: '', charge: '', day: '', board: '', skill: '' }]);
+  
+  // Update Work Experience
+  const updateWorkExperience = useCallback((index: number, value: string) => {
+    setWorkExperiences(prev => {
+      const updated = [...prev];
+      updated[index] = value;
+      return updated;
+    });
   }, []);
-
-  // Delete Tuition
-  const deleteTuition = useCallback((index: number) => {
-    if (tuitionCount > 1) {
-      setTuitions(prev => prev.filter((_, i) => i !== index));
-      setTuitionCount(prev => prev - 1);
-    }
-  }, [tuitionCount]);
 
   // Handle Image Picker
   const handleImagePicker = useCallback(() => setImageModalVisible(true), []);
   
-  // Handle Camera/Gallery
+  // Crop/Process Image
+  const cropImage = useCallback(async (uri: string) => {
+    try {
+      const manipulatedImage = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 500 } }],
+        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      setProfileImage(manipulatedImage.uri);
+      setImageModalVisible(false);
+    } catch (error) {
+      console.error("Image processing error:", error);
+      setProfileImage(uri);
+      setImageModalVisible(false);
+    }
+  }, []);
+  
+  // Handle Camera
+  const handleCamera = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Denied", "Camera access is required to take photos.");
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.length) {
+        cropImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("Camera error:", error);
+      Alert.alert("Error", "Failed to open camera. Please try again.");
+    }
+  }, [cropImage]);
+
+  // Handle Gallery
+  const handleGallery = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Denied", "Gallery access is required to select photos.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.length) {
+        cropImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("Gallery error:", error);
+      Alert.alert("Error", "Failed to open gallery. Please try again.");
+    }
+  }, [cropImage]);
+  
+  // Handle Web File Upload (for browser)
   const handleFileUpload = useCallback((event: any) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -735,14 +865,6 @@ export default function ProfileWeb() {
     }
   }, []);
 
-  // Validate Time Range
-  const validateTimeRange = useCallback(() => {
-    if (!tempTimeFrom || !tempTimeTo) return true;
-    const fromTime = moment(tempTimeFrom, "HH:mm");
-    const toTime = moment(tempTimeTo, "HH:mm");
-    return toTime.isAfter(fromTime);
-  }, [tempTimeFrom, tempTimeTo]);
-
   // Handle Board Change
   const handleBoardChange = useCallback((index: number, boardName: string) => {
     const updated = [...tuitions];
@@ -750,6 +872,7 @@ export default function ProfileWeb() {
     updated[index].subject = "";
     updated[index].class = "";
     setTuitions(updated);
+    setSelectedBoard(boardName);
   }, [tuitions]);
 
   // Animation Hooks
@@ -778,39 +901,6 @@ export default function ProfileWeb() {
   }, [userEmail, fetchReviews]);
 
   useEffect(() => {
-    if (!selectedBoard || educationData.length === 0) return;
-    const selectedBoardData = educationData.find((b) => b.name === selectedBoard);
-    if (selectedBoardData) {
-      const classes = selectedBoardData.classes?.map((c: any) => ({ label: c.name, value: c.name })) || [];
-      setClassItems(classes);
-    }
-  }, [selectedBoard, educationData]);
-
-  useEffect(() => {
-    if (!selectedBoard || !selectedClass) return;
-    const boardData = educationData.find((b) => b.name === selectedBoard);
-    const classData = boardData?.classes?.find((c: any) => c.name === selectedClass);
-    if (classData) {
-      const subjects = classData.subjects?.map((s: any) => ({ label: s.name, value: s.name })) || [];
-      setSubjectItems(subjects);
-    }
-  }, [selectedBoard, selectedClass, educationData]);
-
-  useEffect(() => {
-    if (timingModalVisible && selectedTimingIndex !== null) {
-      const currentTuition = tuitions[selectedTimingIndex];
-      if (currentTuition?.day) {
-        const daysArray = currentTuition.day.split(',').map(day => day.trim());
-        setSelectedDays(daysArray);
-      } else {
-        setSelectedDays([]);
-      }
-      setTempTimeFrom(currentTuition?.timeFrom || "");
-      setTempTimeTo(currentTuition?.timeTo || "");
-    }
-  }, [timingModalVisible, selectedTimingIndex, tuitions]);
-
-  useEffect(() => {
     const backAction = () => {
       router.push("/(tabs)/TeacherDashBoard/Teacher");
       return true;
@@ -819,42 +909,18 @@ export default function ProfileWeb() {
     return () => backHandler.remove();
   }, [router]);
 
-  const renderSubjectCard = (title: string, t1: string, t2: string, p: string, d: string[], icon: any) => (
-    <View style={styles.subjectCard}>
-       <View style={styles.subjCardHeader}>
-          <View style={styles.subjIconBox}>
-             <FontAwesome5 name={icon} size={14} color="#D97706" />
-          </View>
-          <Text style={styles.subjTitle}>{title}</Text>
-          <View style={styles.subjActions}>
-             <TouchableOpacity><MaterialCommunityIcons name="trash-can" size={20} color={COLORS.warningRed} /></TouchableOpacity>
-             <TouchableOpacity style={{ marginLeft: 8 }}><MaterialCommunityIcons name="pencil" size={18} color={COLORS.textHeader} /></TouchableOpacity>
-          </View>
-       </View>
-
-       <View style={styles.subjMetaRow}>
-          <View style={styles.metaBox}><Text style={styles.metaText}>{t1}</Text></View>
-          <View style={styles.metaBox}><Text style={styles.metaText}>{t2}</Text></View>
-          <View style={[styles.metaBox, { backgroundColor: COLORS.priceBg }]}><Text style={styles.metaText}>{p}</Text></View>
-       </View>
-
-       <View style={styles.daysRow}>
-          {d.map((day: string) => (
-             <View key={day} style={styles.dayPill}>
-                <Text style={styles.dayText}>{day}</Text>
-             </View>
-          ))}
-       </View>
-
-       <View style={styles.teachModeRow}>
-          <Text style={styles.teachModeLabel}>I will Teach</Text>
-          <View style={styles.modeBtns}>
-             <TouchableOpacity style={styles.modeBtnGreen}><Text style={styles.modeBtnText}>Online</Text></TouchableOpacity>
-             <TouchableOpacity style={styles.modeBtnPink}><Text style={styles.modeBtnText}>Face to Face</Text></TouchableOpacity>
-          </View>
-       </View>
-    </View>
-  );
+  // ESC key handler for web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          router.push("/(tabs)/TeacherDashBoard/Teacher");
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [router]);
 
   if (!fontsLoaded) {
     return (
@@ -874,28 +940,31 @@ export default function ProfileWeb() {
         />
         
         <View style={styles.webContent}>
-          <TeacherWebSidebar 
-            activeItem={sidebarActiveItem}
-            onItemPress={handleSidebarSelect}
-            userEmail={userEmail}
-            teacherName={teacherName}
-            profileImage={profileImage}
-            subjectCount={qualifications.length}
-            studentCount={0}
-            revenue="₹8.5K"
-            isSpotlight={false}
-          />
+          {!isMobile && (
+            <TeacherWebSidebar 
+              activeItem={sidebarActiveItem}
+              onItemPress={handleSidebarSelect}
+              userEmail={userEmail}
+              teacherName={teacherName}
+              profileImage={profileImage}
+              subjectCount={qualifications.length}
+              studentCount={0}
+              revenue="₹8.5K"
+              isSpotlight={false}
+              collapsed={sidebarCollapsed}
+              onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+            />
+          )}
           
           <View style={styles.webMainContent}>
-            <TeacherThoughtsBackground>
-              <ScrollView showsVerticalScrollIndicator={false} style={styles.mainScroll} contentContainerStyle={styles.scrollContent}>
-                <Animated.View style={[styles.pageContent, animatedPageStyle]}>
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.mainScroll} contentContainerStyle={[styles.scrollContent, isMobile && styles.scrollContentMobile]}>
+              <Animated.View style={[styles.pageContent, animatedPageStyle]}>
                   
-                  <View style={styles.pageHeader}>
+                  <View style={[styles.pageHeader, isMobile && styles.pageHeaderMobile]}>
                     <TouchableOpacity style={styles.backBtnCircle} onPress={() => router.push("/(tabs)/TeacherDashBoard/Teacher")}>
                       <Ionicons name="arrow-back" size={20} color={COLORS.textHeader} />
                     </TouchableOpacity>
-                    <Text style={styles.pageTitle}>My Profile</Text>
+                    <Text style={[styles.pageTitle, isMobile && styles.pageTitleMobile]}>My Profile</Text>
                     <TouchableOpacity style={styles.editBtn} onPress={() => setIsEditable(!isEditable)}>
                       <MaterialCommunityIcons name="pencil" size={18} color={COLORS.primaryBlue} />
                     </TouchableOpacity>
@@ -905,8 +974,8 @@ export default function ProfileWeb() {
                     <View style={[styles.centerColumn, isMobile && { marginRight: 0, minWidth: '100%' }]}>
                       
                       {/* Master Profile Card */}
-                      <View style={styles.profileMasterCard}>
-                        <View style={styles.avatarWrap}>
+                      <View style={[styles.profileMasterCard, isMobile && styles.profileMasterCardMobile]}>
+                        <View style={[styles.avatarWrap, isMobile && styles.avatarWrapMobile]}>
                            <TouchableOpacity style={styles.avatarDashed} onPress={handleImagePicker}>
                              {profileImage ? (
                                <Image source={{ uri: profileImage }} style={styles.avatarImage} />
@@ -917,204 +986,209 @@ export default function ProfileWeb() {
                              )}
                            </TouchableOpacity>
                         </View>
-                        <View style={styles.profileMainInfo}>
-                           <View style={styles.profileTitleRow}>
-                              <Text style={styles.profileNameLarge}>{teacherName}</Text>
-                              {isEditable && (
-                                <TouchableOpacity style={styles.profileEditCircle}>
-                                   <MaterialCommunityIcons name="pencil" size={14} color={COLORS.textHeader} />
-                                </TouchableOpacity>
-                              )}
+                        <View style={[styles.profileMainInfo, isMobile && styles.profileMainInfoMobile]}>
+                           <View style={[styles.profileTitleRow, isMobile && styles.profileTitleRowMobile]}>
+                              <Text style={[styles.profileNameLarge, isMobile && styles.profileNameLargeMobile]}>{teacherName}</Text>
                            </View>
                            <View style={styles.profileDetailRow}>
                               <MaterialCommunityIcons name="home-city-outline" size={16} color={COLORS.textBody} />
-                              <TextInput 
-                                style={[styles.profileDetailText, isEditable && styles.editableInput]} 
-                                value={university}
-                                onChangeText={setUniversity}
-                                editable={isEditable}
-                                placeholder="Recent University"
-                              />
+                              {isEditable ? (
+                                <TextInput 
+                                  style={[styles.profileDetailText, styles.editableInput]} 
+                                  value={university}
+                                  onChangeText={setUniversity}
+                                  placeholder="Recent University"
+                                />
+                              ) : (
+                                <Text style={styles.profileDetailText}>{university || 'Recent University'}</Text>
+                              )}
                            </View>
                            <View style={styles.profileDetailRow}>
                               <MaterialCommunityIcons name="office-building" size={16} color={COLORS.textBody} />
-                              <Text style={styles.profileDetailText}>Past University</Text>
+                              {isEditable ? (
+                                <TextInput 
+                                  style={[styles.profileDetailText, styles.editableInput]} 
+                                  value={pastUniversity}
+                                  onChangeText={setPastUniversity}
+                                  placeholder="Past University"
+                                />
+                              ) : (
+                                <Text style={styles.profileDetailText}>{pastUniversity || 'Past University'}</Text>
+                              )}
                            </View>
                            <View style={styles.profileDetailRow}>
                               <Ionicons name="location-outline" size={16} color={COLORS.textBody} />
-                              <Text style={styles.profileDetailText}>Location</Text>
+                              {isEditable ? (
+                                <TextInput 
+                                  style={[styles.profileDetailText, styles.editableInput]} 
+                                  value={location}
+                                  onChangeText={setLocation}
+                                  placeholder="Location"
+                                />
+                              ) : (
+                                <Text style={styles.profileDetailText}>{location || 'Location'}</Text>
+                              )}
                            </View>
                         </View>
                       </View>
 
                       {/* Educational Qualifications - Split Cards */}
-                      <View style={[styles.eduCardRow, isTablet && { flexDirection: 'column' }]}>
-                         <View style={[styles.eduBox, { marginRight: isTablet ? 0 : 20, marginBottom: isTablet ? 20 : 0 }]}>
-                            <View style={styles.eduBoxHeader}>
-                               <View style={styles.eduPillTab}><Text style={styles.eduPillTabText}>Educational Qualification</Text></View>
-                               {isEditable && (
-                                 <TouchableOpacity onPress={() => {}}>
-                                   <MaterialCommunityIcons name="pencil" size={20} color={COLORS.textHeader} />
-                                 </TouchableOpacity>
-                               )}
+                      <View style={[styles.eduCardRow, (isMobile || isTablet) && styles.eduCardRowMobile]}>
+                        <View style={[styles.eduBox, (isMobile || isTablet) && styles.eduBoxMobile]}>
+                          <View style={styles.eduBoxHeader}>
+                            <View style={styles.eduPillTab}>
+                              <Text style={styles.eduPillTabText}>Educational Qualification</Text>
                             </View>
-                            <TextInput 
-                               style={styles.eduIntroInput} 
-                               placeholder="Edit your introduction...." 
-                               placeholderTextColor={COLORS.textMuted}
-                               multiline
-                               value={introduction}
-                               onChangeText={setIntroduction}
-                               editable={isEditable}
-                            />
-                            <Text style={styles.limitText}>150 words</Text>
-                         </View>
-
-                         <View style={styles.eduListBox}>
-                            <View style={styles.eduListHeader}>
-                               <Text style={styles.eduListTitle}>Educational Qualification</Text>
-                               {isEditable && (
-                                 <TouchableOpacity style={styles.eduListEditCircle}>
-                                   <MaterialCommunityIcons name="pencil" size={14} color={COLORS.primaryBlue} />
-                                 </TouchableOpacity>
-                               )}
-                            </View>
-                            <View style={styles.eduListItems}>
-                               {qualifications.slice(0, 4).map((qual, index) => (
-                                 <EduListItem 
-                                   key={index}
-                                   label={qual.subject || `Edit Subject name`} 
-                                   education={qual.college || `Edit Education`} 
-                                   year={qual.year || `year – year`} 
-                                   striped={index % 2 === 1} 
-                                   iconColor="#EEF2FF" 
-                                   iconName="school" 
-                                   iconGlyphColor={COLORS.primaryBlue} 
-                                 />
-                               ))}
-                            </View>
-                         </View>
-                      </View>
-
-                      {/* Category Selection Tab */}
-                      <View style={styles.tabContainer}>
-                         <View style={styles.segmentedControl}>
-                            <TouchableOpacity 
-                              style={[styles.segItem, selectedCategory === 'Category' && styles.segItemActive]} 
-                              onPress={() => isEditable && setSelectedCategory('Category')}
-                            >
-                              <Text style={[styles.segText, selectedCategory === 'Category' && styles.segTextActive]}>Category</Text>
+                            <TouchableOpacity onPress={() => setIsEditable(!isEditable)}>
+                              <MaterialCommunityIcons name="pencil" size={20} color={COLORS.textHeader} />
                             </TouchableOpacity>
-                            <TouchableOpacity 
-                              style={[styles.segItem, selectedCategory === 'Subject teacher' && styles.segItemActive]} 
-                              onPress={() => isEditable && setSelectedCategory('Subject teacher')}
-                            >
-                              <Text style={[styles.segText, selectedCategory === 'Subject teacher' && styles.segTextActive]}>Subject Teacher</Text>
+                          </View>
+                          <TextInput 
+                            style={styles.eduIntroInput} 
+                            placeholder="Edit your introduction...." 
+                            placeholderTextColor={COLORS.textMuted}
+                            multiline
+                            value={introduction}
+                            onChangeText={setIntroduction}
+                            editable={isEditable}
+                          />
+                          <Text style={styles.limitText}>150 words</Text>
+                        </View>
+
+                        <View style={styles.eduListBox}>
+                          <View style={styles.eduListHeader}>
+                            <Text style={styles.eduListTitle}>Educational Qualifications</Text>
+                            <TouchableOpacity onPress={() => setIsEditable(!isEditable)}>
+                              <MaterialCommunityIcons name="pencil" size={14} color={COLORS.primaryBlue} />
                             </TouchableOpacity>
-                         </View>
+                          </View>
+                          <View style={styles.eduListItems}>
+                            {qualifications.map((qual, index) => (
+                              isEditable ? (
+                                <View key={index} style={[styles.eduListItem, index % 2 === 1 && styles.eduListItemStriped]}>
+                                  <View style={[styles.eduListItemIcon, { backgroundColor: ['#EEF2FF', '#ECFDF5', '#FFFBEB', '#F5F3FF'][index % 4] }]}>
+                                    <MaterialCommunityIcons name={['school', 'book-open-page-variant', 'book', 'pencil'][index % 4]} size={20} color={[COLORS.primaryBlue, COLORS.green, '#F59E0B', '#8B5CF6'][index % 4]} />
+                                  </View>
+                                  <View style={styles.eduListItemContent}>
+                                    <TextInput
+                                      style={styles.eduInput}
+                                      placeholder="Subject name"
+                                      value={qual.subject}
+                                      onChangeText={(text) => {
+                                        const updated = [...qualifications];
+                                        updated[index].subject = text;
+                                        setQualifications(updated);
+                                      }}
+                                    />
+                                    <TextInput
+                                      style={styles.eduInput}
+                                      placeholder="Education"
+                                      value={qual.college}
+                                      onChangeText={(text) => {
+                                        const updated = [...qualifications];
+                                        updated[index].college = text;
+                                        setQualifications(updated);
+                                      }}
+                                    />
+                                    <TextInput
+                                      style={styles.eduInput}
+                                      placeholder="Year - Year"
+                                      value={qual.year}
+                                      onChangeText={(text) => {
+                                        const updated = [...qualifications];
+                                        updated[index].year = text;
+                                        setQualifications(updated);
+                                      }}
+                                    />
+                                  </View>
+                                </View>
+                              ) : (
+                                <EduListItem 
+                                  key={index}
+                                  label={qual.subject || 'Edit Subject name'} 
+                                  education={qual.college || 'Edit Education'} 
+                                  year={qual.year || 'year – year'} 
+                                  striped={index % 2 === 1} 
+                                  iconColor={['#EEF2FF', '#ECFDF5', '#EEF2FF', '#ECFDF5'][index % 4]} 
+                                  iconName={['school', 'library', 'school', 'library'][index % 4]} 
+                                  iconGlyphColor={[COLORS.primaryBlue, COLORS.green,COLORS.primaryBlue, COLORS.green][index % 4]} 
+                                />
+                              )
+                            ))}
+                          </View>
+                        </View>
                       </View>
 
-                      {/* Subject Grid */}
-                      <View style={[styles.subjGrid, isMobile && { flexDirection: 'column' }]}>
-                         {tuitions.slice(0, tuitionCount).map((tuition, index) => (
-                           <View key={index} style={styles.subjectCard}>
-                             <View style={styles.subjCardHeader}>
-                               <View style={styles.subjIconBox}>
-                                 <FontAwesome5 name="book" size={14} color="#D97706" />
-                               </View>
-                               <Text style={styles.subjTitle}>
-                                 {tuition.subject && tuition.class ? `${tuition.subject} – ${tuition.class}` : `Subject ${index + 1}`}
-                               </Text>
-                               <View style={styles.subjActions}>
-                                 {isEditable && (
-                                   <TouchableOpacity onPress={() => deleteTuition(index)}>
-                                     <MaterialCommunityIcons name="trash-can" size={20} color={COLORS.warningRed} />
-                                   </TouchableOpacity>
-                                 )}
-                                 {isEditable && (
-                                   <TouchableOpacity style={{ marginLeft: 8 }} onPress={() => {}}>
-                                     <MaterialCommunityIcons name="pencil" size={18} color={COLORS.textHeader} />
-                                   </TouchableOpacity>
-                                 )}
-                               </View>
-                             </View>
-                             
-                             {/* Dropdown Inputs */}
-                             {isEditable && (
-                               <View style={styles.dropdownInputs}>
-                                 {selectedCategory === "Subject teacher" && (
-                                   <>
-                                     <View style={styles.dropdownRow}>
-                                       <Text style={styles.dropdownLabel}>Board:</Text>
-                                       <View style={styles.dropdownWrapper}>
-                                         <Text style={styles.dropdownText}>{tuition.board || 'Select Board'}</Text>
-                                       </View>
-                                     </View>
-                                     <View style={styles.dropdownRow}>
-                                       <Text style={styles.dropdownLabel}>Class:</Text>
-                                       <View style={styles.dropdownWrapper}>
-                                         <Text style={styles.dropdownText}>{tuition.class || 'Select Class'}</Text>
-                                       </View>
-                                     </View>
-                                     <View style={styles.dropdownRow}>
-                                       <Text style={styles.dropdownLabel}>Subject:</Text>
-                                       <View style={styles.dropdownWrapper}>
-                                         <Text style={styles.dropdownText}>{tuition.subject || 'Select Subject'}</Text>
-                                       </View>
-                                     </View>
-                                   </>
-                                 )}
-                                 {selectedCategory === "Skill teacher" && (
-                                   <View style={styles.dropdownRow}>
-                                     <Text style={styles.dropdownLabel}>Skill:</Text>
-                                     <View style={styles.dropdownWrapper}>
-                                       <Text style={styles.dropdownText}>{tuition.skill || 'Select Skill'}</Text>
-                                     </View>
-                                   </View>
-                                 )}
-                               </View>
-                             )}
-                             <View style={styles.subjMetaRow}>
-                               <View style={styles.metaBox}>
-                                 <Text style={styles.metaText}>{tuition.timeFrom || 'Start Time'}</Text>
-                               </View>
-                               <View style={styles.metaBox}>
-                                 <Text style={styles.metaText}>{tuition.timeTo || 'End Time'}</Text>
-                               </View>
-                               <View style={[styles.metaBox, { backgroundColor: COLORS.priceBg }]}>
-                                 <Text style={styles.metaText}>{tuition.charge || 'Price'}</Text>
-                               </View>
-                             </View>
-                             <View style={styles.daysRow}>
-                               {(tuition.day ? tuition.day.split(',').map(d => d.trim()) : []).map((day: string, i: number) => (
-                                 <View key={i} style={styles.dayPill}>
-                                   <Text style={styles.dayText}>{day}</Text>
-                                 </View>
-                               ))}
-                             </View>
-                             <View style={styles.teachModeRow}>
-                               <Text style={styles.teachModeLabel}>I will Teach</Text>
-                               <View style={styles.modeBtns}>
-                                 <TouchableOpacity style={[styles.modeBtnGreen, teachingMode.includes('Online') && styles.modeBtnSelected]}>
-                                   <Text style={styles.modeBtnText}>Online</Text>
-                                 </TouchableOpacity>
-                                 <TouchableOpacity style={[styles.modeBtnPink, teachingMode.includes('Face to Face') && styles.modeBtnSelected]}>
-                                   <Text style={styles.modeBtnText}>Face to Face</Text>
-                                 </TouchableOpacity>
-                               </View>
-                             </View>
-                           </View>
-                         ))}
+                      {/* Teaching Mode Selection */}
+                      <View style={styles.modeContainer}>
+                        <Text style={styles.modeTitle}>I will teach</Text>
+                        <View style={styles.modeOptions}>
+                          {["Online", "Face to Face"].map((mode) => {
+                            const isSelected = teachingMode.includes(mode);
+                            return (
+                              <TouchableOpacity
+                                key={mode}
+                                onPress={() => {
+                                  setTeachingMode((prev) =>
+                                    isSelected
+                                      ? prev.filter((m) => m !== mode)
+                                      : [...prev, mode]
+                                  );
+                                }}
+                                style={[
+                                  styles.modeButton,
+                                  isSelected && styles.selectedModeButton,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.modeText,
+                                    isSelected && styles.selectedModeText,
+                                  ]}
+                                >
+                                  {mode}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
                       </View>
+{/* Subject Cards Container - Production Ready */}
+<View style={[
+  styles.subjectCardsWrapper,
+  isMobile && styles.subjectCardsWrapperMobile
+]}>
+  <SubjectCard
+    isEditable={isEditable}
+    selectedCategory={selectedCategory}
+    tuitions={tuitions}
+    tuitionCount={tuitionCount}
+    CHARGE_OPTIONS={CHARGE_OPTIONS}
+    DAYS_OF_WEEK={DAYS_OF_WEEK}
+    onTuitionChange={setTuitions}
+    onTuitionCountChange={setTuitionCount}
+    onTimingChange={(index, day, timeFrom, timeTo) => {
+      const updatedTuitions = [...tuitions];
+      updatedTuitions[index] = { ...updatedTuitions[index], day, timeFrom, timeTo };
+      setTuitions(updatedTuitions);
+    }}
+    styles={{
+      ...styles,
+      subjectCard: [
+        styles.subjectCard,
+        isMobile && styles.subjectCardMobile,
+        isTablet && styles.subjectCardTablet
+      ],
+      subjGrid: [
+        styles.subjGrid,
+        isMobile && styles.subjGridMobile
+      ]
+    }}
+    COLORS={COLORS}
+    isMobile={isMobile}
+  />
+</View>
 
-                      {/* Add Action Button */}
-                      {isEditable && (
-                        <TouchableOpacity style={styles.floatingActionBtn} onPress={addTuition}>
-                           <View style={styles.addBtnInner}>
-                              <Ionicons name="add" size={32} color={COLORS.textHeader} />
-                           </View>
-                        </TouchableOpacity>
-                      )}
 
                       {/* Save Button */}
                       {isEditable && (
@@ -1129,7 +1203,7 @@ export default function ProfileWeb() {
 
                       {/* Final Warning Notice */}
                       <Text style={styles.footerWarning}>
-                         Once you registered you will not be allowed to change the timing for next 1 month
+                         Once you registered you will not be allowed to change the timming for next 1 month
                       </Text>
 
                     </View>
@@ -1139,74 +1213,109 @@ export default function ProfileWeb() {
                       <View style={styles.expRightPanel}>
                          <View style={styles.expHeaderBar}>
                             <Text style={styles.expHeaderTitle}>Experience</Text>
-                            {isEditable && (
-                              <TouchableOpacity style={styles.expHeaderEditCircle}>
-                                 <MaterialCommunityIcons name="pencil" size={16} color={COLORS.primaryBlue} />
-                              </TouchableOpacity>
-                            )}
+                            <TouchableOpacity onPress={() => setIsEditable(!isEditable)}>
+                              <MaterialCommunityIcons name="pencil" size={16} color={COLORS.primaryBlue} />
+                            </TouchableOpacity>
                          </View>
                          <View style={styles.expListContainer}>
-                            <WorkExpTile color="#FEFCE8" />
-                            <WorkExpTile color="#F0FDF4" />
-                            <WorkExpTile color="#F5F3FF" />
-                            <WorkExpTile color="#FEF2F2" />
-                            <WorkExpTile color="#FEFCE8" />
+                            {isEditable ? (
+                              workExperiences.map((exp, index) => (
+                                <TextInput
+                                  key={index}
+                                  style={[styles.expInput, { backgroundColor: ['#FEFCE8', '#F0FDF4', '#F5F3FF', '#FEF2F2', '#FEFCE8'][index % 5] }]}
+                                  placeholder="Add your Work Experience"
+                                  value={exp}
+                                  onChangeText={(text) => {
+                                    const updated = [...workExperiences];
+                                    updated[index] = text;
+                                    setWorkExperiences(updated);
+                                  }}
+                                />
+                              ))
+                            ) : (
+                              <>
+                                {workExperiences.map((exp, index) => (
+                                  exp ? (
+                                    <WorkExpTile key={index} color={['#FEFCE8', '#F0FDF4', '#F5F3FF', '#FEF2F2', '#FEFCE8'][index % 5]} text={exp} />
+                                  ) : (
+                                    <WorkExpTile key={index} color={['#FEFCE8', '#F0FDF4', '#F5F3FF', '#FEF2F2', '#FEFCE8'][index % 5]} />
+                                  )
+                                ))}
+                              </>
+                            )}
                          </View>
                       </View>
                     </View>
                   </View>
-
-                  {/* Teacher Thoughts Section */}
-                  <View style={styles.thoughtsSection}>
-                    <Text style={styles.sectionTitle}>Teacher Thoughts</Text>
-                    
-                    {/* Teacher Post Composer */}
-                    <TeacherPostComposer
-                      onCreatePost={handleCreatePost}
-                      placeholder="Share your teaching thoughts..."
-                    />
-                    
-                    {/* Posts Feed */}
-                    {postsLoading && posts.length === 0 && (
-                      <ActivityIndicator color={COLORS.primaryBlue} style={{ marginTop: 30 }} />
-                    )}
-                    {!postsLoading && posts.length === 0 && (
-                      <View style={{ alignItems: 'center', paddingVertical: 30 }}>
-                        <Text style={{ fontSize: 16, color: COLORS.textMuted, fontFamily: 'Poppins_400Regular' }}>
-                          No thoughts yet. Be the first to share!
-                        </Text>
-                      </View>
-                    )}
-                    {posts.map((post: any) => (
-                      <TeacherThoughtsCard
-                        key={post.id}
-                        post={post}
-                        userProfileCache={userProfileCache}
-                        onLike={(postId: string) => {
-                          setPosts(posts.map(p => 
-                            p.id === postId 
-                              ? { ...p, likes: p.isLiked ? p.likes - 1 : p.likes + 1, isLiked: !p.isLiked }
-                              : p
-                          ));
-                        }}
-                        onComment={(post) => {
-                          // Handle comment logic
-                        }}
-                        onReport={(post) => {
-                          // Handle report logic
-                        }}
-                        getProfileImageSource={getProfileImageSource}
-                        initials={initials}
-                        resolvePostAuthor={resolvePostAuthor}
-                      />
-                    ))}
-                  </View>
-
                 </Animated.View>
               </ScrollView>
-            </TeacherThoughtsBackground>
           </View>
         </View>
+        
+        {/* Image Picker Modal */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={imageModalVisible}
+          onRequestClose={() => setImageModalVisible(false)}
+        >
+          <View style={styles.imageModalOverlay}>
+            <View style={styles.imageModalContent}>
+              <View style={styles.imageModalHeader}>
+                <Text style={styles.imageModalTitle}>Choose Profile Picture</Text>
+                <TouchableOpacity onPress={() => setImageModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={COLORS.textHeader} />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.imageModalOptions}>
+                <TouchableOpacity style={styles.imageModalBtn} onPress={handleCamera}>
+                  <View style={[styles.imageModalIconCircle, { backgroundColor: '#EEF2FF' }]}>
+                    <Ionicons name="camera" size={24} color={COLORS.primaryBlue} />
+                  </View>
+                  <Text style={styles.imageModalBtnText}>Take Photo</Text>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={styles.imageModalBtn} onPress={handleGallery}>
+                  <View style={[styles.imageModalIconCircle, { backgroundColor: '#F0FDF4' }]}>
+                    <Ionicons name="images" size={24} color={COLORS.green} />
+                  </View>
+                  <Text style={styles.imageModalBtnText}>Choose from Gallery</Text>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+                </TouchableOpacity>
+                
+                {Platform.OS === 'web' && (
+                  <TouchableOpacity style={styles.imageModalBtn} onPress={() => document.getElementById('web-file-input')?.click()}>
+                    <View style={[styles.imageModalIconCircle, { backgroundColor: '#FEF3C7' }]}>
+                      <Ionicons name="cloud-upload" size={24} color="#D97706" />
+                    </View>
+                    <Text style={styles.imageModalBtnText}>Upload from Computer</Text>
+                    <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+                  </TouchableOpacity>
+                )}
+                
+                <TouchableOpacity 
+                  style={[styles.imageModalBtn, styles.imageModalCancelBtn]} 
+                  onPress={() => setImageModalVisible(false)}
+                >
+                  <Text style={styles.imageModalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+              
+              {/* Hidden file input for web */}
+              {Platform.OS === 'web' && (
+                <input
+                  type="file"
+                  id="web-file-input"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handleFileUpload}
+                />
+              )}
+            </View>
+          </View>
+        </Modal>
       </View>
     ) : (
       <View style={styles.container}>
@@ -1215,27 +1324,6 @@ export default function ProfileWeb() {
     )
   );
 }
-
-// --- Specific Components ---
-
-const EduListItem = ({ label, education, year, striped, iconColor, iconName, iconGlyphColor }: any) => (
-  <View style={[styles.eduItem, striped && { backgroundColor: '#F9FAFB' }]}>
-     <View style={[styles.eduItemIconCircle, { backgroundColor: iconColor }]}>
-        <Ionicons name={iconName} size={14} color={iconGlyphColor} />
-     </View>
-     <View style={styles.eduItemContent}>
-        <Text style={styles.eduItemLabel}>{label}</Text>
-        <Text style={styles.eduItemDetail}>{education}</Text>
-     </View>
-     <Text style={styles.eduItemYear}>{year}</Text>
-  </View>
-);
-
-const WorkExpTile = ({ color }: { color: string }) => (
-  <View style={[styles.expTile, { backgroundColor: color }]}>
-     <Text style={styles.expTileText}>Add your Work Experience</Text>
-  </View>
-);
 
 // --- Stylesheet ---
 const styles = StyleSheet.create({
@@ -1252,23 +1340,39 @@ const styles = StyleSheet.create({
   mainWrapper: { flex: 1 },
   mainScroll: { flex: 1 },
   scrollContent: { padding: wp('2.5%') },
+  scrollContentMobile: { padding: wp('4%') },
+  
+  // Mobile menu
+  mobileMenuBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.white, justifyContent: 'center', alignItems: 'center', marginRight: 12, ...Platform.select({ web: { boxShadow: '0px 2px 4px rgba(0,0,0,0.08)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 } }) },
+  pageHeaderMobile: { marginBottom: 20, paddingHorizontal: 0 },
+  pageTitleMobile: { fontSize: 24, marginLeft: 12 },
+  
+  // Mobile profile card
+  profileMasterCardMobile: { flexDirection: 'column', padding: 24, alignItems: 'center' },
+  avatarWrapMobile: { marginBottom: 16 },
+  profileMainInfoMobile: { marginLeft: 0, alignItems: 'center', width: '100%' },
+  profileTitleRowMobile: { marginBottom: 12 },
+  profileNameLargeMobile: { fontSize: 24, textAlign: 'center' },
+  
+  // Mobile education cards
+  eduCardRowMobile: { flexDirection: 'column' },
+  eduBoxMobile: { marginRight: 0, marginBottom: 20 },
   
   // Page Content
   pageContent: { flex: 1 },
   pageHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 35 },
-  backBtnCircle: { width: 46, height: 46, borderRadius: 23, backgroundColor: COLORS.white, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 },
-  editBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: COLORS.white, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4, marginLeft: 'auto' },
+  backBtnCircle: { width: 46, height: 46, borderRadius: 23, backgroundColor: COLORS.white, justifyContent: 'center', alignItems: 'center', ...Platform.select({ web: { boxShadow: '0px 3px 8px rgba(0,0,0,0.08)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 } }) },
+  editBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: COLORS.white, justifyContent: 'center', alignItems: 'center', marginLeft: 'auto', ...Platform.select({ web: { boxShadow: '0px 3px 8px rgba(0,0,0,0.08)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 } }) },
   pageTitle: { fontFamily: 'Poppins_700Bold', fontSize: 38, color: COLORS.textHeader, marginLeft: 20, flex: 1 },
   contentGrid: { flexDirection: 'row', paddingBottom: 60 },
-  centerColumn: { flex: 2, marginRight: 30 },
   rightSideCol: { width: 360 },
 
   // Profile Card
-  profileMasterCard: { backgroundColor: COLORS.white, borderRadius: 26, padding: 40, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.05, shadowRadius: 15, elevation: 6, marginBottom: 35 },
+  profileMasterCard: { backgroundColor: COLORS.white, borderRadius: 26, padding: 40, flexDirection: 'row', alignItems: 'center', marginBottom: 35, ...Platform.select({ web: { boxShadow: '0px 5px 15px rgba(0,0,0,0.05)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.05, shadowRadius: 15, elevation: 6 } }) },
   avatarWrap: { width: 120, height: 120 },
   avatarDashed: { width: 120, height: 120, borderRadius: 60, borderStyle: 'dashed', borderWidth: 2, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
   avatarImage: { width: 120, height: 120, borderRadius: 60 },
-  avatarIconCircle: { width: 54, height: 54, borderRadius: 27, backgroundColor: COLORS.white, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 3 },
+  avatarIconCircle: { width: 54, height: 54, borderRadius: 27, backgroundColor: COLORS.white, justifyContent: 'center', alignItems: 'center', ...Platform.select({ web: { boxShadow: '0px 2px 6px rgba(0,0,0,0.1)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 3 } }) },
   profileMainInfo: { marginLeft: 40, flex: 1 },
   profileTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
   profileNameLarge: { fontFamily: 'Poppins_700Bold', fontSize: 34, color: COLORS.textHeader },
@@ -1276,50 +1380,17 @@ const styles = StyleSheet.create({
   profileDetailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   profileDetailText: { fontFamily: 'Poppins_500Medium', fontSize: 14, color: COLORS.textBody, marginLeft: 14, flex: 1 },
   editableInput: { backgroundColor: '#F8FAFC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
-  // Dropdown styles
-  dropdownInputs: {
-    marginTop: 15,
-    paddingHorizontal: 15,
-  },
-  dropdownRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  dropdownLabel: {
-    fontSize: 12,
-    color: COLORS.textBody,
-    fontWeight: '500',
-    width: 60,
-    fontFamily: 'Poppins_500Medium',
-  },
-  dropdownWrapper: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    minHeight: 32,
-    justifyContent: 'center',
-  },
-  dropdownText: {
-    fontSize: 13,
-    color: COLORS.textBody,
-    fontFamily: 'Poppins_400Regular',
-  },
 
   // Edu Section
   eduCardRow: { flexDirection: 'row', marginBottom: 40 },
-  eduBox: { flex: 1, backgroundColor: COLORS.white, borderRadius: 24, padding: 30, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 4 },
+  eduBox: { flex: 1, backgroundColor: COLORS.white, borderRadius: 24, padding: 30, ...Platform.select({ web: { boxShadow: '0px 3px 12px rgba(0,0,0,0.04)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 4 } }) },
   eduBoxHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
   eduPillTab: { backgroundColor: COLORS.primaryBlue, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 8 },
   eduPillTabText: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: COLORS.white },
   eduIntroInput: { backgroundColor: '#F3F4FB', borderRadius: 16, padding: 22, height: 200, fontFamily: 'Poppins_400Regular', fontSize: 15, textAlignVertical: 'top' },
   limitText: { alignSelf: 'flex-end', marginTop: 15, fontFamily: 'Poppins_400Regular', fontSize: 13, color: COLORS.textMuted },
   
-  eduListBox: { flex: 1, backgroundColor: COLORS.white, borderRadius: 24, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 4 },
+  eduListBox: { flex: 1, backgroundColor: COLORS.white, borderRadius: 24, overflow: 'hidden', ...Platform.select({ web: { boxShadow: '0px 3px 12px rgba(0,0,0,0.04)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 4 } }) },
   eduListHeader: { backgroundColor: COLORS.primaryBlue, padding: 25, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   eduListTitle: { fontFamily: 'Poppins_700Bold', fontSize: 20, color: COLORS.white },
   eduListEditCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.white, justifyContent: 'center', alignItems: 'center' },
@@ -1331,43 +1402,8 @@ const styles = StyleSheet.create({
   eduItemDetail: { fontFamily: 'Poppins_400Regular', fontSize: 13, color: COLORS.textBody },
   eduItemYear: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: COLORS.primaryBlue },
 
-  // Tabs
-  tabContainer: { marginBottom: 35 },
-  segmentedControl: { flexDirection: 'row', backgroundColor: '#E0E7FF', borderRadius: 14, padding: 6, width: 340 },
-  segItem: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 10 },
-  segItemActive: { backgroundColor: COLORS.green },
-  segText: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.textMuted },
-  segTextActive: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.white },
-
-  // Subjects
-  subjGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -15, marginBottom: 30 },
-  subjectCard: { width: Platform.OS === 'web' ? '47%' : '95%', backgroundColor: COLORS.white, borderRadius: 28, padding: 30, margin: 15, borderWidth: 1, borderColor: '#C6E3FF', shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.05, shadowRadius: 15, elevation: 6 },
-  subjCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 25 },
-  subjIconBox: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center' },
-  subjTitle: { flex: 1, fontFamily: 'Poppins_700Bold', fontSize: 22, color: COLORS.textHeader, marginLeft: 18 },
-  subjActions: { flexDirection: 'row', alignItems: 'center' },
-  subjMetaRow: { flexDirection: 'row', marginBottom: 25 },
-  metaBox: { backgroundColor: '#F1F5F9', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, marginRight: 15 },
-  metaText: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.textHeader },
-  daysRow: { flexDirection: 'row', marginBottom: 30, flexWrap: 'wrap' },
-  dayPill: { backgroundColor: COLORS.softGreen, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 14, marginRight: 12, marginBottom: 8 },
-  dayText: { fontFamily: 'Poppins_700Bold', fontSize: 12, color: COLORS.green },
-  teachModeRow: { borderTopWidth: 1.5, borderTopColor: '#F3F4F6', paddingTop: 25 },
-  teachModeLabel: { fontFamily: 'Poppins_700Bold', fontSize: 20, color: COLORS.textHeader, marginBottom: 18 },
-  modeBtns: { flexDirection: 'row' },
-  modeBtnGreen: { flex: 1, backgroundColor: COLORS.softGreen, paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginRight: 15 },
-  modeBtnPink: { flex: 1, backgroundColor: COLORS.softPink, paddingVertical: 14, borderRadius: 14, alignItems: 'center' },
-  modeBtnSelected: { borderWidth: 2, borderColor: COLORS.primaryBlue },
-  modeBtnText: { fontFamily: 'Poppins_700Bold', fontSize: 15, color: COLORS.textHeader },
-
-  floatingActionBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: COLORS.white, alignSelf: 'flex-start', marginLeft: 15, marginBottom: 45, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 18, elevation: 12 },
-  addBtnInner: { flex: 1, justifyContent: 'center', alignItems: 'center', borderRadius: 35, borderStyle: 'solid', borderWidth: 1.5, borderColor: COLORS.textHeader + '30' },
-  saveBtn: { backgroundColor: COLORS.primaryBlue, paddingVertical: 16, paddingHorizontal: 32, borderRadius: 12, alignItems: 'center', marginBottom: 20, alignSelf: 'flex-start', marginLeft: 15 },
-  saveBtnText: { color: COLORS.white, fontFamily: 'Poppins_600SemiBold', fontSize: 16 },
-  footerWarning: { fontFamily: 'Poppins_600SemiBold', fontSize: 16, color: COLORS.warningRed, textAlign: 'center', width: '100%', paddingHorizontal: 60 },
-
   // Right SidePanel
-  expRightPanel: { backgroundColor: COLORS.white, borderRadius: 26, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.05, shadowRadius: 18, elevation: 8 },
+  expRightPanel: { backgroundColor: COLORS.white, borderRadius: 26, overflow: 'hidden', ...Platform.select({ web: { boxShadow: '0px 6px 18px rgba(0,0,0,0.05)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.05, shadowRadius: 18, elevation: 8 } }) },
   expHeaderBar: { backgroundColor: COLORS.primaryBlue, padding: 25, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   expHeaderTitle: { fontFamily: 'Poppins_700Bold', fontSize: 22, color: COLORS.white },
   expHeaderEditCircle: { width: 34, height: 34, borderRadius: 17, backgroundColor: COLORS.white, justifyContent: 'center', alignItems: 'center' },
@@ -1375,7 +1411,345 @@ const styles = StyleSheet.create({
   expTile: { paddingHorizontal: 22, paddingVertical: 25, borderRadius: 20, marginBottom: 20, justifyContent: 'center' },
   expTileText: { fontFamily: 'Poppins_600SemiBold', fontSize: 15, color: COLORS.textBody },
 
+  // Tabs
+  tabContainer: { marginBottom: 35 },
+  segmentedControl: { flexDirection: 'row', backgroundColor: '#E0E7FF', borderRadius: 14, padding: 6, width: 340 },
+  segItem: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 10 },
+  segItemActive: { backgroundColor: COLORS.green },
+  segText: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.textMuted },
+  segTextActive: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.white },
+  categoryDisplay: { fontFamily: 'Poppins_400Regular', fontSize: 13, color: COLORS.textBody, marginTop: 10, textAlign: 'center' },
+
+  floatingActionBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: COLORS.white, alignSelf: 'flex-start', marginLeft: 15, marginBottom: 45, ...Platform.select({ web: { boxShadow: '0px 8px 18px rgba(0,0,0,0.12)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 18, elevation: 12 } }) },
+  addBtnInner: { flex: 1, justifyContent: 'center', alignItems: 'center', borderRadius: 35, borderStyle: 'solid', borderWidth: 1.5, borderColor: COLORS.textHeader + '30' },
+  footerWarning: { fontFamily: 'Poppins_600SemiBold', fontSize: 16, color: COLORS.warningRed, textAlign: 'center', width: '100%', paddingHorizontal: 60 },
+
+subjGrid: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  width: '100%',
+  marginHorizontal: -8,
+},
+subjectCard: {
+  width: 'calc(33.333% - 16px)',
+  margin: 8,
+  backgroundColor: COLORS.white,
+  borderRadius: 20,
+  padding: 16,
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  boxSizing: 'border-box',
+  minWidth: 280,
+  ...Platform.select({
+    web: { boxShadow: '0px 4px 12px rgba(15, 23, 42, 0.08)' },
+    default: {
+      shadowColor: '#0F172A',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+      elevation: 5,
+    }
+  }),
+},
+subjectCardTablet: {
+  width: 'calc(50% - 16px)',
+  minWidth: 260,
+},
+subjectCardMobile: {
+  width: '100%',
+  marginHorizontal: 0,
+  marginVertical: 8,
+},
+subjectCardsWrapper: {
+  width: '100%',
+  marginBottom: 35,
+},
+subjectCardsWrapperMobile: {
+  marginBottom: 25,
+},
+subjGridMobile: {
+  flexDirection: 'column',
+  marginHorizontal: 0,
+},
+centerColumn: {
+  flex: 1,
+  marginRight: 30,
+  minWidth: 0,
+  width: '100%',
+  maxWidth: '100%',
+  overflow: 'visible',
+},
+
+
+// Dropdown inputs container - ensure no overflow
+dropdownInputs: {
+  marginTop: 5,
+  marginBottom: 20,
+  gap: 10,
+  width: '100%',
+  overflow: 'hidden',
+  boxSizing: 'border-box',
+},
+
+// Dropdown row - prevent overflow
+dropdownRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#F8FAFC',
+  borderRadius: 12,
+  paddingHorizontal: 14,
+  paddingVertical: 12,
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  width: '100%',
+  boxSizing: 'border-box',
+  flexWrap: 'wrap',
+  gap: 8,
+},
+
+// Dropdown wrapper - responsive
+dropdownWrapper: {
+  flex: 1,
+  minWidth: 0, // Critical for preventing overflow
+  backgroundColor: '#FFFFFF',
+  borderRadius: 8,
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  borderWidth: 1,
+  borderColor: '#CBD5E1',
+  minHeight: 36,
+  justifyContent: 'center',
+  overflow: 'hidden',
+  boxSizing: 'border-box',
+},
+
+// Meta row - prevent overflow
+subjMetaRow: { 
+  flexDirection: 'row', 
+  marginBottom: 18,
+  gap: 10,
+  width: '100%',
+  flexWrap: 'wrap',
+  boxSizing: 'border-box',
+},
+
+metaBox: {
+  flex: 1,
+  minWidth: 0, // Critical for preventing overflow
+  backgroundColor: '#F1F5F9',
+  paddingHorizontal: 14,
+  paddingVertical: 12,
+  borderRadius: 10,
+  boxSizing: 'border-box',
+  overflow: 'hidden',
+},
+
+
+  dropdownLabel: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
+    width: 70,
+    fontFamily: 'Poppins_600SemiBold'
+  },
+  
+  dropdownClickable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  
+  dropdownText: {
+    fontSize: 14,
+    color: '#334155',
+    fontFamily: 'Poppins_500Medium'
+  },
+  
+  // Saved values display mode
+  savedValuesContainer: {
+    marginTop: 5,
+    marginBottom: 20,
+    padding: 16,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  
+  savedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingVertical: 4
+  },
+  
+  savedLabel: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontWeight: '600',
+    width: 60,
+    fontFamily: 'Poppins_600SemiBold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5
+  },
+  
+  savedValue: {
+    fontSize: 14,
+    color: '#1E293B',
+    fontFamily: 'Poppins_600SemiBold',
+    flex: 1
+  },
+
+
+  metaBoxActive: {
+    backgroundColor: '#DBEAFE',
+    borderColor: '#3B82F6'
+  },
+
+  metaTextActive: {
+    color: '#2563EB'
+  },
+
+  saveBtn: { backgroundColor: COLORS.primaryBlue, paddingVertical: 16, paddingHorizontal: 32, borderRadius: 12, alignItems: 'center', marginBottom: 20, alignSelf: 'flex-start', marginLeft: 15 },
+  saveBtnText: { color: COLORS.white, fontFamily: 'Poppins_600SemiBold', fontSize: 16 },
+
+  // Editable qualification styles
+  eduListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  eduListItemStriped: {
+    backgroundColor: '#F8FAFC',
+  },
+  eduListItemIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  eduListItemContent: {
+    flex: 1,
+    gap: 6,
+  },
+  eduInput: {
+    fontSize: 13,
+    color: '#334155',
+    fontFamily: 'Poppins_500Medium',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+
+  // Teaching mode styles
+  modeContainer: {
+    margin: 20,
+    marginTop: 16,
+  },
+  modeTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textHeader,
+    fontFamily: 'Poppins_600SemiBold',
+    marginBottom: 12,
+  },
+  modeOptions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+  },
+  selectedModeButton: {
+    backgroundColor: COLORS.primaryBlue,
+    borderColor: COLORS.primaryBlue,
+  },
+  modeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  selectedModeText: {
+    color: COLORS.white,
+  },
+
+  // Experience input styles
+  expInput: {
+    fontSize: 13,
+    color: '#334155',
+    fontFamily: 'Poppins_500Medium',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    minHeight: 48,
+  },
+
+  qualIconCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  qualInputs: { flex: 1, flexDirection: 'row', gap: 8 },
+  qualInputsContainer: { flex: 1, flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  qualInput: { flex: 1, minWidth: 120, borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, fontFamily: 'Poppins_400Regular', backgroundColor: COLORS.white },
+  qualYearInput: { flex: 0.5 },
+  yearInputWrapper: { flex: 0.8, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 100 },
+  yearInput: { flex: 1, borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, fontFamily: 'Poppins_400Regular', backgroundColor: COLORS.white },
+  removeQualBtn: { padding: 4, justifyContent: 'center', alignItems: 'center' },
+  addQualBtn: { padding: 4 },
+  addFirstQualBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 20, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.primaryBlue, borderRadius: 10, margin: 15 },
+  addFirstQualText: { fontFamily: 'Poppins_500Medium', fontSize: 14, color: COLORS.primaryBlue, marginLeft: 8 },
+  qualDisplay: { flex: 1 },
+  qualSubject: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.textHeader },
+  qualCollege: { fontFamily: 'Poppins_400Regular', fontSize: 13, color: COLORS.textBody, marginTop: 2 },
+  qualYear: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: COLORS.primaryBlue, marginTop: 2 },
+
   // Teacher Thoughts Section
   thoughtsSection: { marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: COLORS.border },
   sectionTitle: { fontSize: 20, fontFamily: 'Poppins_600SemiBold', color: COLORS.textHeader, marginBottom: 16, paddingHorizontal: 8 },
+  
+  // Modal Styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { backgroundColor: COLORS.white, borderRadius: 20, width: '100%', maxWidth: 400, maxHeight: '80%', ...Platform.select({ web: { boxShadow: '0px 10px 20px rgba(0,0,0,0.25)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10 } }) },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  modalTitle: { fontFamily: 'Poppins_700Bold', fontSize: 18, color: COLORS.textHeader },
+  modalScroll: { maxHeight: 400 },
+  modalItem: { paddingVertical: 15, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  modalItemText: { fontFamily: 'Poppins_500Medium', fontSize: 15, color: COLORS.textBody },
+  modalSectionTitle: { fontFamily: 'Poppins_700Bold', fontSize: 14, color: COLORS.textHeader, marginTop: 20, marginBottom: 12, paddingHorizontal: 20 },
+  daysSelectionContainer: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 15, gap: 8 },
+  daySelectionBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: COLORS.border },
+  daySelectionBtnActive: { backgroundColor: COLORS.primaryBlue, borderColor: COLORS.primaryBlue },
+  daySelectionText: { fontFamily: 'Poppins_500Medium', fontSize: 12, color: COLORS.textBody },
+  daySelectionTextActive: { color: COLORS.white },
+  timeInput: { backgroundColor: '#F8FAFC', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12, marginHorizontal: 20, borderWidth: 1, borderColor: COLORS.border, fontFamily: 'Poppins_400Regular', fontSize: 14, color: COLORS.textHeader },
+  saveTimingBtn: { backgroundColor: COLORS.primaryBlue, marginHorizontal: 20, marginVertical: 20, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  saveTimingBtnText: { fontFamily: 'Poppins_600SemiBold', fontSize: 16, color: COLORS.white },
+  
+  // Empty Qualification State
+  emptyQualState: { paddingVertical: 30, alignItems: 'center' },
+  emptyQualText: { fontFamily: 'Poppins_400Regular', fontSize: 14, color: COLORS.textMuted, fontStyle: 'italic' },
+  
+  // Image Modal Styles
+  imageModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' },
+  imageModalContent: { backgroundColor: COLORS.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 30 },
+  imageModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  imageModalTitle: { fontFamily: 'Poppins_700Bold', fontSize: 18, color: COLORS.textHeader },
+  imageModalOptions: { paddingHorizontal: 20, paddingTop: 10 },
+  imageModalBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  imageModalIconCircle: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  imageModalBtnText: { flex: 1, fontFamily: 'Poppins_500Medium', fontSize: 16, color: COLORS.textHeader },
+  imageModalCancelBtn: { justifyContent: 'center', borderBottomWidth: 0, marginTop: 10, backgroundColor: '#F3F4F6', borderRadius: 12, paddingVertical: 14 },
+  imageModalCancelText: { fontFamily: 'Poppins_600SemiBold', fontSize: 16, color: COLORS.textBody },
 });

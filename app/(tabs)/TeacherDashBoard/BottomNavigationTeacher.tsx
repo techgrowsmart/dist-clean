@@ -12,8 +12,6 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({userEmail}) => {
     const currentPath = usePathname();
 
     return (
-        
-
         <View style={styles.navBar}>
             {/* Notification Button (Left) */}
             <TouchableOpacity

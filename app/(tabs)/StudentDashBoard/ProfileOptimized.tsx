@@ -139,7 +139,7 @@ export default function Profile() {
       
       // Parallel API calls for better performance
       const [profileResponse, boardsResponse] = await Promise.allSettled([
-        axios.post(`${BASE_URL}/api/sudentProfile`, { email: auth.email }, { headers }),
+        axios.post(`${BASE_URL}/api/studentProfile`, { email: auth.email }, { headers }),
         axios.post(`${BASE_URL}/api/allboards`, { category: "student" }, { headers }).catch(() => null)
       ]);
 
@@ -270,7 +270,7 @@ export default function Profile() {
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.7,

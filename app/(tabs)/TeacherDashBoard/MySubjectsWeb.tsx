@@ -1,575 +1,288 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from "react";
 import { 
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  Image,
-  Dimensions,
-  ActivityIndicator,
   Platform,
-  Alert,
-} from 'react-native';
-import { 
-  widthPercentageToDP as wp,
-  heightPercentageToDP as hp,
-} from 'react-native-responsive-screen';
-import { 
-  useFonts,
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-} from '@expo-google-fonts/poppins';
-import { MaterialCommunityIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  withDelay,
-} from 'react-native-reanimated';
-import axios from 'axios';
-import TeacherWebHeader from '../../../components/ui/TeacherWebHeader';
-import TeacherWebSidebar from '../../../components/ui/TeacherWebSidebar';
-import ThoughtsCard from '../StudentDashBoard/ThoughtsCard';
-import TeacherPostComposer from '../../../components/ui/TeacherPostComposer';
-import { useRouter } from 'expo-router';
-import { BASE_URL } from '../../../config';
-import { getAuthData } from '../../../utils/authStorage';
-import { api } from '../../../services/apiService';
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  ScrollView, 
+  Image, 
+  ActivityIndicator,
+  BackHandler,
+  RefreshControl,
+  Dimensions
+} from "react-native";
+import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
+import { useRouter } from "expo-router";
+import { Ionicons, FontAwesome5, MaterialCommunityIcons } from "@expo/vector-icons";
+import { BASE_URL } from "../../../config";
+import { getAuthData } from "../../../utils/authStorage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import TeacherWebHeader from "../../../components/ui/TeacherWebHeader";
+import TeacherWebSidebar from "../../../components/ui/TeacherWebSidebar";
 
-// Global Design Tokens
+interface Tuition {
+  class?: string;
+  subject?: string;
+  board?: string;
+  skill?: string;
+  timeFrom: string;
+  timeTo: string;
+  charge: string;
+  day: string;
+  classId?: string;
+  skillId?: string;
+}
+
+interface TeacherData {
+  name: string;
+  email: string;
+  profilepic: string;
+  tuitions: Tuition[] | string;
+}
+
+// Colors from ProfileWeb
 const COLORS = {
   background: '#F7F9FC',
   cardBg: '#FFFFFF',
   primaryBlue: '#2563EB',
-  primaryGradient: ['#2563EB', '#1D4ED8'],
+  activeNavBg: '#EEF2FF',
   textHeader: '#1F2937',
   textBody: '#4B5563',
-  textMuted: '#9CA3AF',
+  textMuted: '#94A3B8',
   border: '#E5E7EB',
   white: '#FFFFFF',
-  purpleBadge: '#F3E8FF',
-  purpleText: '#9333EA',
-  bannerTint: '#EEF2FF',
+  green: '#10B981',
+  softGreen: '#D1FAE5',
+  softPink: '#FCE7F3',
+  softYellow: '#FEF3C7',
+  softPurple: '#F3E8FF',
+  softBlue: '#DBEAFE',
 };
 
-export default function MySubjectsWeb() {
+const CACHE_KEY = "subjects_list_cache";
+
+export default function SubjectsList() {
   const router = useRouter();
-  const [fontsLoaded] = useFonts({
-    Poppins_400Regular,
-    Poppins_500Medium,
-    Poppins_600SemiBold,
-    Poppins_700Bold,
-  });
-
-  // States
-  const [sidebarActiveItem, setSidebarActiveItem] = useState('My Subjects');
-  const [teacherName, setTeacherName] = useState('');
-  const [profileImage, setProfileImage] = useState(null);
-  const [userEmail, setUserEmail] = useState('');
-  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
-  const [screenHeight, setScreenHeight] = useState(Dimensions.get('window').height);
-  
-  // Enhanced responsive breakpoints
-  const isSmallMobile = screenWidth < 480;
-  const isMobile = screenWidth < 768;
-  const isTablet = screenWidth >= 768 && screenWidth < 1024;
-  const isDesktop = screenWidth >= 1024;
-  
-  // Dynamic helper functions
-  const getFontSize = (mobile: number, tablet: number, desktop: number) => {
-    if (isSmallMobile) return mobile * 0.9;
-    if (isMobile) return mobile;
-    if (isTablet) return tablet;
-    return desktop;
-  };
-  
-  const getSpacing = (mobile: number, tablet: number, desktop: number) => {
-    if (isSmallMobile) return mobile * 0.8;
-    if (isMobile) return mobile;
-    if (isTablet) return tablet;
-    return desktop;
-  };
-  
-  const [showSidebar, setShowSidebar] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [thoughtsExpanded, setThoughtsExpanded] = useState(false);
-
-  // Teacher Posts Data for Thoughts (using Post interface from ThoughtsCard)
-  const [posts, setPosts] = useState<any[]>([]);
-  const [postsLoading, setPostsLoading] = useState(false);
-  const [userProfileCache, setUserProfileCache] = useState<Map<string, { name: string; profilePic: string }>>(new Map());
-  const [authToken, setAuthToken] = useState<string | null>(null);
-
-  // Subject data from Profile2.tsx
-  const [teacherSubjects, setTeacherSubjects] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [subjects, setSubjects] = useState<Tuition[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Sidebar state
+  const [sidebarActiveItem, setSidebarActiveItem] = useState('My Tuitions');
+  const [teacherName, setTeacherName] = useState('');
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState('');
+  const [windowWidth, setWindowWidth] = useState(Dimensions.get('window').width);
 
-  // Add loading state like TeacherDashboard
-  const [isDashboardLoading, setIsDashboardLoading] = useState(true);
+  const isMobile = windowWidth < 1024;
+  const isTablet = windowWidth >= 768 && windowWidth < 1200;
 
-  // Update dimensions on change
+  const handleBackPress = useCallback(() => {
+    router.push("/(tabs)/TeacherDashBoard/Teacher");
+    return true;
+  }, [router]);
+
+  // Handle sidebar navigation
+  const handleSidebarSelect = useCallback((item: string) => {
+    setSidebarActiveItem(item);
+    const navigationMap: { [key: string]: string } = {
+      "Home": "/(tabs)/TeacherDashBoard/TutorDashboardWeb",
+      "My Students": "/(tabs)/TeacherDashBoard/StudentsEnrolled",
+      "My Subjects": "/(tabs)/TeacherDashBoard/MySubjectsWeb",
+      "Create Subject": "/(tabs)/TeacherDashBoard/CreateSubject",
+      "Spotlights": "/(tabs)/TeacherDashBoard/JoinedDateWeb",
+      "Share": "/(tabs)/TeacherDashBoard/StudentsListWeb",
+      "Profile": "/(tabs)/TeacherDashBoard/ProfileWeb",
+      "Billing": "/(tabs)/TeacherDashBoard/Settings",
+      "Settings": "/(tabs)/TeacherDashBoard/Settings",
+      "Contact Us": "/(tabs)/Contact",
+    };
+    if (navigationMap[item]) {
+      router.push(navigationMap[item] as any);
+    }
+  }, [router]);
+
+  // Handle window resize
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
-      setScreenWidth(window.width);
-      setScreenHeight(window.height);
+      setWindowWidth(window.width);
     });
     return () => subscription?.remove();
   }, []);
 
-  // Fetch teacher subjects from Profile2.tsx
-  const fetchTeacherSubjects = async () => {
+  // Load cached data first for instant display
+  const loadCachedData = useCallback(async () => {
     try {
-      setIsLoading(true);
+      const cached = await AsyncStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const { subjects: cachedSubjects, timestamp } = JSON.parse(cached);
+        const cacheAge = Date.now() - timestamp;
+        
+        // Use cache if it's less than 5 minutes old
+        if (cacheAge < 5 * 60 * 1000 && cachedSubjects.length > 0) {
+          console.log('📚 Using cached subjects data:', cachedSubjects.length);
+          setSubjects(cachedSubjects);
+          setLoading(false);
+          return true;
+        }
+      }
+    } catch (err) {
+      console.error('Cache loading error:', err);
+    }
+    return false;
+  }, []);
+
+  // Cache the fetched data
+  const cacheData = useCallback(async (data: Tuition[]) => {
+    try {
+      await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({
+        subjects: data,
+        timestamp: Date.now()
+      }));
+    } catch (err) {
+      console.error('Cache saving error:', err);
+    }
+  }, []);
+
+  const fetchSubjects = useCallback(async (useCache = true) => {
+    try {
       setError(null);
       
       const auth = await getAuthData();
-      if (!auth?.token) {
-        setError('Authentication required');
+      if (!auth || !auth.email) {
+        setError("Authentication required. Please login again.");
+        router.replace("/");
         return;
       }
+
+      const { email, token, name, profileImage } = auth;
       
-      // Fetch teacher profile to get their subjects
-      const response = await api.post(
-        "/api/userProfile",
-        { email: auth.email }
+      // Set user info for header/sidebar
+      setTeacherName(name || '');
+      setUserEmail(email);
+      setProfileImage(profileImage || null);
+      
+      // Try to load from cache first
+      if (useCache && await loadCachedData()) {
+        return;
+      }
+      const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+      console.log('🚀 Fetching subjects data...');
+      const startTime = Date.now();
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const res = await fetch(`${BASE_URL}/api/teacherProfile`, { 
+        method: "POST", 
+        headers, 
+        body: JSON.stringify({ email }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      
+      const data: any = await res.json();
+      console.log("📚 API Response received in", Date.now() - startTime, "ms");
+
+      let allTuitions: Tuition[] = [];
+
+      // Process the teacherProfile API response structure
+      if (data?.tuitions && Array.isArray(data.tuitions)) {
+        allTuitions = data.tuitions;
+        console.log("📚 Found tuitions in teacherProfile response:", allTuitions.length);
+      } else {
+        console.log("⚠️ No tuitions found in teacherProfile response");
+      }
+
+      console.log("📚 All Tuitions Found:", allTuitions);
+      
+      // Use a better unique identifier that includes all relevant fields
+      const uniqueTuitions = Array.from(
+        new Map(
+          allTuitions.map(item => [
+            `${item.classId || item.skillId}-${item.subject || item.skill}-${item.timeFrom}-${item.timeTo}-${item.day}`,
+            item
+          ])
+        ).values()
       );
       
-      if (response.data && response.data.data && response.data.data.subjects) {
-        const subjects = response.data.data.subjects;
-        setTeacherSubjects(Array.isArray(subjects) ? subjects : []);
-        console.log('Teacher subjects loaded:', subjects.length);
-      } else {
-        // If no subjects in profile, check if they have tuitions
-        const tuitionsResponse = await api.post(
-          "/api/teacherProfile",
-          { email: auth.email }
-        );
-        
-        if (tuitionsResponse.data && tuitionsResponse.data.tuitions) {
-          const tuitions = tuitionsResponse.data.tuitions;
-          const subjectNames = tuitions
-            .filter((t: any) => t.subject && t.subject.trim())
-            .map((t: any) => ({
-              id: Math.random().toString(),
-              title: t.subject,
-              class: t.class || 'Not specified',
-              status: 'ACTIVE',
-              image: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=2070&auto=format&fit=crop',
-              icon: 'calculator'
-            }));
-          setTeacherSubjects(subjectNames);
-          console.log('Subjects extracted from tuitions:', subjectNames.length);
-        } else {
-          setTeacherSubjects([]);
-          console.log('No subjects found in profile or tuitions');
-        }
-      }
-    } catch (err: any) {
-      console.error('Error fetching teacher subjects:', err);
-      setError('Failed to load subjects');
-      setTeacherSubjects([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Load teacher subjects on component mount
-  useEffect(() => {
-    fetchTeacherSubjects();
-  }, []);
-
-  // Handle sidebar navigation
-  const handleSidebarSelect = (item: string) => {
-    setSidebarActiveItem(item);
-    // Navigate based on item
-    switch (item) {
-      case "Dashboard":
-        router.push("/(tabs)/TeacherDashBoard/TutorDashboardWeb");
-        break;
-      case "My Students":
-        router.push("/(tabs)/TeacherDashBoard/StudentsEnrolled");
-        break;
-      case "My Subjects":
-        // Already on My Subjects
-        break;
-      case "Create Subject":
-        router.push("/(tabs)/TeacherDashBoard/CreateSubject");
-        break;
-      case "Spotlights":
-        router.push("/(tabs)/TeacherDashBoard/JoinedDateWeb");
-        break;
-      case "Share":
-        router.push("/(tabs)/TeacherDashBoard/Share");
-        break;
-      case "Profile":
-        router.push("/(tabs)/TeacherDashBoard/Profile2");
-        break;
-      case "Billing":
-        router.push("/(tabs)/TeacherDashBoard/Settings");
-        break;
-      case "Settings":
-        router.push("/(tabs)/TeacherDashBoard/Settings");
-        break;
-      case "Contact Us":
-        router.push("/(tabs)/Contact");
-        break;
-    }
-  };
-
-  useEffect(() => {
-    const subscription = Dimensions.addEventListener('change', ({ window }) => {
-      const width = window.width;
-      // Auto-collapse sidebar on small screens
-      if (width < 1024) {
-        setSidebarCollapsed(true);
-      } else {
-        setSidebarCollapsed(false);
-      }
-    });
-    
-    // Initial sidebar state based on screen size
-    const initialWidth = Dimensions.get('window').width;
-    if (initialWidth < 1024) {
-      setSidebarCollapsed(true);
-    }
-    
-    return () => subscription.remove();
-  }, []);
-
-  // Load teacher data and posts like TeacherDashboard
-  useEffect(() => {
-    const loadTeacherDataAndPosts = async () => {
-      try {
-        setIsDashboardLoading(true);
-        
-        // Get auth data
-        const authData = await getAuthData();
-        console.log('Auth data loaded:', authData ? 'Success' : 'Failed');
-        
-        if (authData?.token) {
-          setAuthToken(authData.token);
-          setTeacherName(authData.name || 'Teacher');
-          setUserEmail(authData.email || '');
-          setProfileImage(authData.profileImage || null);
-          
-          console.log('Teacher data set, ready for real posts');
-          // Posts will be fetched via fetchPosts function
-          setPostsLoading(false);
-        } else {
-          console.error('No auth data found');
-          // No auth data, posts will remain empty
-          setPostsLoading(false);
-        }
-      } catch (error) {
-        console.error('Error loading teacher data:', error);
-        // Error loading data, posts will remain empty
-        setPostsLoading(false);
-      } finally {
-        setIsDashboardLoading(false);
-      }
-    };
-
-    loadTeacherDataAndPosts();
-  }, []);
-
-  // Fetch posts function (updated for real data only)
-  const fetchPosts = async (token: string) => {
-    try {
-      setPostsLoading(true);
-      console.log('Fetching posts with token:', token ? 'Token exists' : 'No token');
+      console.log("✅ Unique Tuitions:", uniqueTuitions.length);
+      setSubjects(uniqueTuitions);
       
-      const res = await axios.get(`${BASE_URL}/api/posts/all`, { 
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        } 
-      });
+      // Cache the results
+      await cacheData(uniqueTuitions);
       
-      console.log('Posts API response:', res.data);
-      
-      if (res.data.success && res.data.data) {
-        // Fetch comments for each post and process post data
-        const postsWithComments = await Promise.all(
-          res.data.data.map(async (post: any) => {
-            try {
-              const commentsResponse = await axios.get(`${BASE_URL}/api/posts/${post.id}/comments`, {
-                headers: {
-                  'Authorization': `Bearer ${token}`
-                }
-              });
-              
-              const comments = commentsResponse.data.success ? commentsResponse.data.data : [];
-              
-              return {
-                ...post,
-                postImage: post.postImage && !post.postImage.startsWith('http')
-                  ? `${BASE_URL}${post.postImage.startsWith('/') ? '' : '/'}${post.postImage}`
-                  : post.postImage,
-                createdAt: post.createdAt,
-                isLiked: post.isLiked || false,
-                comments: comments.map((comment: any) => ({
-                  ...comment,
-                  createdAt: comment.createdAt,
-                  isLiked: false
-                }))
-              };
-            } catch (error) {
-              console.error('Error fetching comments for post:', post.id, error);
-              return {
-                ...post,
-                postImage: post.postImage && !post.postImage.startsWith('http')
-                  ? `${BASE_URL}${post.postImage.startsWith('/') ? '' : '/'}${post.postImage}`
-                  : post.postImage,
-                createdAt: post.createdAt,
-                isLiked: post.isLiked || false,
-                comments: []
-              };
-            }
-          })
-        );
-        
-        // Fetch user profiles for all post authors
-        await fetchUserProfilesForPosts(postsWithComments, token);
-        
-        console.log('Setting posts from API:', postsWithComments.length, 'posts');
-        setPosts(postsWithComments);
-      } else {
-        console.log('API response unsuccessful or no posts, setting empty array');
-        setPosts([]);
-      }
-      setPostsLoading(false);
     } catch (error) {
-      console.error('Error fetching posts:', error);
-      // Don't load mock posts - only show real data
-      console.log('Setting empty posts array - no mock data');
-      setPosts([]);
+      console.error("Error fetching subjects:", error);
+      setError(error instanceof Error ? error.message : "Failed to load subjects");
+      
+      // Try to show stale cache if available
+      await loadCachedData();
     } finally {
-      setPostsLoading(false);
+      setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [loadCachedData, cacheData]);
 
-  // Handle post creation (same as ConnectWeb)
-  const handleCreatePost = async (content: string) => {
-    if (!authToken || !userEmail) {
-      throw new Error('Authentication required');
-    }
-
-    try {
-      const response = await axios.post(`${BASE_URL}/api/posts/create`, {
-        content,
-        authorEmail: userEmail,
-        authorName: teacherName,
-        postType: 'teacher'
-      }, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.data.success) {
-        // Refresh posts to include the new one
-        if (authToken) {
-          await fetchPosts(authToken);
-        }
-        return response.data;
-      } else {
-        throw new Error(response.data.message || 'Failed to create post');
-      }
-    } catch (error: any) {
-      console.error('Error creating post:', error);
-      throw new Error(error.response?.data?.message || 'Failed to create post. Please try again.');
-    }
-  };
-
-  // Load teacher data and fetch posts
-  useEffect(() => {
-    const loadTeacherDataAndPosts = async () => {
-      try {
-        // Get auth data
-        const authData = await getAuthData();
-        console.log('Auth data loaded:', authData ? 'Success' : 'Failed');
-        
-        if (authData?.token) {
-          setAuthToken(authData.token);
-          setTeacherName(authData.name || 'Teacher');
-          setUserEmail(authData.email || '');
-          setProfileImage(authData.profileImage || null);
-          
-          // Fetch posts with the auth token
-          await fetchPosts(authData.token);
-        } else {
-          console.error('No auth data found');
-          // Use bypass token for demo
-          await fetchPosts("bypass_token_teacher1");
-        }
-      } catch (error) {
-        console.error('Error loading teacher data:', error);
-        // Use bypass token for demo
-        await fetchPosts("bypass_token_teacher1");
-      }
-    };
-
-    loadTeacherDataAndPosts();
-  }, []);
-
-  // Fetch user profile using the same API as other teacher pages
-  const fetchUserProfile = async (token: string, email: string) => {
-    try {
-      console.log('🔍 Fetching user profile from AstraDB for:', email);
-      
-      // Check cache first
-      if (userProfileCache.has(email)) {
-        console.log('✅ Using cached profile for:', email);
-        return userProfileCache.get(email)!;
-      }
-      
-      // Try AstraDB test table first for real user data
-      const response = await axios.post(`${BASE_URL}/api/userProfile`, { 
-        email: email,
-        source: 'astraDB'
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (response.data) {
-        // Try different possible field names for profile picture
-        const profilePic = response.data.profileimage || response.data.profilePic || response.data.profilepic || response.data.profile_image;
-        
-        // Try different possible field names for user name
-        const userName = response.data.name || response.data.userName || response.data.fullname || response.data.fullName || response.data.displayName;
-        
-        console.log('✅ User profile from AstraDB:', { name: userName, profilePic: profilePic });
-        
-        if (profilePic || userName) {
-          // Ensure we have a proper URL format for profile image
-          let finalProfilePic = profilePic;
-          if (finalProfilePic && !finalProfilePic.startsWith('http') && !finalProfilePic.startsWith('/')) {
-            finalProfilePic = `/${finalProfilePic}`;
-          }
-          
-          const profileData = { name: userName || 'Unknown User', profilePic: finalProfilePic || '' };
-          
-          // Cache the result
-          setUserProfileCache(prev => new Map(prev.set(email, profileData)));
-          
-          return profileData;
-        } else {
-          console.log('⚠️ No profile image or name found in response');
-        }
-      }
-    } catch (error) {
-      console.log('❌ Profile fetch error:', error);
-      // Don't show alert for profile image fetch error as it's not critical
-    }
-    
-    return { name: 'Unknown User', profilePic: '' };
-  };
-
-  // Enhanced function to fetch and cache multiple user profiles
-  const fetchUserProfilesForPosts = async (posts: any[], token: string) => {
-    const uniqueEmails = [...new Set(posts.map(post => post.author.email))];
-    
-    const profilePromises = uniqueEmails.map(async (email) => {
-      if (!userProfileCache.has(email)) {
-        return await fetchUserProfile(token, email);
-      }
-      return null;
-    });
-    
-    await Promise.all(profilePromises);
-  };
-
-  const resolvePostAuthor = (post: any) => {
-    if (!post) {
-      return {
-        name: teacherName || 'Unknown Teacher',
-        pic: profileImage || null,
-        role: 'teacher'
-      };
-    }
-    
-    // Use cached profile data like TeacherDashboard
-    const cached = userProfileCache.get(post.author?.email) || { name: '', profilePic: '' };
-    let name = cached.name || post.author?.name || '';
-    let pic: string | null = cached.profilePic || post.author?.profile_pic || null;
-    
-    // Handle email fallback for name
-    if (!name || name === 'null' || name.includes('@')) {
-      name = post.author?.email?.split('@')[0] || teacherName || 'Unknown Teacher';
-      // Clean up the name (remove dots, capitalize)
-      name = name.split('.').map(part => 
-        part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
-      ).join(' ');
-    }
-    
-    // Handle profile image path
-    if (pic && !pic.startsWith('http') && !pic.startsWith('/')) {
-      pic = `/${pic}`;
-    }
-    if (pic === '' || pic === 'null') {
-      pic = profileImage || null;
-    }
-    
-    return { name, pic, role: post.author?.role || 'teacher' };
-  };
-
-  const getProfileImageSource = (profilePic?: string) => {
-    if (profilePic) {
-      // Handle different image path formats
-      if (profilePic.startsWith('http')) {
-        return { uri: profilePic };
-      }
-      // For local paths, construct proper URL
-      const imageUrl = profilePic.startsWith('/') ? profilePic : `/${profilePic}`;
-      return { uri: `${BASE_URL}${imageUrl}` };
-    }
-    return null;
-  };
-
-  const initials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  };
-
-  // Entry Animation Styles
-  const opacity = useSharedValue(0);
-  const translateY = useSharedValue(20);
+  // Refresh function for pull-to-refresh
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchSubjects(false); // Skip cache on refresh
+  }, [fetchSubjects]);
 
   useEffect(() => {
-    opacity.value = withDelay(300, withTiming(1, { duration: 800 }));
-    translateY.value = withDelay(300, withSpring(0));
-  }, []);
+    fetchSubjects();
 
-  const animatedPageStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ translateY: translateY.value }],
-  }));
-
-  // Debug log for posts state
-  useEffect(() => {
-    console.log('Posts state updated:', posts.length, 'posts, loading:', postsLoading);
-  }, [posts, postsLoading]);
-
-  if (!fontsLoaded || isDashboardLoading) {
-    return (
-      <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color={COLORS.primaryBlue} />
-        <Text style={{ marginTop: 10, fontSize: 16, color: COLORS.textBody }}>Loading...</Text>
-      </View>
+    // Add back handler
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      handleBackPress
     );
-  }
 
-  return (
-    Platform.OS === 'web' ? (
+    // Cleanup the event listener
+    return () => backHandler.remove();
+  }, [fetchSubjects]);
+
+  // ESC key handler for web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleBackPress();
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [handleBackPress]);
+
+  // Helper function to format 24-hour time to 12-hour AM/PM format
+  const formatTimeDisplay = (timeStr: string): string => {
+    if (!timeStr) return '';
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    if (isNaN(hours) || isNaN(minutes)) return timeStr;
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+    const displayMinutes = minutes.toString().padStart(2, '0');
+    return `${displayHours}:${displayMinutes} ${period}`;
+  };
+
+  const formatTime = (timeFrom: string, timeTo: string) => {
+    if (!timeFrom && !timeTo) return 'No time set';
+    return `${formatTimeDisplay(timeFrom)} - ${formatTimeDisplay(timeTo)}`;
+  };
+
+  // Web layout
+  if (Platform.OS === 'web') {
+    return (
       <View style={styles.webLayout}>
         <TeacherWebHeader 
           teacherName={teacherName}
@@ -578,831 +291,387 @@ export default function MySubjectsWeb() {
         />
         
         <View style={styles.webContent}>
-          {/* Mobile Sidebar Overlay */}
-          {(isMobile || isTablet) && showSidebar && (
-            <View style={styles.sidebarOverlay}>
-              <TouchableOpacity 
-                style={styles.sidebarOverlayTouchable}
-                activeOpacity={1}
-                onPress={() => setShowSidebar(false)}
-              />
-              <View style={[styles.mobileSidebarContainer, { transform: [{ translateX: showSidebar ? 0 : -280 }] }]}>
-                <TeacherWebSidebar 
-                  activeItem={sidebarActiveItem}
-                  onItemPress={handleSidebarSelect}
-                  userEmail={userEmail}
-                  teacherName={teacherName}
-                  profileImage={profileImage}
-                  subjectCount={teacherSubjects.length}
-                  studentCount={12}
-                  revenue="₹18.7K"
-                  isSpotlight={true}
-                />
-              </View>
-            </View>
-          )}
+          <TeacherWebSidebar 
+            activeItem={sidebarActiveItem}
+            onItemPress={handleSidebarSelect}
+            userEmail={userEmail}
+            teacherName={teacherName}
+            profileImage={profileImage}
+            subjectCount={subjects.length}
+            studentCount={0}
+            revenue="₹0"
+            isSpotlight={false}
+          />
           
-          {/* Desktop Sidebar */}
-          {!(isMobile || isTablet) && (
-            <TeacherWebSidebar 
-              activeItem={sidebarActiveItem}
-              onItemPress={handleSidebarSelect}
-              userEmail={userEmail}
-              teacherName={teacherName}
-              profileImage={profileImage}
-              subjectCount={teacherSubjects.length}
-              studentCount={12}
-              revenue="₹18.7K"
-              isSpotlight={true}
-            />
-          )}
-          
-          <View style={[
-            styles.webMainContent, 
-            sidebarCollapsed && !isMobile && !isTablet && styles.webMainContentExpanded,
-            (isMobile || isTablet) && styles.webMainContentMobile
-          ]}>
+          <View style={styles.webMainContent}>
             <ScrollView 
-              style={styles.mainScrollView}
-              contentContainerStyle={styles.mainScrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <Animated.View style={[styles.contentContainer, animatedPageStyle]}>
-                {/* Page Header */}
-                <View style={styles.pageHeaderRow}>
-                   <View>
-                      <Text style={styles.pageTitle} selectable={false}>My Subjects</Text>
-                      <Text style={styles.pageSubtitle} selectable={false}>Manage your subjects and create new subjects</Text>
-                   </View>
-                   <TouchableOpacity 
-                      style={styles.createBtn}
-                      onPress={() => router.push("/(tabs)/TeacherDashBoard/CreateSubject")}
-                   >
-                      <Ionicons name="add" size={24} color="white" style={{ marginRight: 8 }} />
-                      <Text style={styles.createBtnText} selectable={false}>Create New Subject</Text>
-                   </TouchableOpacity>
-                </View>
-
-                {/* Grid of Subject Cards */}
-                <View style={styles.gridContainer}>
-                   {isLoading ? (
-                     <View style={styles.loadingContainer}>
-                       <ActivityIndicator size="large" color={COLORS.primaryBlue} />
-                       <Text style={{ marginTop: 10, fontSize: 16, color: COLORS.textBody }}>Loading subjects...</Text>
-                     </View>
-                   ) : error ? (
-                     <View style={styles.errorContainer}>
-                       <MaterialCommunityIcons name="alert-circle" size={48} color="#EF4444" />
-                       <Text style={styles.errorText}>{error}</Text>
-                       <TouchableOpacity 
-                         style={styles.retryButton}
-                         onPress={fetchTeacherSubjects}
-                       >
-                         <Text style={styles.retryButtonText}>Retry</Text>
-                       </TouchableOpacity>
-                     </View>
-                   ) : teacherSubjects.length === 0 ? (
-                     <View style={styles.emptyState}>
-                       <MaterialCommunityIcons name="book-open" size={64} color={COLORS.textMuted} />
-                       <Text style={styles.emptyStateText}>No subjects available</Text>
-                       <Text style={styles.emptyStateSubtext}>
-                         Please add subjects in your profile to manage them here.
-                       </Text>
-                     </View>
-                   ) : (
-                     teacherSubjects.map((subject, index) => (
-                       <SubjectCard 
-                         key={subject.id} 
-                         subject={subject} 
-                         index={index} 
-                         isMobile={isMobile} 
-                       />
-                     ))
-                   )}
-                </View>
-              </Animated.View>
-            </ScrollView>
-
-            {/* RIGHT: Thoughts Panel - Responsive */}
-            {Platform.OS === 'web' && !(isMobile || isTablet) && (
-              <View style={styles.rightPanel}>
-                <View style={styles.rightPanelHeader}>
-                  <Text style={styles.rightPanelTitle} selectable={false}>Thoughts</Text>
-                  <TouchableOpacity style={styles.filterBtn}>
-                    <Ionicons name="filter" size={16} color={COLORS.textMuted} />
-                  </TouchableOpacity>
-                </View>
-                
-                {/* Post Composer */}
-                <View style={styles.composerWrapper}>
-                  <TeacherPostComposer
-                    onCreatePost={handleCreatePost}
-                    placeholder="Share your thoughts..."
-                  />
-                </View>
-                
-                {/* Posts Feed */}
-                <ScrollView 
-                  showsVerticalScrollIndicator={false} 
-                  contentContainerStyle={styles.thoughtsList}
-                  style={styles.thoughtsScrollView}
-                >
-                  {postsLoading && posts.length === 0 && (
-                    <View style={styles.thoughtsLoadingContainer}>
-                      <ActivityIndicator color={COLORS.primaryBlue} size="large" />
-                      <Text style={styles.thoughtsLoadingText} selectable={false}>Loading thoughts...</Text>
-                    </View>
-                  )}
-                  
-                  {!postsLoading && posts.length === 0 && (
-                    <View style={styles.emptyState}>
-                      <Ionicons name="chatbubble-outline" size={48} color={COLORS.textMuted} />
-                      <Text style={styles.emptyStateTitle} selectable={false}>No thoughts yet</Text>
-                      <Text style={styles.emptyStateText} selectable={false}>Be the first to share your thoughts!</Text>
-                    </View>
-                  )}
-                  
-                  {posts.map((post: any) => {
-                    return (
-                      <ThoughtsCard
-                        key={post.id}
-                        post={post}
-                        onLike={(postId: string) => {
-                          setPosts(posts.map(p => 
-                            p.id === postId 
-                              ? { ...p, likes: p.isLiked ? p.likes - 1 : p.likes + 1, isLiked: !p.isLiked }
-                              : p
-                          ));
-                        }}
-                        onComment={(post) => {
-                          // Handle comment logic
-                        }}
-                        onReport={(post) => {
-                          Alert.alert("Report", "Report this post?");
-                        }}
-                        getProfileImageSource={getProfileImageSource}
-                        initials={initials}
-                        resolvePostAuthor={resolvePostAuthor}
-                      />
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            )}
-
-            {/* MOBILE: Collapsible Thoughts Section */}
-            {(isMobile || isTablet) && (
-              <View style={styles.mobileThoughtsSection}>
-                <View style={styles.mobileThoughtsHeader}>
-                  <Text style={styles.mobileThoughtsTitle} selectable={false}>Thoughts</Text>
-                  <TouchableOpacity 
-                    style={styles.mobileThoughtsToggle}
-                    onPress={() => setThoughtsExpanded(!thoughtsExpanded)}
-                  >
-                    <Ionicons 
-                      name={thoughtsExpanded ? "chevron-up" : "chevron-down"} 
-                      size={20} 
-                      color={COLORS.primaryBlue} 
-                    />
-                  </TouchableOpacity>
-                </View>
-
-                {thoughtsExpanded && (
-                  <View style={styles.mobileThoughtsContent}>
-                    {/* Post Composer */}
-                    <View style={styles.mobileComposerWrapper}>
-                      <TeacherPostComposer
-                        onCreatePost={handleCreatePost}
-                        placeholder="Share your thoughts..."
-                      />
-                    </View>
-                    
-                    {/* Posts Feed - Limited to 3 posts */}
-                    <ScrollView 
-                      showsVerticalScrollIndicator={false}
-                      contentContainerStyle={styles.mobileThoughtsList}
-                      style={styles.mobileThoughtsScroll}
-                    >
-                      {postsLoading && posts.length === 0 && (
-                        <View style={styles.thoughtsLoadingContainer}>
-                          <ActivityIndicator color={COLORS.primaryBlue} size="small" />
-                          <Text style={styles.mobileLoadingText} selectable={false}>Loading...</Text>
-                        </View>
-                      )}
-                      
-                      {!postsLoading && posts.length === 0 && (
-                        <View style={styles.mobileEmptyState}>
-                          <Ionicons name="chatbubble-outline" size={32} color={COLORS.textMuted} />
-                          <Text style={styles.mobileEmptyText} selectable={false}>No thoughts yet</Text>
-                        </View>
-                      )}
-                      
-                      {/* Show only first 3 posts or all if expanded */}
-                      {posts.slice(0, thoughtsExpanded ? posts.length : 3).map((post: any, index: number) => {
-                        return (
-                          <View key={post.id} style={styles.mobilePostWrapper}>
-                            <ThoughtsCard
-                              post={post}
-                              onLike={(postId: string) => {
-                                setPosts(posts.map(p => 
-                                  p.id === postId 
-                                    ? { ...p, likes: p.isLiked ? p.likes - 1 : p.likes + 1, isLiked: !p.isLiked }
-                                    : p
-                                ));
-                              }}
-                              onComment={(post) => {
-                                // Handle comment
-                              }}
-                              onReport={(post) => {
-                                Alert.alert("Report", "Report this post?");
-                              }}
-                              getProfileImageSource={getProfileImageSource}
-                              initials={initials}
-                              resolvePostAuthor={resolvePostAuthor}
-                            />
-                            
-                            {/* Add separator between posts */}
-                            {index < Math.min(posts.slice(0, thoughtsExpanded ? posts.length : 3).length - 1, posts.length - 1) && (
-                              <View style={styles.mobilePostSeparator} />
-                            )}
-                          </View>
-                        );
-                      })}
-                      
-                      {/* Show "See More" indicator if there are more posts */}
-                      {!thoughtsExpanded && posts.length > 3 && (
-                        <TouchableOpacity 
-                          style={styles.seeMoreButton}
-                          onPress={() => setThoughtsExpanded(true)}
-                        >
-                          <Text style={styles.seeMoreText} selectable={false}>See more thoughts...</Text>
-                          <Ionicons name="chevron-down" size={16} color={COLORS.primaryBlue} />
-                        </TouchableOpacity>
-                      )}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
-            )}
-          </View>
-        </View>
-      </View>
-    ) : (
-      <View style={styles.container}>
-        <View style={styles.contentLayout}>
-          {/* Mobile Layout */}
-          <View style={styles.mainWrapper}>
-            <ScrollView
+              showsVerticalScrollIndicator={false} 
               style={styles.mainScroll}
               contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={[COLORS.primaryBlue]}
+                  tintColor={COLORS.primaryBlue}
+                />
+              }
             >
-              <Animated.View style={[styles.dualColumns, animatedPageStyle]}>
-                <View style={[styles.mainFeed, { width: '100%', marginRight: 0 }]}>
-                  <View style={styles.pageHeaderRow}>
-                     <View>
-                        <Text style={styles.pageTitle}>My Subjects</Text>
-                        <Text style={styles.pageSubtitle}>Manage your subjects and create new subjects</Text>
-                     </View>
-                     <TouchableOpacity 
-                        style={styles.createBtn}
-                        onPress={() => router.push("/(tabs)/TeacherDashBoard/CreateSubject")}
-                     >
-                        <Ionicons name="add" size={24} color="white" style={{ marginRight: 8 }} />
-                        <Text style={styles.createBtnText}>Create New Subject</Text>
-                     </TouchableOpacity>
-                  </View>
+              {/* Page Header */}
+              <View style={styles.pageHeader}>
+                <TouchableOpacity 
+                  style={styles.backBtnCircle} 
+                  onPress={() => router.push("/(tabs)/TeacherDashBoard/Teacher")}
+                >
+                  <Ionicons name="arrow-back" size={20} color={COLORS.textHeader} />
+                </TouchableOpacity>
+                <Text style={styles.pageTitle}>My Tuitions</Text>
+                <View style={styles.placeholder} />
+              </View>
 
-                  <View style={styles.gridContainer}>
-                     {isLoading ? (
-                       <View style={styles.loadingContainer}>
-                         <ActivityIndicator size="large" color={COLORS.primaryBlue} />
-                         <Text style={{ marginTop: 10, fontSize: 16, color: COLORS.textBody }}>Loading subjects...</Text>
-                       </View>
-                     ) : error ? (
-                       <View style={styles.errorContainer}>
-                         <MaterialCommunityIcons name="alert-circle" size={48} color="#EF4444" />
-                         <Text style={styles.errorText}>{error}</Text>
-                         <TouchableOpacity 
-                           style={styles.retryButton}
-                           onPress={fetchTeacherSubjects}
-                         >
-                           <Text style={styles.retryButtonText}>Retry</Text>
-                         </TouchableOpacity>
-                       </View>
-                     ) : teacherSubjects.length === 0 ? (
-                       <View style={styles.emptyState}>
-                         <MaterialCommunityIcons name="book-open" size={64} color={COLORS.textMuted} />
-                         <Text style={styles.emptyStateText}>No subjects available</Text>
-                         <Text style={styles.emptyStateSubtext}>
-                           Please add subjects in your profile to manage them here.
-                         </Text>
-                       </View>
-                     ) : (
-                       teacherSubjects.map((subject, index) => (
-                         <SubjectCard 
-                           key={subject.id} 
-                           subject={subject} 
-                           index={index} 
-                           isMobile={true} 
-                         />
-                       ))
-                     )}
-                  </View>
+              {/* Error Display */}
+              {error && (
+                <View style={styles.errorContainer}>
+                  <MaterialCommunityIcons name="alert-circle" size={24} color="#EF4444" />
+                  <Text style={styles.errorText}>{error}</Text>
+                  <TouchableOpacity 
+                    style={styles.retryButton} 
+                    onPress={() => fetchSubjects(false)}
+                  >
+                    <Text style={styles.retryText}>Retry</Text>
+                  </TouchableOpacity>
                 </View>
-              </Animated.View>
+              )}
+
+              {/* Loading State */}
+              {loading && (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={COLORS.primaryBlue} />
+                  <Text style={styles.loadingText}>Loading subjects...</Text>
+                </View>
+              )}
+
+              {/* Empty State */}
+              {!loading && subjects.length === 0 && !error && (
+                <View style={styles.emptyContainer}>
+                  <View style={styles.emptyIconCircle}>
+                    <FontAwesome5 name="book" size={40} color={COLORS.primaryBlue} />
+                  </View>
+                  <Text style={styles.emptyText}>No subjects found</Text>
+                  <Text style={styles.emptySubText}>Your subjects will appear here once you add them in your profile</Text>
+                  <TouchableOpacity 
+                    style={styles.createSubjectBtn}
+                    onPress={() => router.push("/(tabs)/TeacherDashBoard/ProfileWeb")}
+                  >
+                    <Text style={styles.createSubjectText}>Go to Profile to Add Subjects</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Subjects Grid */}
+              {!loading && subjects.length > 0 && (
+                <View style={styles.subjectsContainer}>
+                  {subjects.map((item, index) => (
+                    <View key={`${item.classId || item.skillId}-${index}`} style={styles.subjectCard}>
+                      {/* Card Header with Icon */}
+                      <View style={styles.cardHeader}>
+                        <View style={styles.iconCircle}>
+                          <FontAwesome5 
+                            name={item.skill ? "tools" : "book"} 
+                            size={20} 
+                            color={COLORS.primaryBlue} 
+                          />
+                        </View>
+                        <View style={styles.cardTitleSection}>
+                          <Text style={styles.subjectName} numberOfLines={1}>
+                            {item.subject || item.skill || 'Untitled'}
+                          </Text>
+                          {item.class && (
+                            <Text style={styles.classBoard}>{item.class}</Text>
+                          )}
+                        </View>
+                      </View>
+
+                      {/* Card Details */}
+                      <View style={styles.cardDetails}>
+                        {item.board && (
+                          <View style={styles.detailRow}>
+                            <MaterialCommunityIcons name="school-outline" size={14} color={COLORS.textMuted} />
+                            <Text style={styles.detailText}>{item.board}</Text>
+                          </View>
+                        )}
+                        
+                        <View style={styles.detailRow}>
+                          <Ionicons name="time-outline" size={14} color={COLORS.textMuted} />
+                          <Text style={styles.detailText}>{formatTime(item.timeFrom, item.timeTo)}</Text>
+                        </View>
+
+                        {item.day && (
+                          <View style={styles.daysContainer}>
+                            {item.day.split(',').map((day, i) => (
+                              <View key={i} style={styles.dayPill}>
+                                <Text style={styles.dayText}>{day.trim().slice(0, 3)}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+
+                        {item.charge && (
+                          <View style={styles.priceBadge}>
+                            <Text style={styles.priceText}>{item.charge}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
             </ScrollView>
           </View>
         </View>
       </View>
-    )
+    );
+  }
+
+  // Mobile fallback (should not be used for web)
+  return (
+    <View style={styles.mobileContainer}>
+      <Text style={styles.mobileMessage}>This page is only available on web</Text>
+    </View>
   );
 }
 
-// --- Subject Card Component ---
-const SubjectCard = ({ subject, index, isMobile }: { subject: any; index: number; isMobile: boolean }) => {
-  const lift = useSharedValue(0);
-  const scale = useSharedValue(1);
-  const imgScale = useSharedValue(1);
-
-  const hoverStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: lift.value }, { scale: scale.value }] as any,
-    shadowOpacity: lift.value === 0 ? 0.06 : 0.15,
-  }));
-
-  const imageStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: imgScale.value }] as any,
-  }));
-
-  return (
-    <Animated.View 
-      style={[
-        styles.subjectCard,
-        {
-          transform: [
-            {
-              translateY: withDelay(100 * index, withSpring(0, { tension: 100, friction: 10 }))
-            },
-            { scale: withDelay(100 * index, withSpring(1, { tension: 100, friction: 10 }))
-            }
-          ]
-        }
-      ]}
-    >
-      <View style={styles.subjectCardContent}>
-        <View style={styles.subjectHeader}>
-          <View style={styles.subjectIconContainer}>
-            <Image source={{ uri: subject.image }} style={styles.subjectImage} />
-            <MaterialCommunityIcons name={subject.icon} size={isMobile ? 20 : 24} color={COLORS.primaryBlue} />
-          </View>
-          <View style={styles.subjectInfo}>
-            <Text style={styles.subjectTitle}>{subject.title}</Text>
-            <Text style={styles.subjectClass}>{subject.class}</Text>
-            <View style={styles.subjectStatus}>
-              <View style={[styles.statusDot, { backgroundColor: subject.status === 'ACTIVE' ? COLORS.primaryBlue : '#E5E7EB' }]} />
-              <Text style={[styles.statusText, { color: subject.status === 'ACTIVE' ? COLORS.primaryBlue : COLORS.textMuted }]}>
-                {subject.status === 'ACTIVE' ? 'Active' : 'Inactive'}
-              </Text>
-            </View>
-          </View>
-        </View>
-      </View>
-    </Animated.View>
-  );
-};
-
 const styles = StyleSheet.create({
   // Web Layout
-  webLayout: {
-    flex: 1,
-    flexDirection: 'column',
+  webLayout: { flex: 1, flexDirection: 'column' },
+  webContent: { flex: 1, flexDirection: 'row' },
+  webMainContent: { flex: 1, backgroundColor: COLORS.background, marginLeft: 0 },
+  mainScroll: { flex: 1 },
+  scrollContent: { padding: 24, paddingBottom: 40 },
+  
+  // Mobile fallback
+  mobileContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
+  mobileMessage: { fontSize: 16, color: COLORS.textBody },
+  
+  // Page Header
+  pageHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: 24,
+    paddingHorizontal: 8
   },
-  webContent: {
-    flex: 1,
-    flexDirection: 'row',
+  backBtnCircle: { 
+    width: 46, 
+    height: 46, 
+    borderRadius: 23, 
+    backgroundColor: COLORS.white, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 3 }, 
+    shadowOpacity: 0.08, 
+    shadowRadius: 8, 
+    elevation: 4 
   },
-  webMainContent: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    flexDirection: 'row',
+  pageTitle: { 
+    fontSize: 28, 
+    fontWeight: '700', 
+    color: COLORS.textHeader, 
+    marginLeft: 16, 
+    flex: 1 
   },
-  webMainContentExpanded: {
-    marginLeft: 80, // When sidebar is collapsed
+  placeholder: { width: 46 },
+  
+  // Loading & Error States
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    paddingVertical: 80,
+    minHeight: 400
   },
-  webMainContentMobile: {
-    marginLeft: 0, // No sidebar on mobile
-  },
-  // Sidebar Overlay for Mobile
-  sidebarOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    zIndex: 1000,
-  },
-  sidebarOverlayTouchable: {
-    flex: 1,
-  },
-  mobileSidebarContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    bottom: 0,
-    width: 280,
-    backgroundColor: COLORS.white,
-    ...Platform.select({
-
-      web: {
-
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
-    elevation: 5,
-    zIndex: 1001,
-  },
-  // Main Content Container
-  mainScrollView: {
-    flex: 1,
-  },
-  mainScrollContent: {
-    padding: 32,
-  },
-  contentContainer: {
-    maxWidth: 1200,
-    width: '100%',
-    alignSelf: 'center',
-  },
-  // Common styles
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  loaderContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  contentLayout: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  mainWrapper: {
-    flex: 1,
-    flexDirection: 'column',
-  },
-  mainScroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: wp('3%'),
-  },
-  dualColumns: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  mainFeed: {
-    flex: 1,
-    marginRight: 30,
-  },
-  pageHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 32,
-    marginTop: 8,
-  },
-  pageTitle: {
-    fontFamily: 'Poppins_700Bold',
-    fontSize: 32,
-    color: COLORS.textHeader,
-    marginBottom: 5,
-  },
-  pageSubtitle: {
-    fontFamily: 'Poppins_400Regular',
+  loadingText: {
+    marginTop: 16,
     fontSize: 16,
     color: COLORS.textBody,
   },
-  createBtn: {
-    flexDirection: 'row',
+  errorContainer: {
+    backgroundColor: '#FEE2E2',
+    padding: 20,
+    borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: COLORS.primaryBlue,
-    paddingHorizontal: 25,
-    paddingVertical: 14,
-    borderRadius: 30,
-    shadowColor: COLORS.primaryBlue,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
-    elevation: 8,
-  },
-  createBtnText: {
-    fontFamily: 'Poppins_600SemiBold',
-    fontSize: 16,
-    color: COLORS.white,
-  },
-  gridContainer: {
+    marginBottom: 24,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 24,
+    justifyContent: 'center',
+    gap: 10
   },
-  // Subject Card Styles
-  subjectCard: {
-    width: '48%',
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 16,
-    marginBottom: 20,
-    ...Platform.select({
-
-      web: {
-
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
-    elevation: 5,
-    overflow: 'hidden',
+  errorText: {
+    color: '#DC2626',
+    fontSize: 14,
+    textAlign: 'center',
   },
-  cardImageContainer: {
-    width: '100%',
-    height: 120,
-    position: 'relative',
+  retryButton: {
+    backgroundColor: COLORS.primaryBlue,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8
   },
-  cardImage: {
-    width: '100%',
-    height: '100%',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+  retryText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '600'
   },
-  cardInfo: {
-    padding: 16,
+  
+  // Empty State
+  emptyContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    paddingVertical: 100,
+    minHeight: 400
   },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  emptyIconCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: COLORS.softBlue,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 20
   },
-  cardTitle: {
-    fontFamily: 'Poppins_600SemiBold',
-    fontSize: 16,
+  emptyText: { 
+    fontSize: 22, 
+    fontWeight: '600', 
     color: COLORS.textHeader,
-    flex: 1,
+    marginBottom: 8
   },
-  activeBadge: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  emptySubText: {
+    fontSize: 16,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    maxWidth: 400,
+    marginBottom: 24,
+    lineHeight: 22
+  },
+  createSubjectBtn: {
+    backgroundColor: COLORS.primaryBlue,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
     borderRadius: 12,
   },
-  activeBadgeText: {
-    fontFamily: 'Poppins_500Medium',
-    fontSize: 10,
+  createSubjectText: {
     color: COLORS.white,
+    fontSize: 15,
+    fontWeight: '600'
   },
-  cardMetaRow: {
+  
+  // Subjects Container - responsive grid layout for 3 columns
+  subjectsContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
     gap: 16,
-    marginTop: 8,
   },
-  metaIconBox: {
+  
+  // Subject Card - exact 1/3 width for 3 cards per row
+  subjectCard: { 
+    width: 'calc(33.333% - 11px)',
+    backgroundColor: COLORS.white, 
+    borderRadius: 16, 
+    padding: 20,
+    borderWidth: 1, 
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
-  cardMetaText: {
-    fontFamily: 'Poppins_400Regular',
-    fontSize: 12,
-    color: COLORS.textMuted,
-  },
-  sectionTitle: {
-    fontFamily: 'Poppins_600SemiBold',
-    fontSize: 18,
-    color: COLORS.textHeader,
-    marginBottom: 20,
-  },
-  // Right Panel Styles (same as ConnectWeb)
-  rightPanel: {
-    width: Platform.OS === 'web' ? '30%' : '30%',
-    minWidth: 350,
-    maxWidth: 450,
-    backgroundColor: '#FAFBFC',
-    borderLeftWidth: 1,
-    borderLeftColor: '#E5E7EB',
-    paddingTop: 24,
-    paddingHorizontal: 16,
-    flexDirection: 'column',
-  },
-  rightPanelHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  rightPanelTitle: {
-    fontSize: 22,
-    fontFamily: 'Poppins_600SemiBold',
-    color: COLORS.textHeader,
-    fontWeight: '600',
-  },
-  filterBtn: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-  },
-  composerWrapper: {
-    marginBottom: 20,
-  },
-  thoughtsScrollView: {
-    flex: 1,
-  },
-  thoughtsList: {
-    paddingBottom: 40,
-    gap: 0,
-  },
-  postWrapper: {
-    marginBottom: 0,
-  },
-  postSeparator: {
-    height: 1,
-    backgroundColor: '#F3F4F6',
-    marginVertical: 8,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontFamily: 'Poppins_500Medium',
-    color: COLORS.textHeader,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    fontFamily: 'Poppins_400Regular',
-    color: COLORS.textBody,
-    textAlign: 'center',
-    paddingHorizontal: 20,
-  },
-  thoughtsLoadingContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  thoughtsLoadingText: {
-    fontSize: 16,
-    fontFamily: 'Poppins_400Regular',
-    color: COLORS.textBody,
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  thoughtsSection: {
-    marginTop: 24,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  // Mobile Thoughts Styles
-  mobileThoughtsSection: {
-    backgroundColor: COLORS.cardBg,
-    marginHorizontal: 16,
-    marginVertical: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    ...Platform.select({
-
-      web: {
-
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
-    elevation: 3,
-  },
-  mobileThoughtsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  mobileThoughtsTitle: {
-    fontSize: 18,
-    fontFamily: 'Poppins_600SemiBold',
-    color: COLORS.textHeader,
-  },
-  mobileThoughtsToggle: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-  },
-  mobileThoughtsContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  mobileComposerWrapper: {
     marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    paddingBottom: 16
   },
-  mobileThoughtsScroll: {
-    maxHeight: 300,
-  },
-  mobileThoughtsList: {
-    paddingBottom: 0,
-  },
-  mobileLoadingText: {
-    fontSize: 14,
-    fontFamily: 'Poppins_400Regular',
-    color: COLORS.textBody,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  mobileEmptyState: {
+  
+  iconCircle: { 
+    width: 56, 
+    height: 56, 
+    borderRadius: 14, 
+    backgroundColor: COLORS.activeNavBg, 
+    justifyContent: 'center', 
     alignItems: 'center',
-    paddingVertical: 20,
+    marginRight: 16
   },
-  mobileEmptyText: {
-    fontSize: 14,
-    fontFamily: 'Poppins_400Regular',
-    color: COLORS.textBody,
-    marginTop: 8,
-    textAlign: 'center',
+  
+  cardTitleSection: {
+    flex: 1,
   },
-  mobilePostWrapper: {
-    marginBottom: 12,
+  
+  subjectName: { 
+    fontSize: 18, 
+    fontWeight: '700', 
+    color: COLORS.textHeader,
+    marginBottom: 6,
   },
-  mobilePostSeparator: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 8,
+  classBoard: { 
+    fontSize: 14, 
+    color: COLORS.textMuted,
+    fontWeight: '500'
   },
-  seeMoreButton: {
+  
+  cardDetails: {
+    gap: 10
+  },
+  
+  detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#F8FAFF',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.primaryBlue,
-    marginTop: 8,
+    gap: 8
   },
-  seeMoreText: {
+  
+  detailText: {
     fontSize: 14,
-    fontFamily: 'Poppins_500Medium',
-    color: COLORS.primaryBlue,
-    marginRight: 8,
+    color: COLORS.textBody,
   },
+  
+  daysContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12
+  },
+  
+  dayPill: {
+    backgroundColor: COLORS.softGreen,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  
+  dayText: {
+    fontSize: 12,
+    color: COLORS.green,
+    fontWeight: '600',
+    textTransform: 'uppercase'
+  },
+  
+  priceBadge: {
+    backgroundColor: COLORS.softYellow,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+    marginTop: 12
+  },
+  
+  priceText: {
+    fontSize: 14,
+    color: '#D97706',
+    fontWeight: '700'
+  }
 });

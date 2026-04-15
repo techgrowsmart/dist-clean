@@ -15,7 +15,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    TouchableWithoutFeedback,
+    Pressable,
     View,
 } from "react-native";
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
@@ -180,8 +180,7 @@ export default function SignUpScreen() {
     // Mobile fallback
     return (
         <KeyboardAvoidingView style={styles.mobileContainer} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                <View style={styles.mobileContent}>
+            <Pressable onPress={Keyboard.dismiss} style={styles.mobileContent}>
                     {/* Welcome Title */}
                     <Text style={styles.mobileWelcomeTitle}>
                         Create your account {'\n'}& get started
@@ -253,8 +252,7 @@ export default function SignUpScreen() {
                             onPress={() => Linking.openURL("https://gogrowsmart.com/privacy-policy")}
                         >Privacy Policy</Text>.
                     </Text>
-                </View>
-            </TouchableWithoutFeedback>
+            </Pressable>
         </KeyboardAvoidingView>
     );
 }

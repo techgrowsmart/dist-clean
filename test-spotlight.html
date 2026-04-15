@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Spotlight Screen</title>
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f7f9fc;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-link {
+            display: inline-block;
+            background: #5f5fff;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 10px;
+            font-weight: 600;
+        }
+        .test-link:hover {
+            background: #4a4dff;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🌟 Spotlight Screen Test</h1>
+        
+        <div class="status success">
+            ✅ Web server is running on <strong>http://localhost:8082</strong>
+        </div>
+        
+        <div class="status info">
+            📱 The spotlight screen has been updated with the correct mobile logic and API calls
+        </div>
+        
+        <h2>Test Links:</h2>
+        <a href="http://localhost:8082" class="test-link" target="_blank">
+            🏠 Open Main App
+        </a>
+        
+        <a href="http://localhost:8082/TeacherDashBoard/Spotlights" class="test-link" target="_blank">
+            ⭐ Open Spotlight Screen Directly
+        </a>
+        
+        <h2>✅ What was fixed:</h2>
+        <ul>
+            <li><strong>Mobile Logic Integration:</strong> The web spotlight screen now uses the exact same logic as the mobile version</li>
+            <li><strong>State Management:</strong> Proper state handling for spotlight plans, pricing, and selections</li>
+            <li><strong>Bar Chart:</strong> Responsive bar chart visualization matching mobile design</li>
+            <li><strong>Payment Flow:</strong> Correct navigation to payment page with proper parameters</li>
+            <li><strong>API Integration:</strong> Uses the same API calls and data structure as mobile</li>
+            <li><strong>Responsive Design:</strong> Proper web styling while maintaining mobile functionality</li>
+        </ul>
+        
+        <h2>🎯 Key Features:</h2>
+        <ul>
+            <li>Location search functionality</li>
+            <li>Skill/Subject teacher toggle</li>
+            <li>Interactive bar chart showing student data by state</li>
+            <li>State and hotspot selection dropdowns</li>
+            <li>Plan selection with pricing (1-day, 7-day, 30-day)</li>
+            <li>Payment summary with GST calculation</li>
+            <li>Continue button with proper navigation</li>
+        </ul>
+        
+        <div class="status info">
+            💡 <strong>Note:</strong> You'll need to be logged in to access the teacher dashboard. 
+            The spotlight screen will automatically use the web-optimized version when accessed from a browser.
+        </div>
+    </div>
+</body>
+</html>

@@ -1,16 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Platform,  
-  View, 
-  Text, 
-  TouchableOpacity, 
-  StyleSheet, 
-  ImageBackground, 
-  Dimensions, 
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ImageBackground,
+  Dimensions,
   StatusBar,
   Image,
   Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+
+// Disable SSR for this screen to prevent Platform access during server-side rendering
+export const unstable_settings = {
+  ssr: false,
+};
 
 // use window width when needed via Dimensions.get('window') below
 
@@ -50,14 +55,16 @@ export default function OnboardingScreen() {
 
   useEffect(() => {
     // simple transition animation when index changes
+    const Platform = require('react-native').Platform;
+    const useNative = typeof Platform !== 'undefined' && Platform.OS !== 'web';
     Animated.sequence([
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: -10, duration: 220, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 0, duration: 220, useNativeDriver: useNative }),
+        Animated.timing(translateY, { toValue: -10, duration: 220, useNativeDriver: useNative }),
       ]),
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: useNative }),
+        Animated.timing(translateY, { toValue: 0, duration: 300, useNativeDriver: useNative }),
       ]),
     ]).start();
   }, [currentIndex, fadeAnim, translateY]);
@@ -139,7 +146,8 @@ export default function OnboardingScreen() {
     );
   };
 
-  if (Platform.OS === 'web') {
+  const Platform = require('react-native').Platform;
+  if (typeof Platform !== 'undefined' && Platform.OS === 'web') {
     return (
       <View style={webStyles.container}>
         <StatusBar barStyle="light-content" />
@@ -270,27 +278,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 40,
-    ...Platform.select({
-
-      web: {
-
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
     elevation: 10,
   },
   circleImage: {
@@ -319,27 +310,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 48,
     borderRadius: 16,
     marginBottom: 24,
-    ...Platform.select({
-
-      web: {
-
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-
-      },
-
-      default: {
-
-        shadowColor: '#000',
-
-        shadowOffset: { width: 0, height: 4 },
-
-        shadowOpacity: 0.3,
-
-        shadowRadius: 8,
-
-      },
-
-    }),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
     elevation: 8,
   },
   nextButtonText: {

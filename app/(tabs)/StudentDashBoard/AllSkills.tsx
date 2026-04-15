@@ -18,30 +18,30 @@ import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-nat
 import { Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold, useFonts } from '@expo-google-fonts/poppins';
 import { BASE_URL } from '../../../config';
 import BackButton from "../../../components/BackButton";
+import { skills, skillTeachers } from '../../../data/skills';
 
 const { width } = Dimensions.get("window");
 
-// Mock data for skills with official images
-const mockSkills = [
-  { id: 1, name: 'Music', image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=300&fit=crop', color: '#FF6B6B', count: 45 },
-  { id: 2, name: 'Art & Craft', image: 'https://images.unsplash.com/photo-1585115397848-55da82956c20?w=400&h=300&fit=crop', color: '#4ECDC4', count: 32 },
-  { id: 3, name: 'Dance', image: 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=400&h=300&fit=crop', color: '#45B7D1', count: 28 },
-  { id: 4, name: 'Yoga & Fitness', image: 'https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=400&h=300&fit=crop', color: '#96CEB4', count: 36 },
-  { id: 5, name: 'Photography', image: 'https://images.unsplash.com/photo-1502780402662-acc01917ac2e?w=400&h=300&fit=crop', color: '#FFEAA7', count: 19 },
-  { id: 6, name: 'Cooking', image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&h=300&fit=crop', color: '#DDA0DD', count: 24 },
-  { id: 7, name: 'Writing', image: 'https://images.unsplash.com/photo-1455390582262-044cdead277a?w=400&h=300&fit=crop', color: '#98D8C8', count: 21 },
-  { id: 8, name: 'Languages', image: 'https://images.unsplash.com/photo-1526473222669-274c1dfb6323?w=400&h=300&fit=crop', color: '#F7DC6F', count: 33 },
-  { id: 9, name: 'Technology', image: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&h=300&fit=crop', color: '#BB8FCE', count: 27 },
-  { id: 10, name: 'Sports', image: 'https://images.unsplash.com/photo-1552667466-07770ae110d0?w=400&h=300&fit=crop', color: '#85C1E2', count: 31 },
-  { id: 11, name: 'Gardening', image: 'https://images.unsplash.com/photo-1585859168304-45c7b6e5d4e2?w=400&h=300&fit=crop', color: '#82E0AA', count: 15 },
-  { id: 12, name: 'Public Speaking', image: 'https://images.unsplash.com/photo-1432821598592-099ed5b31f2b?w=400&h=300&fit=crop', color: '#F8B739', count: 18 },
-];
+// Default skill images mapping
+const SKILL_IMAGES: { [key: string]: string } = {
+  'Music': 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=300&fit=crop',
+  'Art': 'https://images.unsplash.com/photo-1585115397848-55da82956c20?w=400&h=300&fit=crop',
+  'Dance': 'https://images.unsplash.com/photo-1547153760-18fc86324498?w=400&h=300&fit=crop',
+  'Workout': 'https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=400&h=300&fit=crop',
+  'Photography': 'https://images.unsplash.com/photo-1502780402662-acc01917ac2e?w=400&h=300&fit=crop',
+  'Cooking': 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&h=300&fit=crop',
+};
 
-export default function AllSkills({ onBack, onSkillSelect, category = "Skill teacher" }: {
-  onBack: () => void;
-  onSkillSelect: (skill: string) => void;
-  category?: string;
-}) {
+const SKILL_COLORS: { [key: string]: string } = {
+  'Music': '#FF6B6B',
+  'Art': '#4ECDC4',
+  'Dance': '#45B7D1',
+  'Workout': '#96CEB4',
+  'Photography': '#FFEAA7',
+  'Cooking': '#DDA0DD',
+};
+
+export default function AllSkills() {
   const router = useRouter();
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -50,22 +50,53 @@ export default function AllSkills({ onBack, onSkillSelect, category = "Skill tea
   });
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [filteredSkills, setFilteredSkills] = useState(mockSkills);
+  const [skillsList, setSkillsList] = useState<any[]>([]);
+  const [filteredSkills, setFilteredSkills] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load skills from local data
+  useEffect(() => {
+    const skillsWithDetails = skills.map((skill, index) => {
+      // Count teachers for this skill from skillTeachers data
+      const teacherCount = skillTeachers.filter(teacher =>
+        teacher.skill.toLowerCase() === skill.name.toLowerCase()
+      ).length;
+
+      return {
+        id: index + 1,
+        name: skill.name,
+        image: skill.image,
+        color: SKILL_COLORS[skill.name] || '#FF6B6B',
+        teacherCount: teacherCount,
+      };
+    });
+    setSkillsList(skillsWithDetails);
+    setFilteredSkills(skillsWithDetails);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    const filtered = mockSkills.filter(skill => 
-      skill.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      (selectedCategory === 'All' || skill.name === selectedCategory)
+    const filtered = skillsList.filter(skill => 
+      skill.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
     setFilteredSkills(filtered);
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery, skillsList]);
 
   const handleSkillPress = (skillName: string) => {
-    onSkillSelect(skillName);
+    // Navigate to TeachersList with skill parameter
+    router.push({
+      pathname: '/(tabs)/StudentDashBoard/TeachersList',
+      params: {
+        skill: skillName,
+      }
+    });
   };
 
-  if (!fontsLoaded) {
+  const handleBack = () => {
+    router.back();
+  };
+
+  if (!fontsLoaded || loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4A7BF7" />
@@ -80,13 +111,13 @@ export default function AllSkills({ onBack, onSkillSelect, category = "Skill tea
         {/* Header */}
         <View style={styles.webHeader}>
           <View style={styles.webHeaderLeft}>
-            <TouchableOpacity onPress={onBack} style={styles.webBackBtn}>
+            <TouchableOpacity onPress={handleBack} style={styles.webBackBtn}>
               <Ionicons name="arrow-back" size={24} color="#333" />
             </TouchableOpacity>
             <Text style={styles.webTitle}>All Skills</Text>
           </View>
           <View style={styles.webHeaderRight}>
-            <Text style={styles.webTotalCount}>{mockSkills.length} Skills Found</Text>
+            <Text style={styles.webTotalCount}>{skillsList.length} Skills Found</Text>
           </View>
         </View>
 
@@ -115,7 +146,7 @@ export default function AllSkills({ onBack, onSkillSelect, category = "Skill tea
               >
                 <Image source={{ uri: skill.image }} style={styles.webSkillImage} />
                 <Text style={styles.webSkillName}>{skill.name}</Text>
-                <Text style={styles.webSkillCount}>{skill.count} Teachers</Text>
+                <Text style={styles.webSkillCount}>{skill.teacherCount} Teachers</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -130,10 +161,10 @@ export default function AllSkills({ onBack, onSkillSelect, category = "Skill tea
       {/* Header */}
       <View style={styles.mobileHeader}>
         <View style={styles.mobileHeaderLeft}>
-          <BackButton size={24} color="#000" onPress={onBack} />
+          <BackButton size={24} color="#000" onPress={handleBack} />
           <Text style={styles.mobileTitle}>All Skills</Text>
         </View>
-        <Text style={styles.mobileTotalCount}>{mockSkills.length} Skills Found</Text>
+        <Text style={styles.mobileTotalCount}>{skillsList.length} Skills Found</Text>
       </View>
 
       {/* Search Bar */}
@@ -164,7 +195,7 @@ export default function AllSkills({ onBack, onSkillSelect, category = "Skill tea
           >
             <Image source={{ uri: item.image }} style={styles.mobileSkillImage} />
             <Text style={styles.mobileSkillName}>{item.name}</Text>
-            <Text style={styles.mobileSkillCount}>{item.count} Teachers</Text>
+            <Text style={styles.mobileSkillCount}>{item.teacherCount} Teachers</Text>
           </TouchableOpacity>
         )}
       />

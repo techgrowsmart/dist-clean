@@ -1,11 +1,18 @@
-// Backend URL configuration
-const isDevelopment = __DEV__; // React Native's development flag
+// Backend URL configuration - FORCE DEV MODE
+const DEV_SERVER_URL = 'http://localhost:3000';
+const PROD_SERVER_URL = 'https://growsmartserver.gogrowsmart.com';
 
-export const BASE_URL = isDevelopment 
-  ? "http://localhost:3000"  // Local HTTP backend
-  : "https://growsmartserver.gogrowsmart.com";  // Production backend
+// ALWAYS use dev server for local development
+export const BASE_URL = DEV_SERVER_URL;
 
-export const RAZOR_PAY_KEY = 'rzp_test_RY9WNGFa44XzaQ';
+export const RAZORPAY_KEY = 'rzp_test_RY9WNGFa44XzaQ';
+// Alias for backward compatibility - some files import as RAZOR_PAY_KEY
+export const RAZOR_PAY_KEY = RAZORPAY_KEY;
 export const PORTAL_DOMAIN = 'portal.gogrowsmart.com';
 
-console.log('🔗 Using BASE_URL:', BASE_URL);
+// Log configuration for debugging
+console.log('🔗 Development Configuration:', {
+  BASE_URL,
+  hostname: typeof window !== 'undefined' ? window.location?.hostname : 'N/A',
+  environment: 'DEVELOPMENT'
+});

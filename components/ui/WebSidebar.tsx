@@ -1,12 +1,10 @@
-import React, { memo, useCallback, useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useState, useEffect } from "react";
 import { StyleSheet, Text, View, TouchableOpacity, Linking, Platform, ImageBackground, Image, ScrollView, Dimensions, Animated } from "react-native";
 import { Ionicons, MaterialCommunityIcons, MaterialIcons } from "@expo/vector-icons";
 import { clearAllStorage } from "../../utils/authStorage";
 import Toast from "react-native-toast-message";
 import { useRouter } from "expo-router";
-
-const { width } = Dimensions.get('window');
-const isMobile = width < 768;
+import { BASE_URL } from "../../config";
 
 type WebSidebarProps = {
   activeItem: string;
@@ -16,6 +14,10 @@ type WebSidebarProps = {
   profileImage: string | null;
   isMobileMenuOpen?: boolean;
   onMobileMenuToggle?: (isOpen: boolean) => void;
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
+  onCollapseChange?: (collapsed: boolean) => void;
+  notificationCounts?: Record<string, number>;
 };
 
 const C = {
@@ -27,9 +29,10 @@ const C = {
   border: '#F0F0F0',
 };
 
-// Optimized menu items with icon configuration
+// Optimizeds menu items with icon configuration
 const menuItems = [
   { name: "My Tuitions", iconType: "MaterialIcons", iconName: "school" },
+  { name: "Favorites", iconType: "Ionicons", iconName: "heart-outline" },
   { name: "Connect", iconType: "Ionicons", iconName: "chatbubble-ellipses-outline" },
   { name: "Share", iconType: "Ionicons", iconName: "share-social-outline" },
   { name: "Subscription", iconType: "MaterialIcons", iconName: "loyalty" },
@@ -41,12 +44,24 @@ const menuItems = [
   { name: "Raise a Complaint", iconType: "MaterialCommunityIcons", iconName: "alert-decagram-outline" },
 ];
 
-const WebSidebar = memo(({ activeItem, onItemPress, userEmail, studentName, profileImage, isMobileMenuOpen = false, onMobileMenuToggle }: WebSidebarProps) => {
+const WebSidebar = memo(({ activeItem, onItemPress, userEmail, studentName, profileImage, isMobileMenuOpen = false, onMobileMenuToggle, collapsible = true, defaultCollapsed = false, onCollapseChange, notificationCounts = {} }: WebSidebarProps) => {
   const router = useRouter();
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+  const isMobile = screenWidth < 768;
   const [translateX] = useState(new Animated.Value(isMobile ? -280 : 0));
+  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+
+  // Update screen dimensions dynamically
+  useEffect(() => {
+    const updateDimensions = () => {
+      setScreenWidth(Dimensions.get('window').width);
+    };
+    const subscription = Dimensions.addEventListener('change', updateDimensions);
+    return () => subscription?.remove();
+  }, []);
 
   // Animate sidebar open/close
-  React.useEffect(() => {
+  useEffect(() => {
     if (isMobile) {
       Animated.timing(translateX, {
         toValue: isMobileMenuOpen ? 0 : -280,
@@ -54,7 +69,13 @@ const WebSidebar = memo(({ activeItem, onItemPress, userEmail, studentName, prof
         useNativeDriver: Platform.OS !== 'web',
       }).start();
     }
-  }, [isMobileMenuOpen, translateX]);
+  }, [isMobileMenuOpen, translateX, isMobile]);
+
+  const toggleCollapse = useCallback(() => {
+    const newCollapsed = !isCollapsed;
+    setIsCollapsed(newCollapsed);
+    onCollapseChange?.(newCollapsed);
+  }, [isCollapsed, onCollapseChange]);
 
   const handleItemPress = useCallback((itemName: string) => {
     // Close mobile menu after navigation
@@ -91,6 +112,9 @@ const WebSidebar = memo(({ activeItem, onItemPress, userEmail, studentName, prof
       case 'My Tuitions':
         router.push("/(tabs)/StudentDashBoard/MyTuitions");
         break;
+      case 'Favorites':
+        router.push("/(tabs)/StudentDashBoard/Favourite");
+        break;
       case 'Connect':
         router.push("/(tabs)/StudentDashBoard/ConnectWeb");
         break;
@@ -107,7 +131,7 @@ const WebSidebar = memo(({ activeItem, onItemPress, userEmail, studentName, prof
         router.push({ pathname: "/(tabs)/StudentDashBoard/Share", params: { userEmail, studentName, profileImage } } as any);
         break;
       case 'Subscription':
-        router.push({ pathname: "/(tabs)/StudentDashBoard/Subscription", params: { userEmail } } as any);
+        router.push({ pathname: "/(tabs)/StudentDashBoard/Subscription", params: { userEmail, studentName, profileImage } } as any);
         break;
       case 'Contact Us':
         router.push("/(tabs)/Contact");
@@ -154,15 +178,33 @@ const WebSidebar = memo(({ activeItem, onItemPress, userEmail, studentName, prof
     }
   }, []);
 
-  // Memoized MenuItem component
-  const MenuItem = memo(({ name, item, isActive }: { name: string; item: any; isActive: boolean }) => (
-    <TouchableOpacity onPress={() => handleItemPress(name)} style={[s.item, isActive && s.itemActive]}>
-      <View style={s.iconWrap}>
-        {renderIcon(item, isActive)}
-      </View>
-      <Text style={[s.itemText, isActive && s.itemTextActive]}>{name}</Text>
-    </TouchableOpacity>
-  ));
+  // Memoized MenuItem component with notification badge
+  const MenuItem = memo(({ name, item, isActive }: { name: string; item: any; isActive: boolean }) => {
+    const notificationCount = notificationCounts[name] || 0;
+    const hasNotification = notificationCount > 0;
+    
+    return (
+      <TouchableOpacity onPress={() => handleItemPress(name)} style={[s.item, isActive && s.itemActive, !isMobile && isCollapsed && s.itemCollapsed]}>
+        <View style={s.iconWrap}>
+          {renderIcon(item, isActive)}
+          {/* Notification badge for Connect icon */}
+          {hasNotification && name === 'Connect' && (
+            <View style={s.notificationBadge}>
+              <Ionicons name="alert-circle" size={14} color="#EF4444" />
+            </View>
+          )}
+        </View>
+        {!isCollapsed && (
+          <View style={s.itemTextContainer}>
+            <Text style={[s.itemText, isActive && s.itemTextActive]}>{name}</Text>
+            {hasNotification && name === 'Connect' && (
+              <Text style={s.notificationCount}>{notificationCount}</Text>
+            )}
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  });
 
   return (
     <>
@@ -179,8 +221,23 @@ const WebSidebar = memo(({ activeItem, onItemPress, userEmail, studentName, prof
       <Animated.View style={[
         s.container, 
         isMobile && s.mobileContainer,
-        isMobile && { transform: [{ translateX }] }
+        isMobile && { transform: [{ translateX }] },
+        !isMobile && isCollapsed && s.containerCollapsed
       ]}>
+        {/* Collapse toggle button - desktop only */}
+        {!isMobile && collapsible && (
+          <TouchableOpacity 
+            style={s.chevronButton}
+            onPress={toggleCollapse}
+            activeOpacity={0.7}
+          >
+            <Ionicons 
+              name={isCollapsed ? "chevron-forward" : "chevron-back"} 
+              size={16} 
+              color={C.muted} 
+            />
+          </TouchableOpacity>
+        )}
         {/* Mobile close button */}
         {isMobile && (
           <TouchableOpacity 
@@ -193,7 +250,7 @@ const WebSidebar = memo(({ activeItem, onItemPress, userEmail, studentName, prof
         
         <ScrollView 
           showsVerticalScrollIndicator={false} 
-          contentContainerStyle={s.scroll}
+          contentContainerStyle={[s.scroll, !isMobile && isCollapsed && s.scrollCollapsed]}
           removeClippedSubviews={true}
           scrollEventThrottle={16}
         >
@@ -206,39 +263,41 @@ const WebSidebar = memo(({ activeItem, onItemPress, userEmail, studentName, prof
           />
 
           {/* Profile with avatar */}
-          <TouchableOpacity onPress={() => handleItemPress("Profile")} style={[s.item, activeItem === "Profile" && s.itemActive]}>
+          <TouchableOpacity onPress={() => handleItemPress("Profile")} style={[s.item, activeItem === "Profile" && s.itemActive, !isMobile && isCollapsed && s.itemCollapsed]}>
             <View style={s.avatar}>
               {profileImage
-                ? <Image source={{ uri: profileImage }} style={{ width: 28, height: 28, borderRadius: 14 }} />
+                ? <Image source={{ uri: profileImage.startsWith('http') ? profileImage : `${BASE_URL}${profileImage.startsWith('/') ? '' : '/'}${profileImage}` }} style={{ width: 28, height: 28, borderRadius: 14 }} />
                 : <Ionicons name="person-circle-outline" size={24} color={activeItem === "Profile" ? C.primary : C.muted} />}
             </View>
-            <Text style={[s.itemText, activeItem === "Profile" && s.itemTextActive]}>Profile</Text>
+            {!isCollapsed && <Text style={[s.itemText, activeItem === "Profile" && s.itemTextActive]}>Profile</Text>}
           </TouchableOpacity>
 
-          <View style={s.divider} />
+          {!isCollapsed && <View style={s.divider} />}
 
           {/* Favorites section */}
-          <Text style={s.sectionLabel}>Favorites</Text>
+          {!isCollapsed && <Text style={s.sectionLabel}>Favorites</Text>}
           {menuItems.map((item, i) => (
             <MenuItem key={i} name={item.name} item={item} isActive={activeItem === item.name} />
           ))}
 
-          <View style={s.divider} />
+          {!isCollapsed && <View style={s.divider} />}
 
-          {/* Advertising card */}
-          <View style={s.adCard}>
-            <Text style={s.adLabel}>Advertising</Text>
-            <ImageBackground source={require('../../assets/images/Popular1.png')} style={s.adImg} imageStyle={{ borderRadius: 8 }}>
-              <View style={s.adOverlay}>
-                <Text style={s.adImgTitle}>Summer sale is on!</Text>
-                <Text style={s.adImgDesc}>Up to 70% off — limited time offer</Text>
-              </View>
-            </ImageBackground>
-            <Text style={s.adTitle}>Summer sale is on!</Text>
-            <Text style={s.adDesc}>Buy your loved pieces with reduced prices up to 70% off!</Text>
-          </View>
+          {/* Advertising card - hidden when collapsed */}
+          {!isCollapsed && (
+            <View style={s.adCard}>
+              <Text style={s.adLabel}>Advertising</Text>
+              <ImageBackground source={require('../../assets/images/Popular1.png')} style={s.adImg} imageStyle={{ borderRadius: 8 }}>
+                <View style={s.adOverlay}>
+                  <Text style={s.adImgTitle}>Summer sale is on!</Text>
+                  <Text style={s.adImgDesc}>Up to 70% off — limited time offer</Text>
+                </View>
+              </ImageBackground>
+              <Text style={s.adTitle}>Summer sale is on!</Text>
+              <Text style={s.adDesc}>Buy your loved pieces with reduced prices up to 70% off!</Text>
+            </View>
+          )}
 
-          <View style={s.divider} />
+          {!isCollapsed && <View style={s.divider} />}
 
           {/* Bottom actions */}
           <MenuItem 
@@ -246,9 +305,9 @@ const WebSidebar = memo(({ activeItem, onItemPress, userEmail, studentName, prof
             item={{ iconType: "Ionicons", iconName: "help-circle-outline" }} 
             isActive={false} 
           />
-          <TouchableOpacity onPress={handleLogout} style={s.item}>
+          <TouchableOpacity onPress={handleLogout} style={[s.item, !isMobile && isCollapsed && s.itemCollapsed]}>
             <View style={s.iconWrap}><Ionicons name="log-out-outline" size={20} color={C.text} /></View>
-            <Text style={s.itemText}>Log out</Text>
+            {!isCollapsed && <Text style={s.itemText}>Log out</Text>}
           </TouchableOpacity>
 
         </ScrollView>
@@ -268,6 +327,38 @@ const s = StyleSheet.create({
     flex: 1, 
     cursor: 'auto' as any,
     willChange: 'transform',
+    position: 'relative' as any,
+  },
+  containerCollapsed: {
+    width: 60,
+    minWidth: 60,
+    maxWidth: 60,
+  },
+  chevronButton: {
+    position: 'absolute' as any,
+    right: -12,
+    top: 20,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: C.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.15)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+      },
+    }),
+    elevation: 3,
   },
   mobileContainer: {
     position: 'absolute' as any,
@@ -327,6 +418,14 @@ const s = StyleSheet.create({
     marginHorizontal: 8, 
     marginBottom: 2, 
     cursor: 'pointer' as any,
+  },
+  itemCollapsed: {
+    justifyContent: 'center',
+    paddingHorizontal: 0,
+  },
+  scrollCollapsed: {
+    paddingVertical: 16,
+    alignItems: 'center',
   },
   itemActive: { 
     backgroundColor: C.active,
@@ -448,6 +547,47 @@ const s = StyleSheet.create({
     marginTop: 3, 
     lineHeight: 16, 
     fontFamily: 'Poppins_400Regular',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 10,
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.2)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+      },
+    }),
+  },
+  itemTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginLeft: 12,
+  },
+  notificationCount: {
+    backgroundColor: '#EF4444',
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+    fontFamily: 'Poppins_600SemiBold',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 8,
+    minWidth: 18,
+    textAlign: 'center',
   },
 });
 

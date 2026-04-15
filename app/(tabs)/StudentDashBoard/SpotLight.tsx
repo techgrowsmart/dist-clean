@@ -26,8 +26,8 @@ import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-nat
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import WebNavbar from "../../../components/ui/WebNavbar";
 import WebSidebar from "../../../components/ui/WebSidebar";
-import ThoughtsCard from "./ThoughtsCard";
-import { autoRefreshToken } from '../../../utils/tokenRefresh';
+import { addFavoriteTeacher, removeFavoriteTeacher, checkFavoriteStatus } from '../../../services/favoriteTeachers';
+import { favoritesEvents, FAVORITES_CHANGED_EVENT } from '../../../utils/favoritesEvents';
 
 const { width } = Dimensions.get("window");
 const ITEMS_PER_PAGE = 4; // Changed from 9 to 4
@@ -38,26 +38,15 @@ const SpotLight = ({ onBack }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalSpotlightCount, setTotalSpotlightCount] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
+    const [likedTeachers, setLikedTeachers] = useState<{[key: string]: boolean}>({});
 
-    // Web header and ThoughtsCard state
+    // Web header state
     const [studentName, setStudentName] = useState<string | null>(null);
     const [profileImage, setProfileImage] = useState<string | null>(null);
     const [userEmail, setUserEmail] = useState<string | null>(null);
     const [userRole, setUserRole] = useState<string | null>(null);
     const [activeMenu, setActiveMenu] = useState("Home");
     const [sidebarActiveItem, setSidebarActiveItem] = useState("Home");
-    const [posts, setPosts] = useState<any[]>([]);
-    const [postsLoading, setPostsLoading] = useState(false);
-    const [authToken, setAuthToken] = useState<string | null>(null);
-    const [userProfileCache, setUserProfileCache] = useState<Map<string, { name: string; profilePic: string }>>(new Map());
-    const [showCommentsModal, setShowCommentsModal] = useState(false);
-    const [selectedPost, setSelectedPost] = useState<any | null>(null);
-    const [postComments, setPostComments] = useState<any[]>([]);
-    const [commentText, setCommentText] = useState('');
-    const [showReportModal, setShowReportModal] = useState(false);
-    const [reportType, setReportType] = useState<'post' | 'comment'>('post');
-    const [reportItemId, setReportItemId] = useState('');
-    const [reportReason, setReportReason] = useState('');
 
     const isDesktop = Platform.OS === 'web' && Dimensions.get('window').width >= 1024;
 
@@ -135,6 +124,26 @@ const SpotLight = ({ onBack }) => {
         fetchTeachers();
     }, []);
 
+    // Check favorite status for teachers when they are loaded
+    useEffect(() => {
+        const checkFavorites = async () => {
+            if (allTeachers.length === 0) return;
+            
+            const likedStatus: {[key: string]: boolean} = {};
+            
+            for (const teacher of allTeachers) {
+                if (teacher.email) {
+                    const isFavorited = await checkFavoriteStatus(teacher.email);
+                    likedStatus[teacher.email] = isFavorited;
+                }
+            }
+            
+            setLikedTeachers(likedStatus);
+        };
+        
+        checkFavorites();
+    }, [allTeachers]);
+
     const totalPages = Math.ceil(totalSpotlightCount / ITEMS_PER_PAGE);
     
     // Calculate paginated data based on current page
@@ -195,58 +204,6 @@ const SpotLight = ({ onBack }) => {
         </View>
     );
 
-    const renderItem = ({ item, index }) => {
-        // Thanksgiving offer rendering - COMMENTED OUT
-        // if (item.type === "offer") {
-        //     return (
-        //         <View style={[styles.offerContainer, { width: '100%' }]}>
-        //             <View style={{ marginTop: 20 }}>
-        //                 <Text style={styles.thanksTitle}>🎉 Thanksgiving is Coming!</Text>
-        //                 <Text style={styles.thanksDescription}>
-        //                     Get up to 50% off every course. Keep learning daily and grow your
-        //                     skills. Don't miss it!
-        //                 </Text>
-        //             </View>
-        //         </View>
-        //     );
-        // }
-
-        let firstSubject = "Basic Subject";
-        try {
-            const tuitions = JSON.parse(item.tuitions || "[]");
-            if (Array.isArray(tuitions) && tuitions.length > 0) {
-                firstSubject = tuitions[0].subject || "Basic Subject";
-            }
-        } catch (error) {
-            console.error("Error parsing tuitions:", error);
-        }
-
-        return (
-            <View style={styles.card}>
-                <TouchableOpacity
-                    onPress={() => {
-                        router.push({
-                            pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
-                            params: {
-                                name: item.name,
-                                email: item.email,
-                                board: item.board,
-                                subject: item.subject,
-                                language: item.language,
-                                profilePic: item.profilePic,
-                            },
-                        });
-                    }}
-                    style={styles.touchableContainer}
-                >
-                    <Image source={{ uri: item.profilePic }} style={styles.image} />
-                    <Text style={styles.name} numberOfLines={1}>{item.name || "Unnamed"}</Text>
-                    <Text style={styles.subject} numberOfLines={1}>{firstSubject}</Text>
-                </TouchableOpacity>
-            </View>
-        );
-    };
-
     // Helper functions for web functionality
     const handleSidebarItemPress = (itemName: string) => {
         setSidebarActiveItem(itemName);
@@ -267,85 +224,34 @@ const SpotLight = ({ onBack }) => {
         }
     };
 
-    const formatTimeAgo = (dateString?: string): string => {
-        if (!dateString) return 'Just now';
-        if (typeof dateString === 'string' && dateString.includes('ago')) return dateString;
-        const date = new Date(dateString);
-        if (isNaN(date.getTime())) return 'Just now';
-        const diff = Date.now() - date.getTime();
-        if (diff < 0) return 'Just now';
-        const mins = Math.floor(diff / 60000);
-        const hrs = Math.floor(mins / 60);
-        const days = Math.floor(hrs / 24);
-        if (mins < 1) return 'Just now';
-        if (mins < 60) return `${mins} min. ago`;
-        if (hrs < 24) return `${hrs}h ago`;
-        return `${days}d ago`;
-    };
-
-    const initials = (name: string) =>
-        name.split(' ').map(w => w.charAt(0)).join('').toUpperCase().slice(0, 2) || '?';
-
-    const getProfileImageSource = (profilePic?: string) => {
-        if (!profilePic || ['', 'null', 'undefined'].includes(profilePic)) return null;
-        if (typeof profilePic === 'string') {
-            if (profilePic.startsWith('http') || profilePic.startsWith('file://')) return { uri: profilePic };
-            const clean = profilePic.startsWith('/') ? profilePic.substring(1) : profilePic;
-            return { uri: `${BASE_URL}/${clean}` };
+    const handleLikePress = async (teacherEmail: string) => {
+        const isLiked = likedTeachers[teacherEmail] || false;
+        
+        try {
+            // Optimistic update
+            setLikedTeachers(prev => ({
+                ...prev, 
+                [teacherEmail]: !isLiked
+            }));
+            
+            if (isLiked) {
+                await removeFavoriteTeacher(teacherEmail);
+            } else {
+                await addFavoriteTeacher(teacherEmail);
+            }
+            
+            // Trigger refresh for other components
+            favoritesEvents.emit(FAVORITES_CHANGED_EVENT);
+        } catch (error) {
+            console.error('Error toggling favorite:', error);
+            // Revert optimistic update on error
+            setLikedTeachers(prev => ({
+                ...prev, 
+                [teacherEmail]: isLiked
+            }));
         }
-        return null;
     };
 
-    const resolvePostAuthor = (post: any) => {
-        const cached = userProfileCache.get(post.author.email) || { name: '', profilePic: '' };
-        let name = cached.name || post.author.name || '';
-        let pic: string | null = cached.profilePic || post.author.profile_pic || null;
-        if (!name || name === 'null' || name.includes('@')) name = post.author.email?.split('@')[0] || 'User';
-        if (pic && !pic.startsWith('http') && !pic.startsWith('/')) pic = `/${pic}`;
-        if (pic === '' || pic === 'null') pic = null;
-        return { name, pic, role: post.author.role || 'User' };
-    };
-
-    const handleLike = (postId: string) => {
-        setPosts(prevPosts => 
-            prevPosts.map(post => 
-                post.id === postId 
-                    ? { ...post, isLiked: !post.isLiked, likes: post.isLiked ? post.likes - 1 : post.likes + 1 }
-                    : post
-            )
-        );
-    };
-
-    const openCommentsModal = (post: any) => {
-        setSelectedPost(post);
-        setShowCommentsModal(true);
-    };
-
-    // ThoughtsCard functionality (simplified)
-    useEffect(() => {
-        if (Platform.OS === 'web' && isDesktop) {
-            // Load mock posts for web
-            setPosts([
-                {
-                    id: '1',
-                    author: { email: 'teacher1@example.com', name: 'John Doe', role: 'Teacher', profile_pic: '' },
-                    content: 'Great teaching experience today!',
-                    likes: 12,
-                    createdAt: new Date().toISOString(),
-                    isLiked: false
-                },
-                {
-                    id: '2',
-                    author: { email: 'teacher2@example.com', name: 'Jane Smith', role: 'Teacher', profile_pic: '' },
-                    content: 'Students are making amazing progress.',
-                    likes: 8,
-                    createdAt: new Date(Date.now() - 3600000).toISOString(),
-                    isLiked: true
-                }
-            ]);
-            setPostsLoading(false);
-        }
-    }, [isDesktop]);
 
     // Web layout with header, sidebar, and ThoughtsCard
     if (Platform.OS === 'web' && isDesktop) {
@@ -364,153 +270,112 @@ const SpotLight = ({ onBack }) => {
                         profileImage={profileImage}
                     />
                     <View style={styles.mainLayout}>
-                        {/* Page Header */}
+                        {/* Simple Page Header - matching My Tuitions */}
                         <View style={styles.pageHeader}>
-                            <TouchableOpacity onPress={onBack} style={styles.backButton}>
-                                <Ionicons name="arrow-back" size={24} color="#333" />
-                            </TouchableOpacity>
-                            <View>
-                                <Text style={styles.pageTitle}>Spotlight Teachers</Text>
-                                <Text style={styles.pageSubtitle}>Subject Teachers</Text>
-                            </View>
-                            <View style={styles.spotlightBadge}>
-                                <Ionicons name="star" size={16} color="#856404" />
-                                <Text style={styles.spotlightBadgeText}>Spotlight</Text>
-                            </View>
+                            <BackButton onPress={onBack} color="white" />
+                            <Ionicons name="star" size={28} color="#1F2937" />
+                            <Text style={styles.pageTitle}>Spotlight Teachers</Text>
                         </View>
 
                         {/* Content */}
-                        <View style={styles.contentColumns}>
-                            <View style={styles.centerContent}>
-                                {/* Search Bar */}
-                                <View style={styles.searchSection}>
-                                    <View style={styles.searchBar}>
-                                        <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
-                                        <TextInput
-                                            style={styles.searchInput}
-                                            placeholder="Search teachers..."
-                                            value={searchQuery}
-                                            onChangeText={setSearchQuery}
-                                            placeholderTextColor="#999"
-                                        />
+                        <View style={styles.contentLayout}>
+                            {/* Teachers Grid */}
+                            <ScrollView style={styles.teachersContainer} showsVerticalScrollIndicator={false}>
+                                {loading ? (
+                                    <View style={styles.loadingContainer}>
+                                        <ActivityIndicator size="large" color="#4A7BF7" />
+                                        <Text style={styles.loadingText}>Loading spotlight teachers...</Text>
                                     </View>
-                                </View>
-
-                                {/* Teachers Grid */}
-                                <ScrollView style={styles.teachersContainer} showsVerticalScrollIndicator={false}>
+                                ) : paginatedData.length === 0 ? (
+                                    <View style={styles.emptyContainer}>
+                                        <Ionicons name="people-outline" size={60} color="#ccc" />
+                                        <Text style={styles.emptyText}>No spotlight teachers found</Text>
+                                        <Text style={styles.emptySubtext}>Check back later for featured teachers</Text>
+                                    </View>
+                                ) : (
                                     <View style={styles.teachersGrid}>
                                         {paginatedData.map((item, index) => (
                                             <View key={item.id?.toString() || item.email || `item-${index}`} style={styles.teacherCard}>
-                                                <View style={styles.teacherHeader}>
-                                                    <Image source={{ uri: item.profilePic }} style={styles.teacherImage} />
-                                                    <View style={styles.teacherOverlay}>
-                                                        <View style={styles.spotlightIcon}>
-                                                            <Ionicons name="star" size={16} color="#fff" />
-                                                        </View>
-                                                        <TouchableOpacity style={styles.likeBtn}>
-                                                            <Ionicons name="heart-outline" size={16} color="#FF6B6B" />
+                                                <TouchableOpacity
+                                                    onPress={() => {
+                                                        router.push({
+                                                            pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
+                                                            params: {
+                                                                name: item.name,
+                                                                email: item.email,
+                                                                board: item.board,
+                                                                subject: item.subject,
+                                                                language: item.language,
+                                                                profilePic: item.profilePic,
+                                                            },
+                                                        });
+                                                    }}
+                                                    activeOpacity={0.8}
+                                                >
+                                                    <View style={styles.cardImageContainer}>
+                                                        <Image source={{ uri: item.profilePic }} style={styles.teacherImage} />
+                                                        <TouchableOpacity 
+                                                            style={styles.heartButton}
+                                                            onPress={(e) => { e.stopPropagation(); handleLikePress(item.email); }}
+                                                        >
+                                                            <Ionicons 
+                                                                name={likedTeachers[item.email] ? 'heart' : 'heart-outline'} 
+                                                                size={16} 
+                                                                color={likedTeachers[item.email] ? '#FF0000' : '#FFFFFF'} 
+                                                            />
                                                         </TouchableOpacity>
                                                     </View>
-                                                </View>
-                                                <View style={styles.teacherInfo}>
-                                                    <Text style={styles.teacherName}>{item.name || "Unnamed"}</Text>
-                                                    <Text style={styles.teacherSpecialty}>Subject Teacher</Text>
-                                                    <View style={styles.teacherMeta}>
-                                                        <View style={styles.rating}>
-                                                            <Ionicons name="star" size={12} color="#FFA500" />
-                                                            <Text style={styles.ratingText}>4.8</Text>
-                                                            <Text style={styles.reviewsText}>(124)</Text>
+                                                    <View style={styles.cardBody}>
+                                                        <View style={styles.cardHeaderRow}>
+                                                            <Text style={styles.tagText}>{item.subject || 'SUBJECT'}</Text>
+                                                            <View style={styles.ratingBadge}>
+                                                                <FontAwesome name="star" size={12} color="#FFFFFF" />
+                                                                <Text style={styles.ratingText}>4.8</Text>
+                                                            </View>
                                                         </View>
-                                                        <Text style={styles.experience}>5+ years</Text>
-                                                    </View>
-                                                    <Text style={styles.teacherDescription}>
-                                                        {item.description || 'Experienced subject teacher dedicated to student success'}
-                                                    </Text>
-                                                    <View style={styles.achievements}>
-                                                        <Text style={styles.achievementsTitle}>Achievements</Text>
-                                                        <View style={styles.achievementBadge}>
-                                                            <Ionicons name="trophy" size={12} color="#856404" />
-                                                            <Text style={styles.achievementText}>Top Rated</Text>
-                                                        </View>
-                                                    </View>
-                                                    <View style={styles.teacherFooter}>
-                                                        <Text style={styles.teacherPrice}>₹{item.charge || '500'}/hr</Text>
-                                                        <View style={styles.teacherActions}>
-                                                            <TouchableOpacity style={styles.viewProfileBtn}>
-                                                                <Text style={styles.viewProfileBtnText}>View Profile</Text>
-                                                            </TouchableOpacity>
-                                                            <TouchableOpacity 
-                                                                style={styles.bookBtn}
-                                                                onPress={() => {
-                                                                    router.push({
-                                                                        pathname: "/(tabs)/StudentDashBoard/BookClass",
-                                                                        params: {
-                                                                            name: item.name,
-                                                                            email: item.email,
-                                                                            board: item.board,
-                                                                            subject: item.subject,
-                                                                            language: item.language,
-                                                                            profilePic: item.profilePic,
-                                                                        },
-                                                                    });
-                                                                }}
-                                                            >
-                                                                <Text style={styles.bookBtnText}>Book</Text>
+                                                        <Text style={styles.teacherName}>{item.name || "Unnamed"}</Text>
+                                                        <Text style={styles.teacherDesc} numberOfLines={2}>Professional teacher dedicated to student success and excellence in education.</Text>
+                                                        <View style={styles.cardFooter}>
+                                                            <TouchableOpacity style={styles.reviewBtn}>
+                                                                <Text style={styles.reviewBtnText}>Your Review</Text>
                                                             </TouchableOpacity>
                                                         </View>
                                                     </View>
-                                                </View>
+                                                </TouchableOpacity>
                                             </View>
                                         ))}
                                     </View>
-                                </ScrollView>
-
-                                {/* Pagination */}
-                                {totalPages > 1 && (
-                                    <View style={styles.pagination}>
-                                        <TouchableOpacity
-                                            style={[styles.pageBtn, currentPage === 1 && styles.pageBtnDisabled]}
-                                            onPress={() => handlePageChange(currentPage - 1)}
-                                            disabled={currentPage === 1}
-                                        >
-                                            <Ionicons name="chevron-back" size={16} color={currentPage === 1 ? "#ccc" : "#333"} />
-                                        </TouchableOpacity>
-                                        <Text style={styles.pageText}>
-                                            Page {currentPage} of {totalPages}
-                                        </Text>
-                                        <TouchableOpacity
-                                            style={[styles.pageBtn, currentPage === totalPages && styles.pageBtnDisabled]}
-                                            onPress={() => handlePageChange(currentPage + 1)}
-                                            disabled={currentPage === totalPages}
-                                        >
-                                            <Ionicons name="chevron-forward" size={16} color={currentPage === totalPages ? "#ccc" : "#333"} />
-                                        </TouchableOpacity>
-                                    </View>
                                 )}
-                            </View>
+                            </ScrollView>
 
-                            {/* Right: Thoughts Panel */}
-                            <View style={styles.rightPanel}>
-                                <Text style={styles.rightPanelTitle}>Thoughts</Text>
-                                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.thoughtsList}>
-                                    {postsLoading && posts.length === 0 && <ActivityIndicator color="#4A7BF7" style={{ marginTop: 30 }} />}
-                                    {!postsLoading && posts.length === 0 && (
-                                        <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                                            <Ionicons name="apps-outline" size={40} color="#ccc" />
-                                            <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No thoughts yet</Text>
-                                        </View>
-                                    )}
-                                    {posts.map((post) => (
-                                        <ThoughtsCard
-                                            key={post.id}
-                                            post={post}
-                                            onLike={handleLike}
-                                            onComment={openCommentsModal}
-                                            onReport={(p) => { setReportType('post'); setReportItemId(p.id); setReportReason(''); setShowReportModal(true); }}
-                                        />
+                            {/* Pagination - matching My Tuitions style */}
+                            {!loading && paginatedData.length > 0 && totalPages > 1 && (
+                                <View style={styles.pagination}>
+                                    <TouchableOpacity
+                                        style={[styles.pageBtn, currentPage === 1 && styles.pageBtnDisabled]}
+                                        onPress={() => handlePageChange(currentPage - 1)}
+                                        disabled={currentPage === 1}
+                                    >
+                                        <Ionicons name="chevron-back" size={16} color={currentPage === 1 ? "#ccc" : "#333"} />
+                                    </TouchableOpacity>
+                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                                        <TouchableOpacity
+                                            key={page}
+                                            style={[styles.pageBtn, currentPage === page && styles.pageBtnActive]}
+                                            onPress={() => handlePageChange(page)}
+                                        >
+                                            <Text style={[styles.pageText, currentPage === page && styles.pageTextActive]}>{page}</Text>
+                                        </TouchableOpacity>
                                     ))}
-                                </ScrollView>
-                            </View>
+                                    <TouchableOpacity
+                                        style={[styles.pageBtn, currentPage === totalPages && styles.pageBtnDisabled]}
+                                        onPress={() => handlePageChange(currentPage + 1)}
+                                        disabled={currentPage === totalPages}
+                                    >
+                                        <Ionicons name="chevron-forward" size={16} color={currentPage === totalPages ? "#ccc" : "#333"} />
+                                    </TouchableOpacity>
+                                </View>
+                            )}
                         </View>
                     </View>
                 </View>
@@ -521,20 +386,70 @@ const SpotLight = ({ onBack }) => {
     // Mobile layout
     return (
         <View style={styles.container}>
+            {/* Simple Header - matching My Tuitions */}
             <View style={styles.header}>
                 <View style={styles.back}>
                     <BackButton size={24} color="#000" onPress={onBack} style={styles.backButton} />
+                    <Ionicons name="star" size={24} color="#1F2937" />
                     <Text style={styles.title}>Spotlights</Text>
                 </View>
-                <Text style={styles.totalCount}>{totalSpotlightCount} Found</Text>
             </View>
 
             <View style={styles.content}>
                 <FlatList
-                    data={paginatedData} // Changed from paginatedDataWithOffer to paginatedData
+                    data={paginatedData}
                     numColumns={2}
                     keyExtractor={(item, index) => item.id?.toString() || item.email || `item-${index}`}
-                    renderItem={renderItem}
+                    renderItem={({ item, index }) => {
+                        let firstSubject = "Basic Subject";
+                        try {
+                            const tuitions = JSON.parse(item.tuitions || "[]");
+                            if (Array.isArray(tuitions) && tuitions.length > 0) {
+                                firstSubject = tuitions[0].subject || "Basic Subject";
+                            }
+                        } catch (error) {
+                            console.error("Error parsing tuitions:", error);
+                        }
+
+                        const isLiked = likedTeachers[item.email] || false;
+
+                        return (
+                            <View style={styles.card}>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        router.push({
+                                            pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
+                                            params: {
+                                                name: item.name,
+                                                email: item.email,
+                                                board: item.board,
+                                                subject: item.subject,
+                                                language: item.language,
+                                                profilePic: item.profilePic,
+                                            },
+                                        });
+                                    }}
+                                    style={styles.touchableContainer}
+                                >
+                                    <View style={styles.mobileImageContainer}>
+                                        <Image source={{ uri: item.profilePic }} style={styles.image} />
+                                        <TouchableOpacity 
+                                            style={styles.mobileLikeBtn}
+                                            onPress={(e) => { e.stopPropagation(); handleLikePress(item.email); }}
+                                        >
+                                            <Ionicons 
+                                                name={isLiked ? 'heart' : 'heart-outline'} 
+                                                size={18} 
+                                                color={isLiked ? '#FF6B6B' : '#fff'} 
+                                            />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <Text style={styles.name} numberOfLines={1}>{item.name || "Unnamed"}</Text>
+                                    <Text style={styles.subject} numberOfLines={1}>{firstSubject}</Text>
+                                </TouchableOpacity>
+                            </View>
+                        );
+                    }}
                     contentContainerStyle={styles.grid}
                     columnWrapperStyle={styles.columnWrapper}
                     showsVerticalScrollIndicator={false}
@@ -571,7 +486,24 @@ const styles = StyleSheet.create({
         maxWidth: wp('46%'),
     },
     touchableContainer: { width: '100%', alignItems: 'center' },
-    image: { width: wp('28%'), height: wp('28%'), borderRadius: wp('2%'), marginBottom: hp('1%') },
+    mobileImageContainer: { position: 'relative', marginBottom: hp('1%') },
+    mobileLikeBtn: { 
+        position: 'absolute',
+        top: 4,
+        right: 4,
+        backgroundColor: 'rgba(255,255,255,0.9)',
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+        elevation: 2
+    },
+    image: { width: wp('28%'), height: wp('28%'), borderRadius: wp('2%') },
     name: { fontSize: wp('3.8%'), textAlign: "center", fontFamily: "OpenSans_400Regular", width: '90%', marginBottom: hp('0.5%') },
     subject: { fontSize: wp('3.2%'), color: 'rgba(27,27,27,0.6)', textAlign: "center", lineHeight: hp('2%'), width: '90%' },
     paginationWrapper: { 
@@ -602,290 +534,226 @@ const styles = StyleSheet.create({
     webContainer: { flex: 1, backgroundColor: '#F5F7FB' },
     rootContainer: { flex: 1, flexDirection: 'row' },
     mainLayout: { flex: 1, backgroundColor: '#F5F7FB' },
-    pageHeader: { 
-        flexDirection: 'row', 
-        alignItems: 'center', 
+    pageHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
         justifyContent: 'space-between',
-        padding: 20,
+        padding: 24,
         backgroundColor: '#fff',
         borderBottomWidth: 1,
         borderBottomColor: '#E5E7EB',
-        marginBottom: 20
+        marginBottom: 24
     },
-    backButton: { 
-        padding: 8, 
-        borderRadius: 8, 
+    backButton: {
+        padding: 10,
+        borderRadius: 10,
         backgroundColor: '#F3F4F6'
     },
-    pageTitle: { 
-        fontSize: 24, 
-        fontWeight: '600', 
+    pageTitle: {
+        fontSize: 28,
+        fontWeight: '700',
         color: '#1F2937',
-        fontFamily: 'Poppins_600SemiBold'
+        fontFamily: 'Poppins_700Bold'
     },
-    pageSubtitle: { 
-        fontSize: 14, 
+    pageSubtitle: {
+        fontSize: 15,
         color: '#6B7280',
-        marginTop: 2
+        marginTop: 4
     },
     spotlightBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FEF3C7',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
+        backgroundColor: '#FFF7ED',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 24,
         borderWidth: 1,
-        borderColor: '#F59E0B'
+        borderColor: '#FFA500'
     },
     spotlightBadgeText: {
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: '600',
-        color: '#92400E',
-        marginLeft: 4
+        color: '#C2410C',
+        marginLeft: 6
     },
-    contentColumns: { 
-        flex: 1, 
-        flexDirection: 'row',
-        paddingHorizontal: 20,
-        gap: 20
-    },
-    centerContent: { 
+    contentLayout: {
         flex: 1,
-        maxWidth: 800
+        paddingHorizontal: 24,
+        paddingBottom: 24
     },
-    searchSection: { 
-        marginBottom: 20 
+    searchSection: {
+        marginBottom: 24
     },
-    searchBar: { 
-        flexDirection: 'row', 
+    searchBar: {
+        flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#fff',
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderWidth: 1,
+        borderRadius: 16,
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderWidth: 2,
         borderColor: '#E5E7EB',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 2
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 4
     },
-    searchIcon: { marginRight: 12 },
-    searchInput: { 
-        flex: 1, 
+    searchIcon: { marginRight: 16 },
+    searchInput: {
+        flex: 1,
         fontSize: 16,
         color: '#1F2937',
         fontFamily: 'Poppins_400Regular'
     },
-    teachersContainer: { 
+    teachersContainer: {
         flex: 1,
-        marginBottom: 20
+        marginBottom: 24
     },
-    teachersGrid: { 
-        flexDirection: 'row', 
-        flexWrap: 'wrap',
-        gap: 16
-    },
-    teacherCard: { 
-        width: '48%', 
-        backgroundColor: '#fff', 
-        borderRadius: 16,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 3
-    },
-    teacherHeader: { 
-        position: 'relative',
-        height: 120,
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
-        overflow: 'hidden'
-    },
-    teacherImage: { 
-        width: '100%', 
-        height: '100%',
-        resizeMode: 'cover'
-    },
-    teacherOverlay: { 
-        position: 'absolute', 
-        top: 8, 
-        right: 8,
+    teachersGrid: {
         flexDirection: 'row',
-        gap: 8
-    },
-    spotlightIcon: { 
-        backgroundColor: '#F59E0B', 
-        width: 32, 
-        height: 32, 
-        borderRadius: 16,
-        alignItems: 'center', 
-        justifyContent: 'center'
-    },
-    likeBtn: { 
-        backgroundColor: 'rgba(255,255,255,0.9)', 
-        width: 32, 
-        height: 32, 
-        borderRadius: 16,
-        alignItems: 'center', 
-        justifyContent: 'center'
-    },
-    teacherInfo: { 
-        padding: 16 
-    },
-    teacherName: { 
-        fontSize: 18, 
-        fontWeight: '600', 
-        color: '#1F2937',
-        fontFamily: 'Poppins_600SemiBold',
-        marginBottom: 4
-    },
-    teacherSpecialty: { 
-        fontSize: 14, 
-        color: '#6B7280',
-        marginBottom: 12
-    },
-    teacherMeta: { 
-        flexDirection: 'row', 
+        flexWrap: 'wrap',
         justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12
-    },
-    rating: { 
-        flexDirection: 'row', 
-        alignItems: 'center' 
-    },
-    ratingText: { 
-        fontSize: 14, 
-        fontWeight: '600',
-        color: '#1F2937',
-        marginLeft: 4
-    },
-    reviewsText: { 
-        fontSize: 12, 
-        color: '#6B7280',
-        marginLeft: 4
-    },
-    experience: { 
-        fontSize: 12, 
-        color: '#059669',
-        fontWeight: '500'
-    },
-    teacherDescription: { 
-        fontSize: 14, 
-        color: '#6B7280',
-        lineHeight: 20,
-        marginBottom: 12
-    },
-    achievements: { 
-        marginBottom: 12 
-    },
-    achievementsTitle: { 
-        fontSize: 12, 
-        fontWeight: '600',
-        color: '#1F2937',
-        marginBottom: 6
-    },
-    achievementBadge: { 
-        flexDirection: 'row', 
-        alignItems: 'center',
-        backgroundColor: '#FEF3C7',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 12,
-        alignSelf: 'flex-start'
-    },
-    achievementText: { 
-        fontSize: 10, 
-        fontWeight: '600',
-        color: '#92400E',
-        marginLeft: 4
-    },
-    teacherFooter: { 
-        flexDirection: 'row', 
-        justifyContent: 'space-between',
-        alignItems: 'center'
-    },
-    teacherPrice: { 
-        fontSize: 18, 
-        fontWeight: '700',
-        color: '#059669'
-    },
-    teacherActions: { 
-        flexDirection: 'row', 
-        gap: 8 
-    },
-    viewProfileBtn: { 
-        backgroundColor: '#F3F4F6',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8
-    },
-    viewProfileBtnText: { 
-        fontSize: 12, 
-        fontWeight: '600',
-        color: '#4B5563'
-    },
-    bookBtn: { 
-        backgroundColor: '#3B5BFE',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 8
-    },
-    bookBtnText: { 
-        fontSize: 12, 
-        fontWeight: '600',
-        color: '#fff'
-    },
-    pagination: { 
-        flexDirection: 'row', 
-        alignItems: 'center',
-        justifyContent: 'center',
         gap: 16,
-        paddingVertical: 20
     },
-    pageBtn: { 
-        width: 40, 
-        height: 40,
-        borderRadius: 8,
-        backgroundColor: '#fff',
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        alignItems: 'center',
-        justifyContent: 'center'
-    },
-    pageBtnDisabled: { 
-        opacity: 0.5 
-    },
-    pageText: { 
-        fontSize: 14, 
-        fontWeight: '500',
-        color: '#6B7280'
-    },
-    rightPanel: { 
-        width: 320, 
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 20,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        height: 'fit-content',
-        maxHeight: 'calc(100vh - 200px)'
-    },
-    rightPanelTitle: { 
-        fontSize: 18, 
-        fontWeight: '600',
-        color: '#1F2937',
+    teacherCard: {
+        width: '31%',
         marginBottom: 16,
+        backgroundColor: '#fff',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        overflow: 'hidden',
+        shadowColor: 'rgba(0,0,0,0.05)',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    cardImageContainer: {
+        width: '100%',
+        height: 180,
+        position: 'relative',
+    },
+    teacherImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
+    },
+    heartButton: {
+        position: 'absolute',
+        top: 12,
+        right: 12,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        borderRadius: 16,
+        padding: 6,
+    },
+    cardBody: {
+        padding: 16,
+    },
+    cardHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    tagText: {
+        color: '#3B5BFE',
+        fontFamily: 'Poppins_600SemiBold',
+        fontSize: 10,
+        letterSpacing: 0.5,
+    },
+    ratingBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#22C55E',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 10,
+    },
+    ratingText: {
+        color: '#FFFFFF',
+        fontFamily: 'Poppins_600SemiBold',
+        fontSize: 11,
+        marginLeft: 4,
+    },
+    teacherName: {
+        fontFamily: 'Poppins_600SemiBold',
+        fontSize: 14,
+        color: '#1F2937',
+        marginBottom: 4,
+    },
+    teacherDesc: {
+        fontFamily: 'Poppins_400Regular',
+        fontSize: 11,
+        color: '#6B7280',
+        lineHeight: 16,
+        marginBottom: 12,
+    },
+    cardFooter: {
+        alignItems: 'flex-end',
+    },
+    reviewBtn: {
+        backgroundColor: '#DCFCE7',
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+        borderRadius: 20,
+    },
+    reviewBtnText: {
+        color: '#1F2937',
+        fontFamily: 'Poppins_500Medium',
+        fontSize: 12,
+    },
+    loadingText: {
+        marginTop: 16,
+        fontSize: 16,
+        color: '#666',
+        fontFamily: 'Poppins_400Regular'
+    },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 60
+    },
+    emptyText: {
+        marginTop: 16,
+        fontSize: 18,
+        color: '#666',
         fontFamily: 'Poppins_600SemiBold'
     },
-    thoughtsList: { 
-        gap: 12 
+    emptySubtext: {
+        marginTop: 8,
+        fontSize: 14,
+        color: '#999',
+        fontFamily: 'Poppins_400Regular'
+    },
+    pagination: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 20,
+        paddingVertical: 24,
+        borderTopWidth: 1,
+        borderTopColor: '#E5E7EB'
+    },
+    pageBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: '#fff',
+        borderWidth: 2,
+        borderColor: '#E5E7EB',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    pageBtnDisabled: {
+        opacity: 0.4
+    },
+    pageText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#6B7280',
+        fontFamily: 'Poppins_600SemiBold'
     },
 });

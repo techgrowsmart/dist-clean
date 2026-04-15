@@ -199,19 +199,20 @@ const Messages = () => {
   
         const type = userType === "teacher" ? "teacher" : "student";
   
+        // Use Firebase-based contacts endpoint to get subscribed students
         const res = await axios.post(
-          `${BASE_URL}/api/contacts`,
+          `${BASE_URL}/api/firebase-contacts`,
           { userEmail, type },
           { headers }
         );
   
         if (res.data.success) {
           const data = res.data.contacts.map((contact: any) => ({
-            name: contact.teacherName || contact.studentName,
-            profilePic:  contact.teacherProfilePic || contact.studentProfilePic || contact.profilePic || "",
-            email: contact.teacherEmail || contact.studentEmail,
-            lastMessage: contact.lastMessage,
-            lastMessageTime: contact.lastMessageTime,
+            name: contact.teacherName || contact.studentName || contact.contactName,
+            profilePic: contact.teacherProfilePic || contact.studentProfilePic || contact.contactProfilePic || contact.profilePic || "",
+            email: contact.teacherEmail || contact.studentEmail || contact.contactEmail,
+            lastMessage: contact.lastMessage || "No messages yet",
+            lastMessageTime: contact.lastMessageTime || "Just now",
           }));
   
           setContacts(data);
@@ -378,38 +379,131 @@ useEffect(() => {
     const messagesRef = collection(db, "chats", chatId, "messages");
     const q = query(messagesRef, orderBy("timestamp", "asc"));
 
-    return onSnapshot(q, (querySnapshot) => {
-      const messagesList: Message[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        const isBroadcast = data.isBroadcast || false;
-        const isMe = data.sender === userEmail;
-        const isRecipient = data.recipient === userEmail;
+    let retryCount = 0;
+    const maxRetries = 3;
+    let retryTimeout: NodeJS.Timeout | null = null;
+    let currentUnsubscribe: (() => void) | null = null;
+    let isMounted = true;
 
-        const shouldInclude = (activeTab === "broadcast" && isBroadcast) || (activeTab === "contacts" && !isBroadcast);
-      
-        if ((isMe || isRecipient) && shouldInclude) {
-          messagesList.push({
-            id: doc.id,
-            text: data.text,
-            sender: isMe ? "me" : "other",
-            time: new Date(data.timestamp?.toDate()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            timestamp: data.timestamp?.toDate(),
-            isBroadcast: isBroadcast,
+    const createSnapshotListener = () => {
+      // Clean up any existing listener before creating a new one
+      if (currentUnsubscribe) {
+        currentUnsubscribe();
+        currentUnsubscribe = null;
+      }
+
+      const unsubscribe = onSnapshot(q, { 
+        includeMetadataChanges: false,
+      }, (querySnapshot) => {
+        try {
+          retryCount = 0; // Reset retry count on success
+          const messagesList: Message[] = [];
+          
+          if (!querySnapshot || !querySnapshot.docs) {
+            console.warn('Empty or invalid snapshot received');
+            return;
+          }
+
+          querySnapshot.forEach((doc) => {
+            try {
+              const data = doc.data();
+              const isBroadcast = data.isBroadcast || false;
+              const isMe = data.sender === userEmail;
+              const isRecipient = data.recipient === userEmail;
+
+              const shouldInclude = (activeTab === "broadcast" && isBroadcast) || (activeTab === "contacts" && !isBroadcast);
+            
+              if ((isMe || isRecipient) && shouldInclude) {
+                // Safely handle timestamp conversion
+                let timestamp: Date;
+                let time: string;
+                
+                try {
+                  if (data.timestamp && typeof data.timestamp.toDate === 'function') {
+                    timestamp = data.timestamp.toDate();
+                    time = timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                  } else {
+                    timestamp = new Date();
+                    time = timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                  }
+                } catch (timeError) {
+                  console.warn('Timestamp conversion error:', timeError);
+                  timestamp = new Date();
+                  time = timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                }
+
+                messagesList.push({
+                  id: doc.id,
+                  text: data.text || '',
+                  sender: isMe ? "me" : "other",
+                  time,
+                  timestamp,
+                  isBroadcast: isBroadcast,
+                });
+              }
+            } catch (docError) {
+              console.warn('Error processing document:', doc.id, docError);
+            }
           });
+
+          if (isMounted) {
+            setMessages((prevMessages) => ({
+              ...prevMessages,
+              [selectedContact.name]: messagesList,
+            }));
+          
+            if (messagesList.length > 0) {
+              const lastMessage = messagesList[messagesList.length - 1];
+              updateLastMessage(selectedContact.name, lastMessage.text, lastMessage.time);
+            }
+          }
+        } catch (error) {
+          console.error('Error processing messages snapshot:', error);
+        }
+      }, (error) => {
+        console.error('Firestore snapshot error:', error);
+        
+        // Implement retry logic for connection errors
+        if (retryCount < maxRetries && isMounted &&
+            (error.message?.includes('body stream already read') || 
+             error.message?.includes('transport errored') ||
+             error.message?.includes('WebChannel') ||
+             error.code === 'unavailable' ||
+             error.code === 'resource-exhausted')) {
+          
+          retryCount++;
+          console.log(`🔄 Retrying Firestore connection (${retryCount}/${maxRetries})...`);
+          
+          if (retryTimeout) {
+            clearTimeout(retryTimeout);
+          }
+          
+          retryTimeout = setTimeout(() => {
+            if (isMounted) {
+              console.log('🔄 Attempting to re-establish Firestore connection...');
+              createSnapshotListener();
+            }
+          }, Math.pow(2, retryCount) * 1000); // Exponential backoff
+        } else {
+          console.error('❌ Max retries reached or non-retryable error:', error);
         }
       });
 
-      setMessages((prevMessages) => ({
-        ...prevMessages,
-        [selectedContact.name]: messagesList,
-      }));
-    
-      if (messagesList.length > 0) {
-        const lastMessage = messagesList[messagesList.length - 1];
-        updateLastMessage(selectedContact.name, lastMessage.text, lastMessage.time);
+      currentUnsubscribe = unsubscribe;
+      return unsubscribe;
+    };
+
+    createSnapshotListener();
+
+    return () => {
+      isMounted = false;
+      if (currentUnsubscribe) {
+        currentUnsubscribe();
       }
-    });
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
+    };
   }, [selectedContact, userEmail]);
 
   const updateLastMessage = (contactName: string, lastMessage: string, lastMessageTime: string) => {

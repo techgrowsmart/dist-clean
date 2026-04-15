@@ -3,6 +3,7 @@ import React from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View, Linking, Platform } from "react-native";
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
 import BillIcon from "../../../assets/svgIcons/Bill";
+import Book from "../../../assets/svgIcons/Book";
 import ContactPhoneIcon from "../../../assets/svgIcons/ContactPhone";
 import FaqIcon from "../../../assets/svgIcons/FaqIcon";
 import LogoutIcon from "../../../assets/svgIcons/Logout";
@@ -17,6 +18,7 @@ import { styles } from "./Student";
 
 const menuItems = [
   { name: "My Tuitions", icon: TutorCap },
+  { name: "Favourite", icon: Book },
   { name: "Share", icon: ShareIcon },
   { name: "Subscription", icon: SubscriptionIcon },
   { name: "Billing", icon: BillIcon },
@@ -96,6 +98,8 @@ const Sidebar = ({ visible, onClose, activeItem, activeSubText, setActiveSubText
       Linking.openURL("https://gogrowsmart.com/terms-and-conditions");
     } else if (itemName === "Privacy Policy") {
       Linking.openURL("https://gogrowsmart.com/privacy-policy");
+    } else if (itemName === "Favourite") {
+      router.push("/(tabs)/StudentDashBoard/Favourite");
     } else {
       onItemPress(itemName);
     }
@@ -110,7 +114,7 @@ const Sidebar = ({ visible, onClose, activeItem, activeSubText, setActiveSubText
         // Force redirect to login page on web
         window.location.href = '/login';
       } else {
-        router.replace("/(tabs)/LoginScreen");
+        router.replace("/login");
       }
       
       Toast.show({
@@ -134,7 +138,7 @@ const Sidebar = ({ visible, onClose, activeItem, activeSubText, setActiveSubText
       if (Platform.OS === "web") {
         window.location.href = '/login';
       } else {
-        router.replace("/(tabs)/LoginScreen");
+        router.replace("/login");
       }
       onClose();
     } finally {
@@ -221,7 +225,7 @@ const Sidebar = ({ visible, onClose, activeItem, activeSubText, setActiveSubText
       {/* Logout Modal */}
       {showLogoutModal && (
         <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#FFF", justifyContent: "center", alignItems: "center", zIndex: 1000, paddingHorizontal: wp('8%') }}>
-          <TouchableOpacity style={{ position: "absolute", top: hp('6%'), right: wp('6%'), zIndex: 1001, backgroundColor: "#F3F4F6", width: wp('8%'), height: wp('8%'), borderRadius: wp('4%'), justifyContent: "center", alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 }} onPress={() => setShowLogoutModal(false)}>
+          <TouchableOpacity style={{ position: "absolute", top: hp('6%'), right: wp('6%'), zIndex: 1001, backgroundColor: "#F3F4F6", width: wp('8%'), height: wp('8%'), borderRadius: wp('4%'), justifyContent: "center", alignItems: "center", ...Platform.select({ web: { boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }, default: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 } }) }} onPress={() => setShowLogoutModal(false)}>
             <Text style={{ fontSize: wp('4%'), fontWeight: "600", color: "#6B7280", fontFamily: "Poppins" }}>×</Text>
           </TouchableOpacity>
           <Text style={{ color: "#111827", fontSize: wp('5%'), fontWeight: "700", textAlign: "center", fontFamily: "Poppins", marginBottom: hp('2%') }}>

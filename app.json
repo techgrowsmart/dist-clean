@@ -53,7 +53,7 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
+      "output": "server",
       "favicon": "./assets/images/growsmart-icon.png",
       "excludedPlatforms": ["ios", "android"]
     },
@@ -89,7 +89,10 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {},
+      "router": {
+        "ssr": false,
+        "prefetch": false
+      },
       "eas": {
         "projectId": "05fec7d8-c438-4568-a18d-cd8eceefe083"
       },

@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { getAuthData } from '../../../utils/authStorage';
-import { BASE_URL } from '../../../config';
+import { BASE_URL, PORTAL_DOMAIN } from '../../../config';
 import WebHeader from '../../../components/ui/TeacherWebHeader';
 import WebSidebar from '../../../components/ui/TeacherWebSidebar';
 import { TeacherThoughtsBackground } from '../../../components/ui/TeacherThoughtsCard';
@@ -28,7 +28,7 @@ import {
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
-import { Feather, FontAwesome, FontAwesome6, MaterialIcons } from '@expo/vector-icons';
+import { Feather, FontAwesome, FontAwesome6, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 const { width } = Dimensions.get('window');
@@ -62,11 +62,16 @@ const getDimension = (mobile: number, tablet: number, desktop: number) => {
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const APP_DOMAIN      = 'gogrowsmart.com';
+const APP_DOMAIN      = PORTAL_DOMAIN || 'portal.gogrowsmart.com';
 const PLAY_STORE_LINK = 'https://play.google.com/store/apps/details?id=com.gogrowsmart.app';
 const APP_STORE_LINK  = 'https://apps.apple.com/app/gogrowsmart';
 const CONTACT_EMAIL   = 'contact@gogrowsmart.com';
-const SHARE_MESSAGE   = `🎓 Level up your teaching with GrowSmart!\n\nConnect with students, share your expertise & grow your tutoring business.\n\n📲 Download now: ${PLAY_STORE_LINK}\n🌐 Visit: https://${APP_DOMAIN}`;
+
+// Share message generator - includes referral code when available
+const getShareMessage = (referralCode?: string) => {
+  const refParam = referralCode ? `?ref=${referralCode}` : '';
+  return `🎓 Level up your teaching with GrowSmart!\n\nConnect with students, share your expertise & grow your tutoring business.\n\n📲 Download now: ${PLAY_STORE_LINK}\n🌐 Visit: https://${APP_DOMAIN}${refParam}${referralCode ? `\n\nUse my referral code: ${referralCode}` : ''}`;
+};
 
 // ─── Share Items ───────────────────────────────────────────────────────────────
 const SHARE_ITEMS = [
@@ -287,9 +292,20 @@ const Share = () => {
 
   const [teacherName, setTeacherName] = useState('');
   const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [auth, setAuth] = useState<any>(null);
+  const [auth, setAuth] = useState<Record<string, any> | null>(null);
+  const [teacherId, setTeacherId] = useState<string>('');
   const [sidebarActiveItem, setSidebarActiveItem] = useState("Share");
   const [copied, setCopied] = useState(false);
+
+  // Generate referral code from teacher data
+  const getReferralCode = () => {
+    if (teacherId) return `TEACHER_${teacherId}`;
+    if (auth?.teacherId) return `TEACHER_${auth.teacherId}`;
+    if (auth?.userId) return `TEACHER_${auth.userId}`;
+    if (auth?.id) return `TEACHER_${auth.id}`;
+    if (auth?.email) return `TEACHER_${auth.email.split('@')[0]}`;
+    return '';
+  };
 
   // Fetch teacher data
   useEffect(() => {
@@ -297,9 +313,12 @@ const Share = () => {
       try {
         const authData = await getAuthData();
         if (authData?.token) {
-          setAuth(authData);
+          setAuth(authData as any);
           setTeacherName(authData.name || '');
           setProfileImage(authData.profileImage || null);
+          // Try to extract teacher ID from auth data or token
+          const anyAuth = authData as any;
+          setTeacherId(anyAuth.teacherId || anyAuth.userId || anyAuth.id || anyAuth._id || '');
         }
       } catch (error) {
         console.error('Error fetching teacher data:', error);
@@ -307,6 +326,24 @@ const Share = () => {
     };
 
     fetchTeacherData();
+  }, []);
+
+  // Back handler
+  const handleBackPress = () => {
+    router.back();
+  };
+
+  // ESC key handler for web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleBackPress();
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
   }, []);
 
   const handleSelect = (item: string) => {
@@ -347,69 +384,152 @@ const Share = () => {
 
   // ── Share handler ───────────────────────────────────────────────────────────
   const handleShare = async (item: typeof SHARE_ITEMS[0]) => {
-    const encodedMsg  = encodeURIComponent(SHARE_MESSAGE);
-    const encodedLink = encodeURIComponent(PLAY_STORE_LINK);
+    const referralCode = getReferralCode();
+    const shareMessage = getShareMessage(referralCode);
+    const refParam = referralCode ? `?ref=${referralCode}` : '';
+    const shareUrl = `https://${APP_DOMAIN}${refParam}`;
+    
+    const encodedMsg  = encodeURIComponent(shareMessage);
+    const encodedLink = encodeURIComponent(`${PLAY_STORE_LINK}${refParam ? `&utm_source=${referralCode}` : ''}`);
+    const encodedPortalLink = encodeURIComponent(shareUrl);
 
     try {
       switch (item.title) {
         case 'Copy Link': {
-          await Clipboard.setStringAsync(`https://${APP_DOMAIN}\n${PLAY_STORE_LINK}`);
+          const refCode = getReferralCode();
+          const refParam = refCode ? `?ref=${refCode}` : '';
+          const copyText = `https://${APP_DOMAIN}${refParam}\n${PLAY_STORE_LINK}${refParam ? `&utm_source=${refCode}` : ''}${refCode ? `\nReferral Code: ${refCode}` : ''}`;
+          await Clipboard.setStringAsync(copyText);
           setCopied(true);
           setTimeout(() => setCopied(false), 2500);
           break;
         }
         case 'WhatsApp': {
-          const url = `whatsapp://send?text=${encodedMsg}`;
-          const webUrl = `https://wa.me/?text=${encodedMsg}`;
-          const canOpen = await Linking.canOpenURL(url);
-          Linking.openURL(canOpen ? url : webUrl);
+          try {
+            // Try native share first (allows contact selection on mobile)
+            if (Platform.OS !== 'web') {
+              const result = await RNShare.share({
+                title: '🎓 Join me on GrowSmart!',
+                message: shareMessage,
+              });
+              if (result.action === RNShare.sharedAction) {
+                console.log('Shared via native share');
+              }
+            } else {
+              // Web: Open WhatsApp Web with message
+              const webUrl = `https://web.whatsapp.com/send?text=${encodedMsg}`;
+              const canOpen = await Linking.canOpenURL(`whatsapp://send?text=${encodedMsg}`);
+              if (canOpen) {
+                // Try to open WhatsApp app with contact selection
+                await Linking.openURL(`whatsapp://send?text=${encodedMsg}`);
+              } else {
+                // Fallback to WhatsApp Web
+                await Linking.openURL(webUrl);
+              }
+            }
+          } catch (err) {
+            console.error('WhatsApp share error:', err);
+            // Fallback to direct URL
+            const fallbackUrl = `https://wa.me/?text=${encodedMsg}`;
+            await Linking.openURL(fallbackUrl);
+          }
           break;
         }
         case 'Facebook': {
-          const url = `https://www.facebook.com/sharer/sharer.php?u=${encodedLink}&quote=${encodedMsg}`;
-          Linking.openURL(url);
+          try {
+            const url = `https://www.facebook.com/sharer/sharer.php?u=${encodedPortalLink}&quote=${encodedMsg}`;
+            await Linking.openURL(url);
+          } catch (err) {
+            // Fallback to native share
+            await RNShare.share({
+              title: '🎓 Join me on GrowSmart!',
+              message: shareMessage,
+            });
+          }
           break;
         }
         case 'LinkedIn': {
-          const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedLink}&summary=${encodedMsg}`;
-          Linking.openURL(url);
+          try {
+            const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedPortalLink}&summary=${encodedMsg}`;
+            await Linking.openURL(url);
+          } catch (err) {
+            // Fallback to native share
+            await RNShare.share({
+              title: '🎓 Join me on GrowSmart!',
+              message: shareMessage,
+            });
+          }
           break;
         }
         case 'Messenger': {
-          const deepLink = `fb-messenger://share?link=${encodedLink}`;
-          const webLink  = `https://www.facebook.com/dialog/send?link=${encodedLink}&app_id=145634995501895&redirect_uri=${encodedLink}`;
-          Linking.openURL(deepLink).catch(() => Linking.openURL(webLink));
+          try {
+            const deepLink = `fb-messenger://share?link=${encodedPortalLink}`;
+            const webLink  = `https://www.facebook.com/dialog/send?link=${encodedPortalLink}&app_id=145634995501895&redirect_uri=${encodedPortalLink}`;
+            const canOpen = await Linking.canOpenURL(deepLink);
+            if (canOpen) {
+              await Linking.openURL(deepLink);
+            } else {
+              await Linking.openURL(webLink);
+            }
+          } catch (err) {
+            // Fallback to native share
+            await RNShare.share({
+              title: '🎓 Join me on GrowSmart!',
+              message: shareMessage,
+            });
+          }
           break;
         }
         case 'Mail': {
           const subject = encodeURIComponent('🎓 Join me on GrowSmart – Best Teaching Platform!');
-          const body    = encodeURIComponent(SHARE_MESSAGE);
+          const body    = encodeURIComponent(shareMessage);
           Linking.openURL(`mailto:?subject=${subject}&body=${body}`);
           break;
         }
         case 'Twitter / X': {
-          const tweet = encodeURIComponent(`🎓 Grow your teaching business with @GrowSmart!\nDownload: ${PLAY_STORE_LINK} #Education #OnlineTeaching`);
+          const refCode = getReferralCode();
+          const tweetText = refCode 
+            ? `🎓 Grow your teaching business with @GrowSmart!\nJoin using my referral: https://${APP_DOMAIN}?ref=${refCode}\nDownload: ${PLAY_STORE_LINK} #Education #OnlineTeaching #GrowSmart`
+            : `🎓 Grow your teaching business with @GrowSmart!\nDownload: ${PLAY_STORE_LINK} #Education #OnlineTeaching`;
+          const tweet = encodeURIComponent(tweetText);
           const url = `https://twitter.com/intent/tweet?text=${tweet}`;
           Linking.openURL(url);
           break;
         }
         case 'Telegram': {
-          const url = `https://t.me/share/url?url=${encodedLink}&text=${encodedMsg}`;
-          Linking.openURL(url);
+          try {
+            const url = `https://t.me/share/url?url=${encodedPortalLink}&text=${encodedMsg}`;
+            const deepLink = `tg://msg_url?url=${encodedPortalLink}&text=${encodedMsg}`;
+            const canOpen = await Linking.canOpenURL(deepLink);
+            if (canOpen && Platform.OS !== 'web') {
+              await Linking.openURL(deepLink);
+            } else {
+              await Linking.openURL(url);
+            }
+          } catch (err) {
+            // Fallback to web URL
+            const webUrl = `https://t.me/share/url?url=${encodedPortalLink}&text=${encodedMsg}`;
+            await Linking.openURL(webUrl);
+          }
           break;
         }
         default: {
           // Native share sheet
+          const refCode = getReferralCode();
           await RNShare.share({
-            title:   '🎓 GrowSmart – Teach & Earn',
-            message: SHARE_MESSAGE,
+            title:   '🎓 GrowSmart – Teach & Inspire',
+            message: getShareMessage(refCode),
             url:     PLAY_STORE_LINK,  // iOS only
           });
         }
       }
     } catch (err) {
       console.error('Share error:', err);
-      Alert.alert('Oops!', 'Could not open the share option. Please try again.');
+      Alert.alert(
+        'Share Failed',
+        'Could not open the share option. Please try again or use Copy Link.',
+        [{ text: 'OK', style: 'default' }]
+      );
     }
   };
 
@@ -445,15 +565,20 @@ const Share = () => {
         >
           {/* Page header */}
           <View style={styles.pageHeader}>
-            <View>
-              <Text style={styles.pageTitle}>Share GrowSmart</Text>
-              <Text style={styles.pageSubtitle}>
-                Invite students & fellow teachers to join the platform
-              </Text>
-            </View>
-            <View style={styles.headerBadge}>
-              <Feather name="gift" size={14} color={COLORS.gold} />
-              <Text style={styles.headerBadgeText}>Refer & Earn</Text>
+            <View style={styles.pageHeaderLeft}>
+              <TouchableOpacity
+                style={styles.backBtn}
+                onPress={handleBackPress}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="arrow-back" size={24} color={COLORS.textDark} />
+              </TouchableOpacity>
+              <View>
+                <Text style={styles.pageTitle}>Share GrowSmart</Text>
+                <Text style={styles.pageSubtitle}>
+                  Invite students & fellow teachers to join the platform
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -492,7 +617,9 @@ const Share = () => {
               <TouchableOpacity
                 style={styles.linkCopyBtn}
                 onPress={async () => {
-                  await Clipboard.setStringAsync(`https://${APP_DOMAIN}`);
+                  const refCode = getReferralCode();
+                  const refParam = refCode ? `?ref=${refCode}` : '';
+                  await Clipboard.setStringAsync(`https://${APP_DOMAIN}${refParam}`);
                   setCopied(true);
                   setTimeout(() => setCopied(false), 2500);
                 }}
@@ -506,13 +633,6 @@ const Share = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Info footer */}
-            <View style={styles.footer}>
-              <MaterialIcons name="info-outline" size={14} color={COLORS.textMuted} />
-              <Text style={styles.footerText}>
-                Earn rewards every time a student joins using your link.
-              </Text>
-            </View>
           </View>
         </ScrollView>
       </View>
@@ -528,6 +648,7 @@ const styles = StyleSheet.create({
   contentLayout: {
     flex: 1,
     flexDirection: 'row',
+    gap: 8,
   },
   mainWrapper: {
     flex: 1,
@@ -547,6 +668,24 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  pageHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  backBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
   pageTitle: {
     fontSize: 22,

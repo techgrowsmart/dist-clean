@@ -18,7 +18,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    TouchableWithoutFeedback,
+    Pressable,
     View
 } from "react-native";
 import { 
@@ -72,11 +72,16 @@ export default function LoginScreen() {
 
       if (!response.ok) {
         if (data.isRegistered === false) {
-          Toast.show({ type: "error", text1: data.message });
-          router.push("/SignUp");
+          setEmailError("Account not found. Please sign up first.");
+          Toast.show({ type: "error", text1: data.message, text2: "Redirecting to Sign Up..." });
+          setTimeout(() => router.push("/SignUp"), 2000);
           return;
         }
-        Toast.show({ type: "error", text1: data.message });
+        if (response.status === 404) {
+          setEmailError("Account not found. Please check your email or sign up.");
+          return;
+        }
+        setEmailError(data.message || "Login failed. Please try again.");
         return;
       }
 
@@ -134,6 +139,7 @@ export default function LoginScreen() {
         }
       }
     } catch (error) {
+      setEmailError("Network error. Please check your connection and try again.");
       Toast.show({
         type: "error",
         text1: "Something went wrong",
@@ -154,8 +160,7 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.innerContainer}>
+      <Pressable onPress={Keyboard.dismiss} style={styles.innerContainer}>
           <Image source={require("../../assets/image/Login-screen.png")} style={styles.logo} resizeMode="contain" />
           <Text style={styles.head}>Log in</Text>
           
@@ -184,8 +189,7 @@ export default function LoginScreen() {
               <Text style={styles.signupLink}> Sign Up</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </TouchableWithoutFeedback>
+        </Pressable>
     </KeyboardAvoidingView>
   );
 }
@@ -198,8 +202,7 @@ const styles = StyleSheet.create({
   inputLabel: { alignSelf: "flex-start", color: "#606060", fontSize: wp("2.8%"), fontFamily: "Mulish_Regular", marginBottom: hp("1%"), paddingLeft: hp("2%") },
   input: { width: "100%", height: hp("7%"), backgroundColor: "#fff", borderRadius: wp("2.5%"), paddingHorizontal: wp("4%"), color: "#03070E", marginBottom: hp("1%"), fontSize: wp("3.8%"), fontFamily: "Mulish_Regular", borderWidth: hp("0.16%"), borderColor: "#5d674e" },
   inputError: { borderColor: "red", borderWidth: 1 },
-  errorText: { alignSelf: "flex-start", color: "red", fontSize: wp("3.2%"), marginBottom: hp("1%"), fontFamily: "Mulish_Regular" },
-  button: { width: "100%", height: hp("6.5%"), backgroundColor: "#5f5fff", borderRadius: wp("2.5%"), justifyContent: "center", alignItems: "center", marginTop: hp("2%") },
+  errorText: { alignSelf: "flex-start", color: "red", fontSize: wp("3.2%"), marginBottom: hp("1%"), fontFamily: "Mulish_Regular" },  button: { width: "100%", height: hp("6.5%"), backgroundColor: "#5f5fff", borderRadius: wp("2.5%"), justifyContent: "center", alignItems: "center", marginTop: hp("2%") },
   buttonDisabled: { backgroundColor: "#a0a0ff" },
   buttonText: { color: "#fff", fontSize: wp("4%"), fontFamily: "Mulish_Medium" },
   signupContainer: { flexDirection: "row", alignItems: "center", marginTop: hp("10%") },

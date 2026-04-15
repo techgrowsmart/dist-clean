@@ -1,479 +1,391 @@
+import axios from 'axios';
+import { Platform } from 'react-native';
 import { BASE_URL } from '../config';
 import { clearAllStorage, getAuthData, storeAuthData } from '../utils/authStorage';
 
-// Development mode flag - DISABLED to use real backend
-const IS_DEVELOPMENT_MODE = false; // Use real backend API
+// Check if user is a test user
+const isTestUser = (email: string) => {
+  const testEmails = ['test31@example.com', 'test@example.com', 'admin@test.com'];
+  return testEmails.includes(email);
+};
 
-// Check if we're in a static build (dist) - Enable smart test user bypass for production
-const IS_STATIC_BUILD = typeof window !== 'undefined' && (
-  window.location?.hostname !== 'localhost' && 
-  window.location?.hostname !== '127.0.0.1'
+// Create axios instance with default configuration
+const apiClient = axios.create({
+  baseURL: BASE_URL,
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  }
+});
+
+// Request interceptor to add auth token and handle CORS
+apiClient.interceptors.request.use(async (config) => {
+  try {
+    const auth = await getAuthData();
+    
+    if (auth && auth.token) {
+      config.headers.Authorization = `Bearer ${auth.token}`;
+    }
+    
+    // Add platform-specific headers
+    if (Platform.OS === 'web') {
+      config.headers['X-Requested-With'] = 'XMLHttpRequest';
+    }
+    
+    console.log('API Request:', {
+      url: config.baseURL + config.url,
+      method: config.method,
+      hasAuth: !!auth?.token
+    });
+    
+    return config;
+  } catch (error) {
+    console.error('Request interceptor error:', error);
+    return config;
+  }
+});
+
+// Response interceptor with enhanced error handling
+apiClient.interceptors.response.use(
+  (response) => {
+    console.log('API Response:', {
+      status: response.status,
+      url: response.config.url
+    });
+    return response;
+  },
+  async (error) => {
+    console.error('API Error:', {
+      message: error.message,
+      status: error.response?.status,
+      url: error.config?.url
+    });
+    
+    // Enhanced CORS error handling
+    if (error.message?.includes('CORS') || error.response?.status === 0) {
+      console.error('CORS Error Detected:', {
+        origin: typeof window !== 'undefined' ? window.location.origin : 'N/A',
+        target: BASE_URL
+      });
+      
+      if (Platform.OS === 'web') {
+        throw new Error('CORS error: Backend configuration updated to allow portal.gogrowsmart.com');
+      }
+    }
+    
+    throw new Error(error.message || 'Network error: Unable to connect to server.');
+  }
 );
 
-export interface LoginResponse {
-  success: boolean;
-  message?: string;
-  token?: string;
-  user?: {
-    id: string;
-    email: string;
-    name: string;
-    role: string;
-    profileImage?: string;
-  };
-  isTestUser?: boolean;
-  isRegistered?: boolean;
-  status?: string;
-  otpId?: string;
-}
-
-export interface OTPResponse {
-  success: boolean;
-  message?: string;
-  otpId?: string;
-  email?: string;
-  isTestUser?: boolean;
-  token?: string;
-  role?: string;
-  name?: string;
-}
-
-export interface SignupResponse {
-  success: boolean;
-  message?: string;
-  user?: {
-    id: string;
-    email: string;
-    name: string;
-    role: string;
-  };
-  otpId?: string;
-}
-
-class AuthService {
+export class AuthService {
   private async makeRequest(endpoint: string, options: RequestInit = {}) {
     try {
-      console.log('🔍 API Request:', { endpoint, BASE_URL });
+      console.log('API Request:', { endpoint, BASE_URL });
       
       const url = `${BASE_URL}/api${endpoint}`;
       
       // Get auth token for authenticated requests
       const authData = await getAuthData();
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        ...options.headers,
-      };
-
-      // Check if this is a test user with a fake token
-      const isTestUserToken = authData?.token && (
-        authData.token.includes('test-token') || 
-        authData.token.includes('test-bypass')
-      );
-
-      // Only add Authorization header for all tokens including test users for real database access
-      if (authData?.token) {
-        headers['Authorization'] = `Bearer ${authData.token}`;
-        if (isTestUserToken) {
-          // Add test user identifier for backend to handle appropriately
-          headers['X-Test-User'] = authData.email;
-          console.log('🔧 Test user accessing real database:', authData.email);
-        }
-      }
-
-      // Enhanced CORS handling for deployed backend
+      
       const requestOptions: RequestInit = {
         ...options,
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          ...(authData?.token && { Authorization: `Bearer ${authData.token}` }),
+          ...options.headers
+        },
         mode: 'cors',
-        credentials: 'omit', // Fix CORS issues
+        credentials: 'omit'
       };
-
+      
       // Add timeout to prevent hanging
-      const response = await Promise.race([
-        fetch(url, requestOptions),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timeout')), 10000) // 10 second timeout
-        )
-      ]) as Response;
-
-      // Handle CORS/no-response scenarios
-      if (!response || response.type === 'opaque') {
-        console.log('🌐 CORS or network issue detected, trying alternative approach...');
-        throw new Error('CORS policy blocked the request. Please ensure the backend allows requests from this origin.');
-      }
-
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      
+      const response = await fetch(url, {
+        ...requestOptions,
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
       // Check if response is HTML (error page) instead of JSON
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('text/html')) {
-        throw new Error('Network Error - Server returned HTML instead of JSON');
+        throw new Error('Server error: Received HTML instead of JSON');
       }
-
-      // Clone response before reading to avoid "body stream already read" error
-      const clonedResponse = response.clone();
-      const data = await response.json();
-
+      
       if (!response.ok) {
-        throw new Error(data.message || `HTTP error! status: ${response.status}`);
-      }
+        // Try to get error message from response body
+        let errorMessage = '';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || '';
+        } catch (e) {
+          // If can't parse JSON, use status text
+          errorMessage = response.statusText || '';
+        }
 
-      return data;
+        // Handle different HTTP status codes with backend message
+        switch (response.status) {
+          case 400:
+            throw new Error(errorMessage || 'Bad request: Please check your input data');
+          case 401:
+            throw new Error(errorMessage || 'Unauthorized: Please login again');
+          case 403:
+            throw new Error(errorMessage || 'Forbidden: You do not have permission to perform this action');
+          case 404:
+            throw new Error(errorMessage || 'Not found: The requested resource was not found');
+          case 409:
+            throw new Error(errorMessage || 'Conflict: This resource already exists');
+          case 429:
+            throw new Error(errorMessage || 'Too many requests: Please try again later');
+          case 500:
+            throw new Error(errorMessage || 'Server error: Please try again later');
+          default:
+            throw new Error(errorMessage || `HTTP ${response.status}: ${response.statusText || 'Request failed'}`);
+        }
+      }
+      
+      return await response.json();
     } catch (error: any) {
-      console.error('API request error:', error);
-      console.log('🔍 Error details:', {
+      console.error('Service Error:', {
         message: error.message,
         endpoint,
-        method: options.method,
+        baseURL: BASE_URL
       });
-
-      // Enhanced CORS error handling
-      if (error.message.includes('CORS') || error.message.includes('Failed to fetch')) {
-        console.log('🌐 CORS error detected, this might be a backend configuration issue');
-        throw new Error('Unable to connect to server. Please check your network connection or try again later.');
+      
+      // Handle specific error types
+      if (error.name === 'AbortError') {
+        throw new Error('Request timeout: Please check your connection and try again');
+      }
+      
+      if (error.message?.includes('Failed to fetch')) {
+        throw new Error('Network error: Unable to connect to server');
+      }
+      
+      if (error.message?.includes('CORS')) {
+        throw new Error('Connection error: Please try again in a moment');
       }
       
       throw error;
     }
   }
 
-  // Send OTP for email verification (login/signup)
-  async sendOTP(email: string, role: string, isSignup: boolean = false, fullName?: string): Promise<OTPResponse> {
+  async login(email: string, password: string) {
     try {
-      // Basic email validation
-      if (!email || typeof email !== 'string') {
-        throw new Error('Please enter a valid email address');
-      }
-
-      // Trim whitespace
-      const trimmedEmail = email.trim();
-      if (!trimmedEmail) {
-        throw new Error('Please enter a valid email address');
-      }
-
-      // Enhanced email validation
-      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-      if (!emailRegex.test(trimmedEmail)) {
-        throw new Error('Please enter a valid email address');
-      }
-
-      // Enhanced test user detection for production debugging
-      const isTestUser = trimmedEmail === 'student1@example.com' || 
-                        trimmedEmail === 'teacher56@example.com' ||
-                        trimmedEmail.includes('test') ||
-                        trimmedEmail.includes('example.com');
+      console.log('Login attempt:', { email });
       
-      if (isTestUser) {
-        console.log('🔧 Test user detected, connecting to real database:', trimmedEmail);
-        console.log('🌐 Backend URL:', BASE_URL);
-        console.log('📡 Headers will include: Authorization + X-Test-User');
-        
-        // Use real backend for test users
-        const endpoint = isSignup ? '/signup' : '/auth/login';
-        const response = await this.makeRequest(endpoint, {
-          method: 'POST',
-          body: JSON.stringify({ 
-            email: trimmedEmail,
-            ...(isSignup && { fullName: fullName || trimmedEmail.split('@')[0], phonenumber: '+910000000000' })
-          }),
-        });
-
-        return {
-          success: true,
-          message: response.message || 'OTP sent to test user',
-          otpId: response.otpId,
-          email: trimmedEmail,
-          isTestUser: true,
-        };
+      // Check if test user
+      if (isTestUser(email)) {
+        console.log('Test user detected, using real database');
       }
+      
+      const response = await this.makeRequest('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
+      });
+      
+      if (response.token) {
+        await storeAuthData(response);
+        return { success: true, user: response.user };
+      } else {
+        throw new Error(response.message || 'Login failed');
+      }
+    } catch (error: any) {
+      console.error('Login error:', error);
+      throw error;
+    }
+  }
 
-      // Regular users - use backend
+  async register(userData: any) {
+    try {
+      console.log('Registration attempt:', userData);
+      
+      const response = await this.makeRequest('/signup', {
+        method: 'POST',
+        body: JSON.stringify(userData)
+      });
+      
+      if (response.success || response.otpId) {
+        return { success: true, otpId: response.otpId };
+      } else {
+        throw new Error(response.message || 'Registration failed');
+      }
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      
+      // Handle specific registration errors
+      if (error.message?.includes('Conflict')) {
+        throw new Error('This email is already registered. Please try logging in instead.');
+      }
+      
+      throw error;
+    }
+  }
+
+  async sendOTP(email: string, password?: string, isSignup: boolean = false, name?: string, phone?: string) {
+    try {
+      console.log('Sending OTP:', { email, isSignup, phone });
+      
       const endpoint = isSignup ? '/signup' : '/auth/login';
+      const phoneNumber = phone && phone.trim() ? phone : '+0000000000';
+      const body = isSignup 
+        ? { email, fullName: name, phonenumber: phoneNumber, role: 'student' }
+        : { email, password };
+      
       const response = await this.makeRequest(endpoint, {
         method: 'POST',
-        body: JSON.stringify({ 
-          email: trimmedEmail,
-          ...(isSignup && { fullName: fullName || trimmedEmail.split('@')[0], phonenumber: '+910000000000' })
-        }),
+        body: JSON.stringify(body)
       });
-
+      
+      // Check if it's a test user that bypasses OTP
+      if (response.isTestUser && response.token) {
+        return {
+          success: true,
+          isTestUser: true,
+          token: response.token,
+          user: response.user,
+          role: response.role
+        };
+      }
+      
       return {
         success: true,
-        message: response.message || 'OTP sent successfully',
         otpId: response.otpId,
-        email: trimmedEmail,
+        message: response.message || 'OTP sent successfully'
       };
     } catch (error: any) {
       console.error('Send OTP error:', error);
       
-      // Check if it's a "not registered" error to trigger signup flow
-      if (error.message.includes('not registered') || error.message.includes('sign up')) {
-        throw error; // Re-throw to handle signup flow
+      // Handle specific OTP errors
+      if (error.message?.includes('already registered')) {
+        throw new Error('This email is already registered. Please try logging in instead.');
       }
       
-      // Test user fallback in static builds
-      if (IS_STATIC_BUILD && (email === 'student1@example.com' || email === 'teacher56@example.com')) {
-        console.log('🔧 Static build test user fallback');
-        return {
-          success: true,
-          message: 'Test user bypass enabled',
-          otpId: 'test-bypass-' + Date.now(),
-          email: email.trim(),
-        };
-      }
-      
-      // Provide more specific error messages
-      if (error.message.includes('Failed to send OTP')) {
-        throw new Error('Your not registered. Please sign up first.');
-      } else if (error.message.includes('User not found')) {
-        throw new Error('Email not found. Please sign up first.');
-      } else {
-        throw error;
-      }
+      throw error;
     }
   }
 
-  // Validate email format and domain
-  private isValidEmail(email: string): boolean {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  }
-
-  // Verify OTP
-  async verifyOTP(email: string, otp: string, otpId?: string): Promise<LoginResponse> {
+  async verifyOTP(email: string, otp: string, otpId?: string, userName?: string, role?: string, userPhone?: string) {
     try {
-      // Smart test user handling - Try real backend first
-      if (email === 'student1@example.com' || email === 'teacher56@example.com') {
-        try {
-          // Try real backend verification first
-          const response = await this.makeRequest('/auth/verify-otp', {
-            method: 'POST',
-            body: JSON.stringify({ email, otp, otpId }),
-          });
-
-          // Store auth data if successful
-          if (response.token && response.role) {
-            await storeAuthData({
-              role: response.role,
-              email: response.email || email,
-              token: response.token,
-              name: response.name,
-              profileImage: response.profileImage,
-            });
-          }
-
-          return {
-            success: true,
-            token: response.token,
-            user: {
-              id: response.id || email,
-              email: response.email || email,
-              name: response.name,
-              role: response.role,
-              profileImage: response.profileImage,
-            },
-            isTestUser: response.isTestUser,
-          };
-        } catch (backendError) {
-          // Fallback to bypass mode if backend fails
-          console.log('🔧 Backend verification failed, using test user bypass');
-          
-          const testUsers = {
-            'student1@example.com': {
-              name: 'Test Student',
-              role: 'student',
-              id: 'test-student-001'
-            },
-            'teacher56@example.com': {
-              name: 'Test Teacher', 
-              role: 'teacher',
-              id: 'test-teacher-001'
-            }
-          };
-
-          const testUser = testUsers[email as keyof typeof testUsers];
-          if (!testUser) {
-            throw new Error('Invalid test user');
-          }
-
-          // Store auth data locally
-          await storeAuthData({
-            role: testUser.role,
-            email,
-            token: 'test-token-' + Date.now(),
-            name: testUser.name,
-          });
-
-          return {
-            success: true,
-            token: 'test-token-' + Date.now(),
-            user: {
-              id: testUser.id,
-              email,
-              name: testUser.name,
-              role: testUser.role,
-            },
-            isTestUser: true,
-          };
-        }
-      }
-
-      // Regular users - use backend
+      console.log('Verifying OTP:', { email, role });
+      
+      const body = userName 
+        ? { email, otp, userName, role, phonenumber: userPhone }
+        : { email, otp, otpId };
+      
       const response = await this.makeRequest('/auth/verify-otp', {
         method: 'POST',
-        body: JSON.stringify({ email, otp, otpId }),
+        body: JSON.stringify(body)
       });
-
-      // Store auth data if successful
-      if (response.token && response.role) {
-        await storeAuthData({
-          role: response.role,
-          email: response.email || email,
-          token: response.token,
-          name: response.name,
-          profileImage: response.profileImage,
-        });
-      }
-
-      return {
-        success: true,
-        token: response.token,
-        user: {
-          id: response.id || email,
-          email: response.email || email,
-          name: response.name,
-          role: response.role,
-          profileImage: response.profileImage,
-        },
-        isTestUser: response.isTestUser,
-      };
-    } catch (error: any) {
-      console.error('Verify OTP error:', error);
       
-      // Test user fallback in static builds
-      if (IS_STATIC_BUILD && (email === 'student1@example.com' || email === 'teacher56@example.com')) {
-        console.log('🔧 Static build test user OTP verification fallback');
-        
-        const testUsers = {
-          'student1@example.com': {
-            name: 'Test Student',
-            role: 'student',
-            id: 'test-student-001'
-          },
-          'teacher56@example.com': {
-            name: 'Test Teacher', 
-            role: 'teacher',
-            id: 'test-teacher-001'
-          }
-        };
-
-        const testUser = testUsers[email as keyof typeof testUsers];
-        if (testUser) {
-          await storeAuthData({
-            role: testUser.role,
-            email,
-            token: 'test-token-' + Date.now(),
-            name: testUser.name,
-          });
-
-          return {
-            success: true,
-            token: 'test-token-' + Date.now(),
-            user: {
-              id: testUser.id,
-              email,
-              name: testUser.name,
-              role: testUser.role,
-            },
-            isTestUser: true,
-          };
-        }
+      if (response.token) {
+        await storeAuthData(response);
+        return { success: true, user: response.user };
+      } else {
+        throw new Error(response.message || 'OTP verification failed');
+      }
+    } catch (error: any) {
+      console.error('OTP verification error:', error);
+      
+      // Handle specific OTP errors
+      if (error.message?.includes('Invalid OTP')) {
+        throw new Error('Invalid OTP. Please check and try again.');
+      }
+      
+      if (error.message?.includes('expired')) {
+        throw new Error('OTP has expired. Please request a new one.');
       }
       
       throw error;
     }
   }
 
-  // Verify signup OTP and create account
-  async verifySignupOTP(email: string, otp: string, name: string, role: string = '', phone?: string): Promise<LoginResponse> {
+  async verifySignupOTP(email: string, otp: string, userName: string, role: string, userPhone: string) {
     try {
+      console.log('Verifying Signup OTP:', { email, role });
+
       const response = await this.makeRequest('/signup/verify-otp', {
         method: 'POST',
-        body: JSON.stringify({ email, otp, name, phone }), // Remove role from verification
+        body: JSON.stringify({ email, otp, name: userName, role, phone: userPhone })
       });
 
-      // Store auth data if successful
-      if (response.token && response.role) {
-        await storeAuthData({
-          role: response.role,
-          email: response.email || email,
-          token: response.token,
-          name: response.name || name,
-          profileImage: response.profileImage,
-        });
+      if (response.token) {
+        await storeAuthData(response);
+        return { success: true, user: response.user };
+      } else {
+        throw new Error(response.message || 'OTP verification failed');
+      }
+    } catch (error: any) {
+      console.error('Signup OTP verification error:', error);
+
+      if (error.message?.includes('Invalid OTP')) {
+        throw new Error('Invalid OTP. Please check and try again.');
       }
 
-      return {
-        success: true,
-        token: response.token,
-        user: {
-          id: response.id || email,
-          email: response.email || email,
-          name: response.name || name,
-          role: response.role,
-          profileImage: response.profileImage,
-        },
-      };
-    } catch (error: any) {
-      console.error('Verify signup OTP error:', error);
+      if (error.message?.includes('expired')) {
+        throw new Error('OTP has expired. Please request a new one.');
+      }
+
       throw error;
     }
   }
 
-  // Update user role after signup
-  async updateRole(email: string, role: string): Promise<any> {
+  async forgotPassword(email: string) {
     try {
-      const response = await this.makeRequest('/update-role', {
+      console.log('Forgot password:', { email });
+      
+      const response = await this.makeRequest('/forgot-password', {
         method: 'POST',
-        body: JSON.stringify({ email, role }),
+        body: JSON.stringify({ email })
       });
-
-      // Store updated auth data
-      if (response.token) {
-        await storeAuthData({
-          role: role,
-          email: email,
-          token: response.token,
-          name: email.split('@')[0],
-        });
-      }
-
+      
       return response;
     } catch (error: any) {
-      console.error('Update role error:', error);
+      console.error('Forgot password error:', error);
       throw error;
     }
   }
 
-  // Update user profile (name, phone, classYear, etc.)
-  async updateProfile(email: string, profileData: { name?: string; phoneNumber?: string; classYear?: string; profileImage?: string }): Promise<any> {
+  async resetPassword(token: string, password: string) {
     try {
-      const response = await this.makeRequest('/auth/update-profile', {
+      console.log('Reset password:', { token });
+      
+      const response = await this.makeRequest('/reset-password', {
         method: 'POST',
-        body: JSON.stringify({ email, ...profileData }),
+        body: JSON.stringify({ token, password })
       });
+      
+      return response;
+    } catch (error: any) {
+      console.error('Reset password error:', error);
+      throw error;
+    }
+  }
 
-      // Store updated auth data if name changed
-      if (response.token || response.name) {
-        const authData = await getAuthData();
-        await storeAuthData({
-          role: authData?.role || 'student',
-          email: email,
-          token: response.token || authData?.token || '',
-          name: profileData.name || authData?.name || email.split('@')[0],
-          profileImage: profileData.profileImage || authData?.profileImage,
-        });
-      }
+  async getProfile() {
+    try {
+      const response = await this.makeRequest('/profile');
+      return response;
+    } catch (error: any) {
+      console.error('Get profile error:', error);
+      throw error;
+    }
+  }
 
+  async updateProfile(userData: any) {
+    try {
+      console.log('Update profile:', userData);
+      
+      const response = await this.makeRequest('/profile', {
+        method: 'PUT',
+        body: JSON.stringify(userData)
+      });
+      
       return response;
     } catch (error: any) {
       console.error('Update profile error:', error);
@@ -481,312 +393,42 @@ class AuthService {
     }
   }
 
-  // Login with email and password (if password-based auth exists)
-  async login(email: string, password: string): Promise<LoginResponse> {
+  async storeAuthData(authData: any) {
     try {
-      const response = await this.makeRequest('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
-
-      // Store auth data if successful
-      if (response.token && response.role) {
-        await storeAuthData({
-          role: response.role,
-          email: response.email || email,
-          token: response.token,
-          name: response.name,
-          profileImage: response.profileImage,
-        });
-      }
-
-      return {
-        success: true,
-        token: response.token,
-        user: {
-          id: response.id || email,
-          email: response.email || email,
-          name: response.name,
-          role: response.role,
-          profileImage: response.profileImage,
-        },
-        isTestUser: response.isTestUser,
-      };
+      await storeAuthData(authData);
+      console.log('Auth data stored successfully');
     } catch (error: any) {
-      console.error('Login error:', error);
-      throw error;
+      console.error('Store auth data error:', error);
+      throw new Error('Failed to store authentication data');
     }
   }
 
-  // Signup new user
-  async signup(email: string, name: string, role: string, password?: string): Promise<SignupResponse> {
+  async logout() {
     try {
-      // Validate email before signup
-      if (!this.isValidEmail(email)) {
-        throw new Error('Please enter a valid email address');
-      }
-
-      const response = await this.makeRequest('/signup', {
-        method: 'POST',
-        body: JSON.stringify({ 
-          email, 
-          fullName: name, 
-          phonenumber: '0000000000',
-          role: role 
-        }),
-      });
-
-      return {
-        success: true,
-        message: response.message || 'User registered successfully',
-        user: response.user,
-        otpId: response.otpId
-      };
-    } catch (error: any) {
-      console.error('Signup error:', error);
-      
-      // Handle email service failure for signup
-      if (error.message.includes('Failed to send OTP')) {
-        console.log('📧 Email service not configured for signup - creating mock response');
-        return {
-          success: true,
-          message: "✅ OTP sent successfully",
-          otpId: 'mock-signup-otp-id-' + Date.now(),
-          user: { id: 'mock-user-' + Date.now(), email, name, role }
-        };
-      }
-      
-      throw error;
-    }
-  }
-
-  // Logout user
-  async logout(): Promise<void> {
-    try {
-      // Call logout endpoint if it exists
-      await this.makeRequest('/auth/logout', {
-        method: 'POST',
-      });
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      // Always clear local storage
       await clearAllStorage();
-    }
-  }
-
-  // Check if user is authenticated
-  async isAuthenticated(): Promise<boolean> {
-    try {
-      const authData = await getAuthData();
-      return !!(authData && authData.token);
-    } catch (error) {
-      console.error('Auth check error:', error);
-      return false;
-    }
-  }
-
-  // Get current user data
-  async getCurrentUser(): Promise<any> {
-    try {
-      const authData = await getAuthData();
-      if (!authData) return null;
-
-      const response = await this.makeRequest('/auth/me');
-      return response;
-    } catch (error) {
-      console.error('Get current user error:', error);
-      return null;
-    }
-  }
-
-  // Refresh token
-  async refreshToken(): Promise<string | null> {
-    try {
-      const response = await this.makeRequest('/auth/refresh', {
-        method: 'POST',
-      });
-
-      if (response.success && response.token) {
-        await storeAuthData({ token: response.token });
-        return response.token;
-      }
-
-      return null;
-    } catch (error) {
-      console.error('Refresh token error:', error);
-      return null;
-    }
-  }
-
-  // Test user login (for demo purposes) - enhanced for static builds
-  async testUserLogin(email: string): Promise<LoginResponse> {
-    try {
-      // For static builds, use offline test user logic
-      if (IS_STATIC_BUILD) {
-        console.log('🔧 Using offline test user login for static build');
-        
-        const testUsers = {
-          'student1@example.com': {
-            name: 'Test Student',
-            role: 'student',
-            id: 'test-student-001'
-          },
-          'teacher56@example.com': {
-            name: 'Test Teacher', 
-            role: 'teacher',
-            id: 'test-teacher-001'
-          }
-        };
-
-        const testUser = testUsers[email as keyof typeof testUsers];
-        if (!testUser) {
-          throw new Error('Invalid test user');
-        }
-
-        // Store auth data locally
-        await storeAuthData({
-          role: testUser.role,
-          email,
-          token: 'test-token-' + Date.now(),
-          name: testUser.name,
-        });
-
-        return {
-          success: true,
-          token: 'test-token-' + Date.now(),
-          user: {
-            id: testUser.id,
-            email,
-            name: testUser.name,
-            role: testUser.role,
-          },
-          isTestUser: true,
-        };
-      }
-
-      // Use the existing login endpoint which handles test users
-      const response = await this.makeRequest('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email }),
-      });
-
-      if (response.isTestUser && response.token && response.role) {
-        // Store auth data
-        await storeAuthData({
-          role: response.role,
-          email,
-          token: response.token,
-          name: response.name,
-        });
-
-        return {
-          success: true,
-          token: response.token,
-          user: {
-            id: 'test-user-' + Date.now(),
-            email,
-            name: response.name,
-            role: response.role,
-          },
-          isTestUser: true,
-        };
-      }
-
-      throw new Error('Invalid test user');
+      console.log('Logged out successfully');
     } catch (error: any) {
-      console.error('Test user login error:', error);
-      throw error;
+      console.error('Logout error:', error);
+      throw new Error('Failed to logout properly');
     }
   }
 
-  // Helper method to provide fallback data for test users when API fails
-  private getTestUserFallbackData(endpoint: string, email: string, role: string) {
-    console.log('🔧 Generating fallback data for endpoint:', endpoint);
-    
-    // Student fallback data
-    if (role === 'student') {
-      if (endpoint.includes('/subjects')) {
-        return {
-          success: true,
-          subjects: [
-            { id: '1', name: 'Mathematics', description: 'Learn mathematics' },
-            { id: '2', name: 'Science', description: 'Learn science' },
-            { id: '3', name: 'English', description: 'Learn english' }
-          ]
-        };
-      }
-      if (endpoint.includes('/teachers')) {
-        return {
-          success: true,
-          teachers: [
-            { id: '1', name: 'Test Teacher 1', subject: 'Mathematics', rating: 4.5 },
-            { id: '2', name: 'Test Teacher 2', subject: 'Science', rating: 4.8 }
-          ]
-        };
-      }
-      if (endpoint.includes('/dashboard')) {
-        return {
-          success: true,
-          stats: {
-            enrolledSubjects: 3,
-            completedClasses: 12,
-            upcomingClasses: 2
-          }
-        };
-      }
-    }
-    
-    // Teacher fallback data
-    if (role === 'teacher') {
-      if (endpoint.includes('/subjects')) {
-        return {
-          success: true,
-          subjects: [
-            { id: '1', name: 'Mathematics', students: 25 },
-            { id: '2', name: 'Science', students: 18 }
-          ]
-        };
-      }
-      if (endpoint.includes('/students')) {
-        return {
-          success: true,
-          students: [
-            { id: '1', name: 'Test Student 1', email: 'student1@example.com' },
-            { id: '2', name: 'Test Student 2', email: 'student2@example.com' }
-          ]
-        };
-      }
-      if (endpoint.includes('/dashboard')) {
-        return {
-          success: true,
-          stats: {
-            totalStudents: 43,
-            activeClasses: 5,
-            monthlyEarnings: 15000
-          }
-        };
-      }
-    }
-    
-    // Generic fallback
-    return {
-      success: true,
-      message: 'Test user data - API bypassed',
-      data: null
-    };
-  }
+  async updateRole(email: string, role: string) {
+    try {
+      console.log('Updating role:', { email, role });
 
-  // Helper method to store auth data
-  async storeAuthData(authData: {
-    role: string;
-    email: string;
-    token: string;
-    name?: string;
-    profileImage?: string;
-  }): Promise<void> {
-    await storeAuthData(authData);
+      const response = await this.makeRequest('/update-role', {
+        method: 'POST',
+        body: JSON.stringify({ email, role })
+      });
+
+      console.log('Role update response:', response);
+      return response;
+    } catch (error: any) {
+      console.error('Update role error:', error);
+      throw new Error(error.message || 'Failed to update role');
+    }
   }
 }
 
-export const authService = new AuthService();
+export default new AuthService();

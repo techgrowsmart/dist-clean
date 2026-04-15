@@ -11,10 +11,12 @@ export default function TeacherRegistration2() {
   const params = useLocalSearchParams();
   const isWeb = Platform.OS === 'web';
   const email = params.email as string || '';
+  const name = params.name as string || '';
+  const phone = params.phone as string || '';
   
   const [formData, setFormData] = useState({
-    fullName: '',
-    phoneNumber: '',
+    fullName: decodeURIComponent(name).replace(/\+/g, ' '),
+    phoneNumber: decodeURIComponent(phone).replace(/\+/g, ' '),
     residentialAddress: '',
     state: '',
     country: '',
@@ -102,7 +104,7 @@ export default function TeacherRegistration2() {
                 <Text style={webStyles.inputLabel}>Full Name *</Text>
                 <TextInput
                   style={webStyles.input}
-                  placeholder="Enter your full name"
+                  placeholder="Entguvger your full name"
                   value={formData.fullName}
                   onChangeText={(value) => handleInputChange('fullName', value)}
                   editable={!loading}
@@ -383,18 +385,7 @@ const webStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
-    ...Platform.select({
-      web: {
-        boxShadow: '0px 12px 20px rgba(0, 0, 0, 0.4)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.4,
-        shadowRadius: 20,
-        elevation: 16,
-      },
-    }),
+    boxShadow: '0px 12px 20px rgba(0, 0, 0, 0.4)',
   },
   leftLogoText: {
     fontSize: 40,
@@ -407,9 +398,6 @@ const webStyles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 20,
-    textShadowColor: 'rgba(0, 0, 0, 0.4)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
   },
   brandSubtitle: {
     fontSize: 20,
@@ -417,9 +405,6 @@ const webStyles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     letterSpacing: 3,
-    textShadowColor: 'rgba(0, 0, 0, 0.4)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
   },
   rightColumn: {
     flex: 1,

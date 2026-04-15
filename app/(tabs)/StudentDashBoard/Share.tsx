@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Platform,
   View,
@@ -28,6 +28,7 @@ import {
 } from '@expo-google-fonts/poppins';
 import { Feather, FontAwesome, FontAwesome6, MaterialIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import BackButton from '../../../components/BackButton';
 
 const { width } = Dimensions.get('window');
 
@@ -209,6 +210,16 @@ const Share = () => {
   const { userEmail, studentName, profileImage } =
     useLocalSearchParams<{ userEmail: string; studentName: string; profileImage: string }>();
 
+  const handleBackPress = useCallback(() => { router.push('/(tabs)/StudentDashBoard/Student'); }, [router]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') handleBackPress(); };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [handleBackPress]);
+
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -252,10 +263,18 @@ const Share = () => {
           break;
         }
         case 'WhatsApp': {
-          const url = `whatsapp://send?text=${encodedMsg}`;
-          const webUrl = `https://wa.me/?text=${encodedMsg}`;
-          const canOpen = await Linking.canOpenURL(url);
-          Linking.openURL(canOpen ? url : webUrl);
+          if (Platform.OS === 'web') {
+            const webUrl = `https://wa.me/?text=${encodedMsg}`;
+            window.open(webUrl, '_blank');
+          } else {
+            const url = `whatsapp://send?text=${encodedMsg}`;
+            const canOpen = await Linking.canOpenURL(url);
+            if (canOpen) {
+              await Linking.openURL(url);
+            } else {
+              Alert.alert('WhatsApp not installed', 'Please install WhatsApp to share via this option.');
+            }
+          }
           break;
         }
         case 'Facebook': {
@@ -338,15 +357,14 @@ const Share = () => {
         >
           {/* Page header */}
           <View style={styles.pageHeader}>
-            <View>
-              <Text style={styles.pageTitle}>Share GrowSmart</Text>
-              <Text style={styles.pageSubtitle}>
-                Invite friends, parents & peers to join the platform
-              </Text>
-            </View>
-            <View style={styles.headerBadge}>
-              <Feather name="gift" size={14} color={COLORS.gold} />
-              <Text style={styles.headerBadgeText}>Refer & Earn</Text>
+            <View style={styles.headerLeft}>
+              <BackButton onPress={handleBackPress} />
+              <View>
+                <Text style={styles.pageTitle}>Share GrowSmart</Text>
+                <Text style={styles.pageSubtitle}>
+                  Invite friends, parents & peers to join the platform
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -443,6 +461,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   pageTitle: {
     fontSize: 22,

@@ -34,6 +34,7 @@ import { getAuthData } from '../../utils/authStorage';
 import { BASE_URL } from '../../config';
 import axios from 'axios';
 import TeacherThoughtsCard from 'components/ui/TeacherThoughtsCard';
+import { UnifiedPost } from '../../components/ui/UnifiedThoughtsCard';
 
 // Global Design Tokens
 const COLORS = {
@@ -1036,14 +1037,14 @@ const styles = StyleSheet.create({
 
   topControls: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 35 },
   filterGroup: { flex: 1, flexDirection: 'row', marginRight: wp('5%') },
-  filterItem: { backgroundColor: COLORS.white, borderRadius: 16, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.04, shadowRadius: 15, elevation: 4 },
+  filterItem: { backgroundColor: COLORS.white, borderRadius: 16, padding: 18, ...Platform.select({ web: { boxShadow: '0px 8px 15px rgba(0, 0, 0, 0.04)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.04, shadowRadius: 15, elevation: 4 } }) },
   filterIconRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   filterLabel: { fontFamily: 'Poppins_700Bold', fontSize: 11, color: COLORS.textHeader, marginLeft: 12, textTransform: 'uppercase' },
   filterInput: { fontFamily: 'Poppins_400Regular', fontSize: 14, color: COLORS.textBody, backgroundColor: '#F9FAFB', borderRadius: 10, padding: 10 },
   dropdownTrigger: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 10, padding: 12, width: '100%', borderWidth: 1, borderColor: '#F3F4F6' },
   dropdownValue: { fontFamily: 'Poppins_500Medium', fontSize: 14, color: COLORS.textHeader },
 
-  toggleContainer: { flexDirection: 'row', backgroundColor: COLORS.white, borderRadius: 10, padding: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 3 },
+  toggleContainer: { flexDirection: 'row', backgroundColor: COLORS.white, borderRadius: 10, padding: 5, ...Platform.select({ web: { boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.06)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 3 } }) },
   toggleBtn: { paddingHorizontal: 25, paddingVertical: 10, borderRadius: 8 },
   toggleBtnActive: { backgroundColor: COLORS.primaryBlue },
   toggleText: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: COLORS.textMuted },
@@ -1052,7 +1053,7 @@ const styles = StyleSheet.create({
   mainSection: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 40 },
   mainSectionMobile: { flexDirection: 'column' },
   mainSectionTablet: { flexDirection: 'column' },
-  chartContainer: { width: '58%', backgroundColor: COLORS.chartDark, borderRadius: 16, padding: 25, overflow: 'hidden' },
+  chartContainer: { width: '58%', backgroundColor: COLORS.chartDark, borderRadius: 16, padding: 25 },
   chartContainerMobile: { width: '100%', marginBottom: 20 },
   chartContainerTablet: { width: '60%', marginBottom: 20 },
   chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
@@ -1094,8 +1095,7 @@ const styles = StyleSheet.create({
 
     }),
     elevation: 15,
-    zIndex: 10000,
-    overflow: 'hidden'
+    zIndex: 10000
   },
   dropdownOption: {
     padding: 14,
@@ -1108,7 +1108,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
 
-  pricingCard: { width: '22%', backgroundColor: '#2563EB', borderRadius: 16, padding: 30, shadowColor: COLORS.primaryBlue, shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.2, shadowRadius: 30, elevation: 15 },
+  pricingCard: { width: '22%', backgroundColor: '#2563EB', borderRadius: 16, padding: 30, ...Platform.select({ web: { boxShadow: '0px 20px 30px rgba(59, 130, 246, 0.2)' }, default: { shadowColor: COLORS.primaryBlue, shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.2, shadowRadius: 30, elevation: 15 } }) },
   pricingCardMobile: { width: '100%', marginBottom: 20 },
   pricingCardTablet: { width: '35%', marginBottom: 20 },
   pricingSection: { marginBottom: 40 },
@@ -1128,13 +1128,13 @@ const styles = StyleSheet.create({
   upgradeBtn: { backgroundColor: COLORS.white, borderRadius: 12, height: 56, justifyContent: 'center', alignItems: 'center' },
   upgradeBtnText: { fontFamily: 'Poppins_700Bold', fontSize: 16, color: COLORS.primaryBlue },
 
-  bottomAd: { backgroundColor: COLORS.white, borderRadius: 16, padding: wp('3%'), shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3, marginBottom: 30 },
+  bottomAd: { backgroundColor: COLORS.white, borderRadius: 16, padding: wp('3%'), marginBottom: 30, ...Platform.select({ web: { boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.05)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 } }) },
   adSectionTitle: { fontFamily: 'Poppins_700Bold', fontSize: 13, color: COLORS.textHeader, marginBottom: 20 },
   adBannerImg: { width: '100%', height: hp('15%'), borderRadius: 12, marginBottom: 20 },
   adContent: { paddingHorizontal: 10 },
   adTitle: { fontFamily: 'Poppins_700Bold', fontSize: 16, color: COLORS.textHeader },
   adSubtitle: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: COLORS.textBody, marginTop: 4 },
-  thoughtsSection: { backgroundColor: COLORS.white, borderRadius: 16, padding: wp('3%'), shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3, marginBottom: 30 },
+  thoughtsSection: { backgroundColor: COLORS.white, borderRadius: 16, padding: wp('3%'), marginBottom: 30, ...Platform.select({ web: { boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.05)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 } }) },
   sectionTitle: { fontFamily: 'Poppins_700Bold', fontSize: 18, color: COLORS.textHeader, marginBottom: 20 },
   drawerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 99, flexDirection: 'row' },
   
@@ -1142,15 +1142,16 @@ const styles = StyleSheet.create({
   webDualColumns: {
     flexDirection: 'row',
     flex: 1,
+    gap: 24,
   },
   webMainContent: {
     flex: 1,
-    marginRight: 30,
+    marginRight: 0,
   },
   webRightPanel: {
-    width: Platform.OS === 'web' ? '30%' : '30%',
-    minWidth: 350,
-    maxWidth: 450,
+    width: 380,
+    minWidth: 320,
+    maxWidth: 400,
     backgroundColor: '#FAFBFC',
     borderLeftWidth: 1,
     borderLeftColor: '#E5E7EB',
@@ -1451,24 +1452,22 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: 20,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 6,
     borderLeftWidth: 4,
     borderLeftColor: COLORS.primaryBlue,
+    ...Platform.select({
+      web: { boxShadow: '0px 10px 20px rgba(0, 0, 0, 0.08)' },
+      default: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 6 }
+    }),
   },
   enhancedToggleContainer: {
     flexDirection: 'row',
     backgroundColor: COLORS.white,
     borderRadius: 15,
     padding: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 15,
-    elevation: 4,
+    ...Platform.select({
+      web: { boxShadow: '0px 6px 15px rgba(0, 0, 0, 0.08)' },
+      default: { shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.08, shadowRadius: 15, elevation: 4 }
+    }),
   },
 
   enhancedChartContainer: {
@@ -1476,7 +1475,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 30,
     marginBottom: 30,
-    overflow: 'hidden',
     ...Platform.select({
       web: {
         boxShadow: '0px 15px 35px rgba(15, 23, 42, 0.3)',

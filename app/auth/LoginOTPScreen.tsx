@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ImageBackground, Dimensions, Platform, StatusBar, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { authService } from '../../services/authService';
+import authService from '../../services/authService';
 import { safeBack } from '../../utils/navigation';
 
 const { width, height } = Dimensions.get('window');

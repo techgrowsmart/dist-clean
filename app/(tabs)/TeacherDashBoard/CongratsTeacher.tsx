@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   View,
   Text,
@@ -8,19 +8,37 @@ import {
   TouchableOpacity,
   Linking,
   Alert,
+  Platform,
 } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { width, height } = Dimensions.get("window");
 
 const CongratsTeacher = () => {
+  const router = useRouter();
   const { teacherName, createdAt, userEmail } = useLocalSearchParams<{ 
     teacherName: string; 
     createdAt: string; 
     userEmail: string 
   }>();
+
+  const handleClose = () => {
+    router.back();
+  };
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleClose();
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, []);
 
   const handleShare = async () => {
     try {
@@ -53,6 +71,9 @@ const CongratsTeacher = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
+        <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
+          <Ionicons name="close" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
         <View style={styles.headerContent}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
@@ -163,6 +184,14 @@ const styles = StyleSheet.create({
     paddingTop: 50,
     paddingBottom: 30,
     paddingHorizontal: 20,
+    position: "relative",
+  },
+  closeButton: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 4,
   },
   headerContent: {
     alignItems: "center",

@@ -41,9 +41,26 @@ const COLORS = {
 };
 
 export default function Checkout() {
-  const { teacherEmail, selected, total, profilepic, description } = useLocalSearchParams();
+  const { teacherEmail, selected, total, profilepic, description, bookingId } = useLocalSearchParams();
   const router = useRouter();
   const [teacher, setTeacher] = useState<any>(null);
+
+  const handleBackPress = () => {
+    safeBack(router, '/(tabs)/StudentDashBoard/TeacherDetails');
+  };
+
+  // ESC key handler for web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleBackPress();
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, []);
   const [selectedTuitions, setSelectedTuitions] = useState<any[]>([]);
   const [subtotal, setSubtotal] = useState(Number(total));
   const [searchQuery, setSearchQuery] = useState("");
@@ -135,7 +152,8 @@ export default function Checkout() {
 
   useEffect(() => {
     const updatedTotal = selectedTuitions.reduce((acc, item) => {
-      const amount = parseInt(item.charge);
+      const chargeStr = item.charge?.toString().replace(/[₹,]/g, '').trim() || '0';
+      const amount = parseInt(chargeStr);
       return acc + (isNaN(amount) ? 0 : amount);
     }, 0);
     setSubtotal(updatedTotal);
@@ -149,7 +167,7 @@ export default function Checkout() {
   const MobileUI = () => (
     <View style={styles.container}>
       <View style={styles.topContainer}>
-        <BackButton size={20} color="#000" onPress={() => safeBack(router)} />
+        <BackButton size={20} color="#000" onPress={handleBackPress} />
         <Text style={styles.heading}>Confirm class</Text>
       </View>
 
@@ -169,7 +187,7 @@ export default function Checkout() {
                   {item.class && <Text style={styles.classText}>{item.class}</Text>}
                   {item.skill && <Text style={styles.subjectText}>{item.skill}</Text>}
                 </View>
-                <Text style={styles.rateText}>₹{item.charge}</Text>
+                <Text style={styles.rateText}>₹{item.charge?.toString().replace(/[₹,]/g, '').trim()}</Text>
               </View>
               <View style={styles.ratingContainer}>
                 <Text style={styles.reviewText}>Review -</Text>
@@ -202,6 +220,9 @@ export default function Checkout() {
               teacherProfilePic: teacher?.profilepic || "",
               subject: selectedTuitions.map((t) => t.subject).join(", "),
               className: selectedTuitions.map((t) => t.class).join(", "),
+              studentName: studentName || "Student",
+              studentProfilePic: profileImage || "",
+              bookingId: bookingId,
             },
           });
         }}>
@@ -240,7 +261,7 @@ export default function Checkout() {
           <View style={webStyles.centerContentContainer}>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={webStyles.centerContentScroll}>
               <View style={webStyles.pageNavHeader}>
-                <TouchableOpacity style={webStyles.backButton} onPress={() => safeBack(router)}>
+                <TouchableOpacity style={webStyles.backButton} onPress={handleBackPress}>
                   <Ionicons name="arrow-back" size={20} color={COLORS.textPrimary} />
                 </TouchableOpacity>
                 <Text style={webStyles.pageTitle}>Checkout</Text>
@@ -279,7 +300,7 @@ export default function Checkout() {
                           {item.class && <Text style={webStyles.classText}>{item.class}</Text>}
                           {item.skill && <Text style={webStyles.subjectText}>{item.skill}</Text>}
                         </View>
-                        <Text style={webStyles.rateText}>₹{item.charge}</Text>
+                        <Text style={webStyles.rateText}>₹{item.charge?.toString().replace(/[₹,]/g, '').trim()}</Text>
                       </View>
                       
                       <View style={webStyles.scheduleInfo}>
@@ -304,28 +325,6 @@ export default function Checkout() {
                     </View>
                   </View>
                 ))}
-
-                {/* ThoughtsCard Section */}
-                <View style={{ marginTop: 24, marginBottom: 32 }}>
-                  <ThoughtsCard
-                    post={{
-                      id: 'checkout-post',
-                      author: {
-                        email: teacherEmail as string || '',
-                        name: teacher?.name || 'Teacher',
-                        role: 'Teacher',
-                        profile_pic: teacher?.profilepic || profilepic as string || ''
-                      },
-                      content: description as string || 'Thank you for choosing my classes! I look forward to helping you achieve your learning goals.',
-                      likes: 0,
-                      comments: [],
-                      createdAt: 'Just now',
-                      isLiked: false
-                    }}
-                    getProfileImageSource={getProfileImageSource}
-                    initials={initials}
-                  />
-                </View>
               </View>
 
               <View style={webStyles.checkoutFooter}>
@@ -333,8 +332,8 @@ export default function Checkout() {
                   <Text style={webStyles.subtotalLabel}>Subtotal:</Text>
                   <Text style={webStyles.subtotalAmount}>₹{subtotal}</Text>
                 </View>
-                <TouchableOpacity 
-                  style={webStyles.payButton} 
+                <TouchableOpacity
+                  style={webStyles.payButton}
                   onPress={() => {
                     const numericAmount = subtotal;
                     if (!numericAmount) { alert("Invalid charge amount"); return; }
@@ -348,6 +347,9 @@ export default function Checkout() {
                         teacherProfilePic: teacher?.profilepic || "",
                         subject: selectedTuitions.map((t) => t.subject).join(", "),
                         className: selectedTuitions.map((t) => t.class).join(", "),
+                        studentName: studentName || "Student",
+                        studentProfilePic: profileImage || "",
+                        bookingId: bookingId,
                       },
                     });
                   }}
@@ -455,9 +457,17 @@ const webStyles = StyleSheet.create({
     marginBottom: 24,
   },
   backButton: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: COLORS.border,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
   pageTitle: {
     fontSize: 24, fontWeight: '700', color: COLORS.textPrimary,

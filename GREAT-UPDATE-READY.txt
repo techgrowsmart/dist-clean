@@ -1,0 +1,40 @@
+==========================================
+   GREAT NEW UPDATE AVAILABLE!
+==========================================
+
+Hey there! 👋
+
+We've built something AWESOME for your portal - a cache-busting
+system that will DESTROY browser cache issues FOREVER!
+
+WHAT THIS GREAT UPDATE DOES:
+----------------------------
+✅ Prevents browsers from caching old /portal redirects
+✅ Auto-refreshes content when you upload new files
+✅ Users always see the LATEST version instantly
+✅ Fixes cache issues without clearing browser manually
+✅ Works on ALL browsers automatically
+
+WHEN TO APPLY:
+--------------
+Run the script below when you're ready to upload to Hostinger:
+
+   ./apply-great-update.sh
+
+Type "yes" when it asks, and BOOM - cache problems are history!
+
+WHAT CHANGES IT MAKES:
+----------------------
+1. Adds cache-killing meta tags to ALL HTML files
+2. Updates .htaccess with aggressive cache headers
+3. Ensures browsers always fetch fresh content
+4. Destroys stale cache automatically
+
+Your files in dist-clean/ are currently in ORIGINAL state.
+Apply the GREAT UPDATE only when YOU say yes!
+
+Ready to make cache issues disappear forever? 🚀
+
+Run: ./apply-great-update.sh
+
+==========================================

@@ -3,7 +3,7 @@ import Bars from "../../../assets/svgIcons/Bars";
 import NotificationBellIcon from "../../../assets/svgIcons/NotificationBell";
 import { BASE_URL } from "../../../config";
 import { getAuthData } from "../../../utils/authStorage";
-import apiClient from "../../../services/apiService";
+import { apiClient } from "../../../services/apiService";
 import {
   Poppins_400Regular,
   Poppins_700Bold,
@@ -86,38 +86,14 @@ const InfiniteReviewScroll = ({ reviews }: { reviews: Review[] }) => {
   const scrollX = React.useRef(0);
   const scrollInterval = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const [isPaused, setIsPaused] = React.useState(false);
+  const touchActiveRef = React.useRef(false);
 
   const SCROLL_SPEED = 1.8; // You can change this value
   
   const SCROLL_INTERVAL = 36; // ~60fps for smooth animation
 
-  // Mock reviews data (only used if no real reviews are available)
-  const mockReviews = [
-    {
-      id: 'mock1',
-      title: "My Reviews",
-      rating: "⭐ ⭐ ⭐ ⭐",
-      content: "A positive teacher review typically highlights a teacher's positive qualities, effective teaching methods, and their impact on student learning",
-      isReal: false
-    },
-    {
-      id: 'mock2', 
-      title: "My Reviews",
-      rating: "⭐ ⭐ ⭐ ⭐ ⭐",
-      content: "Excellent teaching methodology and great communication skills. Students showed remarkable improvement under this teacher's guidance.",
-      isReal: false
-    },
-    {
-      id: 'mock3',
-      title: "My Reviews", 
-      rating: "⭐ ⭐ ⭐ ⭐",
-      content: "Very patient and understanding teacher who creates a positive learning environment for all students.",
-      isReal: false
-    }
-  ];
-
-  // Use the processed reviews directly (they're already combined with mock data in the parent)
-  const reviewData = reviews.length > 0 ? reviews : mockReviews;
+  // Real reviews only - no mock data
+  const reviewData = reviews;
   console.log('Displaying reviews:', reviewData.length, '(Real:', reviewData.filter(r => r.isReal).length, 'Mock:', reviewData.filter(r => !r.isReal).length, ')');
 
   // Calculate total content width for seamless looping
@@ -161,13 +137,15 @@ const InfiniteReviewScroll = ({ reviews }: { reviews: Review[] }) => {
     };
   }, [isPaused]);
 
-  const handleTouchStart = () => {
+  const handleInteractionStart = React.useCallback(() => {
+    touchActiveRef.current = true;
     setIsPaused(true);
-  };
+  }, []);
 
-  const handleTouchEnd = () => {
+  const handleInteractionEnd = React.useCallback(() => {
+    touchActiveRef.current = false;
     setIsPaused(false);
-  };
+  }, []);
 
   return (
     <View style={styles.marqueeContainer}>
@@ -179,15 +157,14 @@ const InfiniteReviewScroll = ({ reviews }: { reviews: Review[] }) => {
         scrollEventThrottle={16}
         bounces={false}
         scrollEnabled={false}
+        onTouchStart={handleInteractionStart}
+        onTouchEnd={handleInteractionEnd}
       >
         {/* Multiple duplicate sets for truly infinite looping */}
         {[...reviewData, ...reviewData, ...reviewData, ...reviewData].map((review, index) => (
-          <TouchableOpacity
+          <View
             key={`${review.id}-${index}`}
-            style={styles.reviewCard}
-            onPressIn={handleTouchStart}
-            onPressOut={handleTouchEnd}
-            activeOpacity={1}
+            style={[styles.reviewCard, { pointerEvents: "box-none" }]}
           >
             {/* Real review badge */}
             {review.isReal && (
@@ -203,7 +180,7 @@ const InfiniteReviewScroll = ({ reviews }: { reviews: Review[] }) => {
                 {review.content}
               </Text>
             </ScrollView>
-          </TouchableOpacity>
+          </View>
         ))}
       </ScrollView>
     </View>
@@ -618,7 +595,7 @@ export default function TeacherDashboard() {
       // Create optimized API calls - SINGLE PROFILE CALL for both profile and subjects
       const apiPromises = [
         // Single profile fetch that includes both profile data and subject count
-        apiClient.post('/api/userProfile', { email }, { headers, timeout: 8000 })
+        apiClient.post('/api/teacherProfile', { email }, { headers, timeout: 8000 })
           .then(response => {
             console.log('🔍 Raw teacherProfile API response:', response.data);
             return { type: 'profile', data: response.data };
@@ -628,10 +605,32 @@ export default function TeacherDashboard() {
             return { type: 'profile', error };
           }),
         
-        // Contacts fetch
-        apiClient.post('/api/contacts', { userEmail: email, type: auth?.role }, { headers, timeout: 6000 })
-          .then(response => ({ type: 'contacts', data: response.data }))
-          .catch(error => ({ type: 'contacts', error })),
+        // Enrolled students fetch - try primary endpoint first, then fallback to contacts
+        (async () => {
+          try {
+            // First try the enrolled students endpoint
+            const response = await axios.get(`${BASE_URL}/api/teacher/enrolled-students`, {
+              headers: { 'Authorization': `Bearer ${token}` },
+              timeout: 8000
+            });
+            
+            if (response.data.success && response.data.data) {
+              console.log(`✅ Enrolled students loaded: ${response.data.data.length}`);
+              return { type: 'contacts', data: { success: true, contacts: response.data.data } };
+            }
+            throw new Error('No enrolled students data');
+          } catch (enrolledError) {
+            console.log('⚠️ Enrolled students endpoint failed, falling back to contacts...');
+            
+            // Fallback to contacts endpoint
+            try {
+              const contactsResponse = await apiClient.post('/api/contacts', { userEmail: email, type: auth?.role }, { headers, timeout: 6000 });
+              return { type: 'contacts', data: contactsResponse.data };
+            } catch (contactsError) {
+              return { type: 'contacts', error: contactsError };
+            }
+          }
+        })(),
         
         // Reviews fetch - improved error handling
         Promise.race([
@@ -690,12 +689,16 @@ export default function TeacherDashboard() {
                   let count = subjectCount; // Preserve current count as default
                   
                   if (data?.tuitions && Array.isArray(data.tuitions)) {
-                    const uniqueSubjects = new Set();
+                    // Use same unique tuition logic as MySubjectsWeb.tsx
+                    // Unique key includes: classId/skillId + subject/skill + timeFrom + timeTo + day
+                    const uniqueTuitions = new Map();
                     data.tuitions.forEach((tuition: any) => {
-                      if (tuition?.subject) uniqueSubjects.add(tuition.subject);
-                      else if (tuition?.skill) uniqueSubjects.add(tuition.skill);
+                      const key = `${tuition.classId || tuition.skillId}-${tuition.subject || tuition.skill}-${tuition.timeFrom}-${tuition.timeTo}-${tuition.day}`;
+                      if (!uniqueTuitions.has(key)) {
+                        uniqueTuitions.set(key, tuition);
+                      }
                     });
-                    count = uniqueSubjects.size;
+                    count = uniqueTuitions.size;
                     console.log('📚 Using teacherProfile tuitions array, unique subjects:', count);
                   } else {
                     console.log('⚠️ No tuitions found in teacherProfile response, preserving existing count');
@@ -752,7 +755,7 @@ export default function TeacherDashboard() {
                 if (data?.success && data.reviews) {
                   console.log(`⭐ Reviews loaded: ${data.reviews.length}`);
                   
-                  // Process reviews with better date handling
+                  // Process reviews with better date handling - real data only
                   const processedReviews = data.reviews.map((review: any) => ({
                     id: review.id,
                     title: `Review by ${review.studentName || 'Student'}`,
@@ -762,58 +765,13 @@ export default function TeacherDashboard() {
                     isReal: true // Mark as real data
                   }));
                   
-                  // Combine with mock data for seamless looping
-                  const mockReviews = [
-                    {
-                      id: 'mock1',
-                      title: "My Reviews",
-                      rating: "⭐ ⭐ ⭐ ⭐",
-                      content: "A positive teacher review typically highlights a teacher's positive qualities, effective teaching methods, and their impact on student learning",
-                      isReal: false
-                    },
-                    {
-                      id: 'mock2', 
-                      title: "My Reviews",
-                      rating: "⭐ ⭐ ⭐ ⭐ ⭐",
-                      content: "Excellent teaching methodology and great communication skills. Students showed remarkable improvement under this teacher's guidance.",
-                      isReal: false
-                    },
-                    {
-                      id: 'mock3',
-                      title: "My Reviews", 
-                      rating: "⭐ ⭐ ⭐ ⭐",
-                      content: "Very patient and understanding teacher who creates a positive learning environment for all students.",
-                      isReal: false
-                    }
-                  ];
-                  
-                  // Create display array with real reviews + mock data for seamless looping
-                  let displayReviews = [];
-                  if (processedReviews.length > 0) {
-                    // Add real reviews first
-                    displayReviews = [...processedReviews];
-                    
-                    // Add mock data to fill up to at least 3 items for smooth scrolling
-                    if (displayReviews.length < 3) {
-                      const mockNeeded = Math.max(0, 3 - displayReviews.length);
-                      displayReviews.push(...mockReviews.slice(0, mockNeeded));
-                    }
-                    
-                    // Add one more real review at the end if available
-                    if (processedReviews.length > displayReviews.length) {
-                      displayReviews.push(processedReviews[displayReviews.length]);
-                    }
-                  } else {
-                    // No real reviews, use only mock data
-                    displayReviews = mockReviews;
-                  }
-                  
-                  console.log('📝 Final display reviews:', displayReviews.length, '(Real:', processedReviews.length, 'Mock:', displayReviews.filter(r => !r.isReal).length, ')');
-                  setReviews(displayReviews);
+                  // Use real reviews only - no mock data
+                  console.log('📝 Reviews loaded:', processedReviews.length);
+                  setReviews(processedReviews);
                   
                   // Cache reviews
                   AsyncStorage.setItem('teacher_reviews_cache', JSON.stringify({
-                    reviews: displayReviews,
+                    reviews: processedReviews,
                     timestamp: Date.now()
                   })).catch(() => {});
                 }
@@ -886,6 +844,62 @@ export default function TeacherDashboard() {
     // Clean up interval on component unmount
     return () => clearInterval(interval);
   }, [userEmail, fetchUnreadCount]);
+
+  // Fetch reviews function for polling
+  const fetchReviews = useCallback(async () => {
+    try {
+      const auth = await getAuthData();
+      if (!auth?.token || !userEmail) return;
+
+      const headers = {
+        Authorization: `Bearer ${auth.token}`,
+        "Content-Type": "application/json",
+      };
+
+      // Try multiple endpoints for reviews
+      const response = await Promise.race([
+        apiClient.post('/api/teacher-reviews', { teacherEmail: userEmail }, { headers, timeout: 8000 }),
+        apiClient.post('/api/reviews/teacher', { teacherEmail: userEmail }, { headers, timeout: 8000 }),
+        apiClient.post('/api/reviews', { teacherEmail: userEmail }, { headers, timeout: 8000 })
+      ]);
+
+      if (response.data?.reviews) {
+        // Process reviews with better date handling
+        const processedReviews = response.data.reviews.map((review: any) => ({
+          id: review.id,
+          title: `Review by ${review.studentName || 'Student'}`,
+          rating: '⭐'.repeat(Math.min(Math.max(parseInt(review.rating) || 4, 1), 5)),
+          content: review.content,
+          createdAt: review.created_at,
+          isReal: true
+        }));
+
+        setReviews(processedReviews);
+        
+        // Cache reviews
+        AsyncStorage.setItem('teacher_reviews_cache', JSON.stringify({
+          reviews: processedReviews,
+          timestamp: Date.now()
+        })).catch(() => {});
+      }
+    } catch (error) {
+      console.log('⚠️ Reviews polling error:', error);
+    }
+  }, [userEmail]);
+
+  // Separate effect for reviews polling - updates every 10 seconds
+  useEffect(() => {
+    if (!userEmail) return;
+    
+    // Initial fetch
+    fetchReviews();
+    
+    // Set up polling every 10 seconds for more responsive updates
+    const interval = setInterval(fetchReviews, 10000);
+    
+    // Clean up interval on component unmount
+    return () => clearInterval(interval);
+  }, [userEmail, fetchReviews]);
 
   let [fontsLoaded] = useFonts({
     Poppins_Regular: Poppins_400Regular,

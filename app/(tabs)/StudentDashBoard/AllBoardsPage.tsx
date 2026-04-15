@@ -403,15 +403,15 @@ export default function AllBoardsPage({ onBack, onBoardSelect, category = "Subje
     const boardName = board.name || board.board || '';
     const boardId = board.id || '';
     
-    // Handle All Universities specially - navigate to UniversitiesList page
-    if (board.isUniversities || boardName === 'All Universities') {
-      console.log('All Universities selected - navigating to universities list');
+    // Handle Universities specially - navigate to ClassSelection with universities flow
+    if (board.isUniversities || boardName === 'All Universities' || boardName === 'Universities' || boardId === 'board_universities') {
+      console.log('Universities selected - navigating to universities flow');
       if (onBoardSelect) {
-        onBoardSelect('All Universities', 'universities');
+        onBoardSelect('Universities', 'board_universities');
       } else {
         router.push({
-          pathname: '/(tabs)/StudentDashBoard/UniversitiesList',
-          params: { category: 'universities' }
+          pathname: '/(tabs)/StudentDashBoard/ClassSelection',
+          params: { boardName: 'Universities', boardId: 'board_universities', isUniversities: 'true' }
         } as any);
       }
       return;

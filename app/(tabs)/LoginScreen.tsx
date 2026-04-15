@@ -1,10 +1,16 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
+
+// Disable SSR for this screen to prevent Platform access during server-side rendering
+export const unstable_settings = {
+  ssr: false,
+};
 
 export default function LoginScreen() {
   const { width } = useWindowDimensions();
-  const isLargeScreen = Platform.OS === 'web' && width >= 768;
+  const Platform = require('react-native').Platform;
+  const isLargeScreen = typeof Platform !== 'undefined' && Platform.OS === 'web' && width >= 768;
   const router = useRouter();
 
   return (

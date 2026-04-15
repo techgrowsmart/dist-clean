@@ -19,14 +19,10 @@ import { useNavigation } from "@react-navigation/native";
 import { router } from "expo-router";
 
 const SpotlightTarrif = () => {
-  const [selectedType, setSelectedType] = useState<"skill" | "subject">(
-    "skill"
-  );
-  const [selectedState, setSelectedState] = useState("West Bengal - WB");
-  const [selectedHotspot, setSelectedHotspot] = useState("Skill Teacher");
-  const [selectedPlan, setSelectedPlan] = useState(
-    "1-day spotlight plan at ₹60"
-  );
+  const [selectedType, setSelectedType] = useState<"skill" | "subject">("skill");
+  const [selectedState, setSelectedState] = useState("Delhi");
+  const [searchText, setSearchText] = useState("");
+  const [selectedPlan, setSelectedPlan] = useState("1-day spotlight plan at ₹60");
   const navigation = useNavigation();
 
   const spotlightPlans = {
@@ -38,24 +34,48 @@ const SpotlightTarrif = () => {
   const selectedPricing = spotlightPlans[selectedPlan] || { amount: 0, gst: 0 };
   const total = selectedPricing.amount + selectedPricing.gst;
 
+  const states = [
+    { code: "DL", name: "Delhi" },
+    { code: "TN", name: "Tamil Nadu" },
+    { code: "MH", name: "Maharashtra" },
+    { code: "KA", name: "Karnataka" },
+    { code: "RJ", name: "Rajasthan" },
+    { code: "WB", name: "West Bengal" },
+    { code: "TG", name: "Telangana" },
+    { code: "AP", name: "Andhra Pradesh" },
+    { code: "UP", name: "Uttar Pradesh" },
+    { code: "GJ", name: "Gujarat" },
+    { code: "KL", name: "Kerala" },
+    { code: "PB", name: "Punjab" },
+  ];
+
   const skillData = [
     { state: "Delhi", students: 1000 },
-    { state: "TN", students: 2000 },
-    { state: "MH", students: 1500 },
-    { state: "KA", students: 2500 },
-    { state: "RJ", students: 1800 },
+    { state: "Tamil Nadu", students: 2000 },
+    { state: "Maharashtra", students: 1500 },
+    { state: "Karnataka", students: 2500 },
+    { state: "Rajasthan", students: 1800 },
+    { state: "West Bengal", students: 1200 },
+    { state: "Telangana", students: 900 },
+    { state: "Andhra Pradesh", students: 1100 },
   ];
 
   const subjectData = [
     { state: "Delhi", students: 1200 },
-    { state: "TN", students: 1600 },
-    { state: "MH", students: 2200 },
-    { state: "KA", students: 1800 },
-    { state: "RJ", students: 2000 },
+    { state: "Tamil Nadu", students: 1600 },
+    { state: "Maharashtra", students: 2200 },
+    { state: "Karnataka", students: 1800 },
+    { state: "Rajasthan", students: 2000 },
+    { state: "West Bengal", students: 1400 },
+    { state: "Telangana", students: 800 },
+    { state: "Andhra Pradesh", students: 1000 },
   ];
 
   const maxStudents = 3000;
   const chartData = selectedType === "skill" ? skillData : subjectData;
+
+  // Sync hotspot with selected type
+  const selectedHotspot = selectedType === "skill" ? "Skill Teacher" : "Subject Teacher";
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -84,6 +104,8 @@ const SpotlightTarrif = () => {
             placeholder="Search your area"
             placeholderTextColor="#aaa"
             style={styles.input}
+            value={searchText}
+            onChangeText={setSearchText}
           />
         </View>
         <Text style={styles.helperText}>
@@ -154,21 +176,14 @@ const SpotlightTarrif = () => {
           selectedValue={selectedState}
           onValueChange={(itemValue) => setSelectedState(itemValue)}
         >
-          <Picker.Item
-            style={styles.pickerLabel}
-            label="West Bengal - WB"
-            value="West Bengal - WB"
-          />
-          <Picker.Item
-            style={styles.pickerLabel}
-            label="Telangana - TG"
-            value="Telangana - TG"
-          />
-          <Picker.Item
-            style={styles.pickerLabel}
-            label="Andhra Pradesh - AP"
-            value="Andhra Pradesh - AP"
-          />
+          {states.map((state) => (
+            <Picker.Item
+              key={state.code}
+              style={styles.pickerLabel}
+              label={`${state.name} - ${state.code}`}
+              value={state.name}
+            />
+          ))}
         </Picker>
       </View>
 
@@ -177,10 +192,9 @@ const SpotlightTarrif = () => {
         <Picker
           style={styles.picker}
           selectedValue={selectedHotspot}
-          onValueChange={(itemValue) => setSelectedHotspot(itemValue)}
+          enabled={false}
         >
-          <Picker.Item label="Skill Teacher" value="Skill Teacher" />
-          <Picker.Item label="Subject Teacher" value="Subject Teacher" />
+          <Picker.Item label={selectedHotspot} value={selectedHotspot} />
         </Picker>
       </View>
 
@@ -325,8 +339,6 @@ const styles = StyleSheet.create({
   },
   activeTypeButton: {
     backgroundColor: "#ffffff",
-    fontWeight: "600",
-    fontSize: wp(isTablet ? "2.15%" : "3.733%"),
   },
   typeText: {
     color: "#fff",
@@ -425,7 +437,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   continueText: {
-    color: "#00000",
+    color: "#000",
     fontSize: wp("4.27%"),
     fontWeight: "bold",
   },

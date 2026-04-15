@@ -482,6 +482,23 @@ const Settings = () => {
     }));
   };
 
+  const handleBackPress = () => {
+    router.back();
+  };
+
+  // ESC key handler for web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleBackPress();
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, []);
+
   // Load teacher data for web header and sidebar
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -1082,8 +1099,13 @@ const Settings = () => {
             styles.pageHeader,
             { opacity: fadeAnim }
           ]}>
-            <Text style={styles.pageTitle}>Settings</Text>
-            <Text style={styles.pageSubtitle}>Manage your account preferences and bank details</Text>
+            <TouchableOpacity style={styles.backBtnCircle} onPress={handleBackPress}>
+              <Ionicons name="arrow-back" size={20} color="#1F2937" />
+            </TouchableOpacity>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.pageTitle}>Settings</Text>
+              <Text style={styles.pageSubtitle}>Manage your account preferences and bank details</Text>
+            </View>
           </Animated.View>
 
           {/* Personal Information Card */}
@@ -1264,7 +1286,26 @@ const createStyles = (screenWidth: number) => StyleSheet.create({
     padding: getSpacing(screenWidth, 1.5),
   },
   pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: getSpacing(screenWidth, 2),
+  },
+  backBtnCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    marginRight: getSpacing(screenWidth, 1),
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   pageTitle: {
     fontSize: getFontSize(screenWidth, 'title'),

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Dimensions,
   Linking,
   Image,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
@@ -17,6 +18,8 @@ import WebSidebar from '../../../components/ui/WebSidebar';
 import ResponsiveSidebar from '../../../components/ui/ResponsiveSidebar';
 import { TeacherThoughtsBackground } from '../../../components/ui/TeacherThoughtsCard';
 import BackButton from '../../../components/BackButton';
+import { getAuthData } from '../../../utils/authStorage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 const isDesktop = width >= 1024;
@@ -83,6 +86,67 @@ const Faq = () => {
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const router = useRouter();
+  const [studentName, setStudentName] = useState<string>('');
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  const handleBackPress = useCallback(() => { router.push('/(tabs)/StudentDashBoard/Student'); }, [router]);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const auth = await getAuthData();
+        if (!auth?.token) return;
+
+        const headers = { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" };
+        const profileResponse = await fetch(`${process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:5000'}/api/userProfile`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ email: auth.email }),
+        });
+
+        if (profileResponse.ok) {
+          const profileData = await profileResponse.json();
+          setStudentName(profileData.name || '');
+          setProfileImage(profileData.profileimage || null);
+          setUserEmail(auth.email || '');
+          await AsyncStorage.multiSet([
+            ["studentName", profileData.name || ""],
+            ["profileImage", profileData.profileimage || ""],
+            ["userEmail", auth.email || ""],
+          ]);
+        }
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+        // Try to get cached data
+        const cachedName = await AsyncStorage.getItem("studentName");
+        const cachedImage = await AsyncStorage.getItem("profileImage");
+        const cachedEmail = await AsyncStorage.getItem("userEmail");
+        if (cachedName) setStudentName(cachedName);
+        if (cachedImage) setProfileImage(cachedImage);
+        if (cachedEmail) setUserEmail(cachedEmail);
+      }
+    };
+
+    const loadUserRole = async () => {
+      try {
+        const storedRole = await AsyncStorage.getItem("user_role");
+        if (storedRole) setUserRole(storedRole);
+      } catch {}
+    };
+
+    fetchProfile();
+    loadUserRole();
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') handleBackPress(); };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, [handleBackPress]);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -117,16 +181,16 @@ const Faq = () => {
         router.push('/(tabs)/StudentDashBoard/Profile');
         break;
       case 'Share':
-        router.push('/(tabs)/StudentDashBoard/Share');
+        router.push({ pathname: "/(tabs)/StudentDashBoard/Share", params: { userEmail, studentName, profileImage } });
         break;
       case 'Billing':
-        router.push('/(tabs)/Billing');
+        router.push({ pathname: "/(tabs)/Billing", params: { userEmail, userType: userRole } });
         break;
       case 'Faq':
         // Already on this page
         break;
       case 'Subscription':
-        router.push('/(tabs)/StudentDashBoard/Subscription');
+        router.push({ pathname: "/(tabs)/StudentDashBoard/Subscription", params: { userEmail } });
         break;
       case 'Contact Us':
         router.push('/(tabs)/Contact');
@@ -149,7 +213,7 @@ const Faq = () => {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <BackButton size={24} color="#FFFFFF" onPress={() => router.back()} />
+          <BackButton size={24} color="#FFFFFF" onPress={handleBackPress} />
           <Text style={styles.headerText}>FAQ</Text>
         </View>
 
@@ -262,116 +326,126 @@ const Faq = () => {
         <ResponsiveSidebar 
           activeItem="Faq" 
           onItemPress={handleSidebarSelect}
-          userEmail=""
-          studentName="Student"
-          profileImage={null}
+          userEmail={userEmail || ""}
+          studentName={studentName || "Student"}
+          profileImage={profileImage || null}
         >
           <View style={styles.desktopMain}>
             <TeacherThoughtsBackground>
               <View style={styles.desktopContent}>
                 <View style={styles.desktopHeader}>
-                  <Text style={styles.desktopTitle}>Frequently Asked Questions</Text>
-                  <Text style={styles.desktopSubtitle}>Find answers to common questions about GoGrowSmart</Text>
+                  <TouchableOpacity 
+                    style={styles.desktopBackButton} 
+                    onPress={handleBackPress}
+                  >
+                    <Ionicons name="arrow-back" size={20} color="#1F2937" />
+                  </TouchableOpacity>
+                  <View style={styles.desktopHeaderTitle}>
+                    <Text style={styles.desktopTitle}>Frequently Asked Questions</Text>
+                    <Text style={styles.desktopSubtitle}>Find answers to common questions about GoGrowSmart</Text>
+                  </View>
                 </View>
 
-                <View style={styles.desktopGrid}>
-                  {/* Left Column - Categories and FAQ */}
-                  <View style={styles.desktopLeft}>
-                    <View style={styles.categoriesContainer}>
-                      <Text style={styles.sectionTitle}>Categories</Text>
-                      <View style={styles.categoryGrid}>
-                        {categories.map((category) => (
+                <ScrollView style={styles.desktopScrollContainer} showsVerticalScrollIndicator={false}>
+                  <View style={styles.desktopGrid}>
+                    {/* Left Column - Categories and FAQ */}
+                    <View style={styles.desktopLeft}>
+                      <View style={styles.categoriesContainer}>
+                        <Text style={styles.sectionTitle}>Categories</Text>
+                        <View style={styles.categoryGrid}>
+                          {categories.map((category) => (
+                            <TouchableOpacity
+                              key={category}
+                              style={[
+                                styles.categoryChipDesktop,
+                                selectedCategory === category && styles.categoryChipActive
+                              ]}
+                              onPress={() => setSelectedCategory(category)}
+                            >
+                              <Text style={[
+                                styles.categoryText,
+                                selectedCategory === category && styles.categoryTextActive
+                              ]}>
+                                {category}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+
+                      <View style={styles.faqContainer}>
+                        {filteredFAQs.map((item) => (
                           <TouchableOpacity
-                            key={category}
-                            style={[
-                              styles.categoryChipDesktop,
-                              selectedCategory === category && styles.categoryChipActive
-                            ]}
-                            onPress={() => setSelectedCategory(category)}
+                            key={item.id}
+                            style={styles.faqItem}
+                            onPress={() => toggleItem(item.id)}
                           >
-                            <Text style={[
-                              styles.categoryText,
-                              selectedCategory === category && styles.categoryTextActive
-                            ]}>
-                              {category}
-                            </Text>
+                            <View style={styles.faqHeader}>
+                              <Text style={styles.faqQuestion}>{item.question}</Text>
+                              <Ionicons
+                                name={expandedItems.includes(item.id) ? "chevron-up" : "chevron-down"}
+                                size={20}
+                                color="#3B5BFE"
+                              />
+                            </View>
+                            {expandedItems.includes(item.id) && (
+                              <Text style={styles.faqAnswer}>{item.answer}</Text>
+                            )}
                           </TouchableOpacity>
                         ))}
                       </View>
                     </View>
 
-                    <View style={styles.faqContainer}>
-                      {filteredFAQs.map((item) => (
-                        <TouchableOpacity
-                          key={item.id}
-                          style={styles.faqItem}
-                          onPress={() => toggleItem(item.id)}
-                        >
-                          <View style={styles.faqHeader}>
-                            <Text style={styles.faqQuestion}>{item.question}</Text>
-                            <Ionicons
-                              name={expandedItems.includes(item.id) ? "chevron-up" : "chevron-down"}
-                              size={20}
-                              color="#3B5BFE"
-                            />
-                          </View>
-                          {expandedItems.includes(item.id) && (
-                            <Text style={styles.faqAnswer}>{item.answer}</Text>
-                          )}
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
+                    {/* Right Column - Footer */}
+                    <View style={styles.desktopRight}>
+                      <View style={styles.footerContainerDesktop}>
+                        <View style={styles.footerSection}>
+                          <Text style={styles.footerTitle}>About GoGrowSmart</Text>
+                          <Text style={styles.footerText}>
+                            GoGrowSmart is committed to providing quality education through innovative technology and experienced teachers.
+                          </Text>
+                        </View>
 
-                  {/* Right Column - Footer */}
-                  <View style={styles.desktopRight}>
-                    <View style={styles.footerContainerDesktop}>
-                      <View style={styles.footerSection}>
-                        <Text style={styles.footerTitle}>About GoGrowSmart</Text>
-                        <Text style={styles.footerText}>
-                          GoGrowSmart is committed to providing quality education through innovative technology and experienced teachers.
-                        </Text>
-                      </View>
-
-                      <View style={styles.footerSection}>
-                        <Text style={styles.footerTitle}>Quick Links</Text>
-                        <TouchableOpacity onPress={() => Linking.openURL('https://gogrowsmart.com/terms-of-service/')}>
-                          <Text style={styles.footerLink}>Terms of Service</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => Linking.openURL('https://gogrowsmart.com/privacy-policy/')}>
-                          <Text style={styles.footerLink}>Privacy Policy</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => Linking.openURL('mailto:support@gogrowsmart.com')}>
-                          <Text style={styles.footerLink}>Contact Support</Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      <View style={styles.footerSection}>
-                        <Text style={styles.footerTitle}>Connect With Us</Text>
-                        <View style={styles.socialLinks}>
-                          <TouchableOpacity style={styles.socialButton}>
-                            <Ionicons name="logo-facebook" size={24} color="#3B5BFE" />
+                        <View style={styles.footerSection}>
+                          <Text style={styles.footerTitle}>Quick Links</Text>
+                          <TouchableOpacity onPress={() => Linking.openURL('https://gogrowsmart.com/terms-of-service/')}>
+                            <Text style={styles.footerLink}>Terms of Service</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity style={styles.socialButton}>
-                            <Ionicons name="logo-twitter" size={24} color="#3B5BFE" />
+                          <TouchableOpacity onPress={() => Linking.openURL('https://gogrowsmart.com/privacy-policy/')}>
+                            <Text style={styles.footerLink}>Privacy Policy</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity style={styles.socialButton}>
-                            <Ionicons name="logo-linkedin" size={24} color="#3B5BFE" />
-                          </TouchableOpacity>
-                          <TouchableOpacity style={styles.socialButton}>
-                            <Ionicons name="logo-instagram" size={24} color="#3B5BFE" />
+                          <TouchableOpacity onPress={() => Linking.openURL('mailto:support@gogrowsmart.com')}>
+                            <Text style={styles.footerLink}>Contact Support</Text>
                           </TouchableOpacity>
                         </View>
-                      </View>
 
-                      <View style={styles.footerBottom}>
-                        <Text style={styles.copyright}>
-                          © 2024 GoGrowSmart. All rights reserved.
-                        </Text>
+                        <View style={styles.footerSection}>
+                          <Text style={styles.footerTitle}>Connect With Us</Text>
+                          <View style={styles.socialLinks}>
+                            <TouchableOpacity style={styles.socialButton}>
+                              <Ionicons name="logo-facebook" size={24} color="#3B5BFE" />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.socialButton}>
+                              <Ionicons name="logo-twitter" size={24} color="#3B5BFE" />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.socialButton}>
+                              <Ionicons name="logo-linkedin" size={24} color="#3B5BFE" />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.socialButton}>
+                              <Ionicons name="logo-instagram" size={24} color="#3B5BFE" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+
+                        <View style={styles.footerBottom}>
+                          <Text style={styles.copyright}>
+                            © 2024 GoGrowSmart. All rights reserved.
+                          </Text>
+                        </View>
                       </View>
                     </View>
                   </View>
-                </View>
+                </ScrollView>
               </View>
             </TeacherThoughtsBackground>
           </View>
@@ -566,8 +640,22 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 32,
   },
+  desktopScrollContainer: {
+    flex: 1,
+  },
   desktopHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 32,
+  },
+  desktopBackButton: {
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    marginRight: 16,
+  },
+  desktopHeaderTitle: {
+    flex: 1,
   },
   desktopTitle: {
     fontSize: 32,

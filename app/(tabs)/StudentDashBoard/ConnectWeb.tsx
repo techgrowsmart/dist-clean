@@ -3,7 +3,7 @@ import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, FlatList, Image, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import Animated, {
@@ -13,7 +13,6 @@ import Animated, {
 import {
   collection,
   getDocs,
-  onSnapshot,
   orderBy,
   query,
   where,
@@ -25,6 +24,7 @@ import {
   arrayUnion,
 } from "firebase/firestore";
 import { db } from "../../../firebaseConfig";
+import socketService from '../../../services/socketService';
 import WebNavbar from "../../../components/ui/WebNavbar";
 import WebSidebar from "../../../components/ui/WebSidebar";
 import ResponsiveSidebar from "../../../components/ui/ResponsiveSidebar";
@@ -100,7 +100,7 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
   // State
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [messages, setMessages] = useState<{ [key: string]: Message[] }>({});
+  // const [messages, setMessages] = useState<{ [key: string]: Message[] }>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [messageInput, setMessageInput] = useState<string>("");
   const [isSending, setIsSending] = useState<boolean>(false);
@@ -117,6 +117,31 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+
+  // Helper to filter out broadcast messages
+  const filterBroadcastMessages = (messages: any[]) => {
+    return messages.filter(msg => {
+      const text = msg.text || msg.message || '';
+      return !text.startsWith('📢 Broadcast:');
+    });
+  };
+
+  // ScrollView ref for auto-scrolling to bottom
+  const messagesScrollViewRef = useRef<ScrollView>(null);
+  // Ref for message polling interval cleanup
+  const messagePollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Ref for broadcast message polling
+  const broadcastPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-scroll to bottom when chatMessages change
+  useEffect(() => {
+    if (chatMessages.length > 0 && messagesScrollViewRef.current) {
+      setTimeout(() => {
+        messagesScrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [chatMessages]);
   
   // Posts / Thoughts state
   const [posts, setPosts] = useState<any[]>([]);
@@ -135,6 +160,24 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
   // Booking requests state
   const [bookingRequests, setBookingRequests] = useState<any[]>([]);
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
+
+  // Student Broadcast state
+  const [studentBroadcastData, setStudentBroadcastData] = useState<any[]>([]);
+  const [selectedBroadcast, setSelectedBroadcast] = useState<any | null>(null);
+  const [broadcastMessages, setBroadcastMessages] = useState<any[]>([]);
+  const [broadcastLoading, setBroadcastLoading] = useState(false);
+
+  // Calculate notification count for Connect icon
+  const connectNotificationCount = useMemo(() => {
+    let count = 0;
+    // Count pending booking requests
+    const pendingRequests = bookingRequests.filter(r => r.status === 'pending').length;
+    count += pendingRequests;
+    // Count broadcast groups (new messages)
+    count += studentBroadcastData.length > 0 ? 1 : 0;
+    return count;
+  }, [bookingRequests, studentBroadcastData]);
 
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
@@ -190,6 +233,142 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
     loadUserInfo();
   }, []);
 
+  // Refresh contacts when userEmail is set/updated
+  useEffect(() => {
+    if (userEmail) {
+      fetchEnrolledStudents(userEmail);
+    }
+  }, [userEmail]);
+
+  // Fetch broadcast data when Broadcast tab is active
+  useEffect(() => {
+    if (activeTab === 'Broadcast' && userEmail && authToken) {
+      fetchStudentBroadcast();
+    }
+  }, [activeTab, userEmail, authToken]);
+
+  // Cleanup message polling when selected contact changes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (messagePollIntervalRef.current) {
+        clearInterval(messagePollIntervalRef.current);
+        messagePollIntervalRef.current = null;
+      }
+      if (broadcastPollIntervalRef.current) {
+        clearInterval(broadcastPollIntervalRef.current);
+        broadcastPollIntervalRef.current = null;
+      }
+    };
+  }, [selectedContact]);
+
+  // Global cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      if (messagePollIntervalRef.current) {
+        clearInterval(messagePollIntervalRef.current);
+        messagePollIntervalRef.current = null;
+      }
+      if (broadcastPollIntervalRef.current) {
+        clearInterval(broadcastPollIntervalRef.current);
+        broadcastPollIntervalRef.current = null;
+      }
+    };
+  }, []);
+
+  // Monitor socket connection status
+  useEffect(() => {
+    const checkSocketConnection = () => {
+      try {
+        const socketService = require('../../../services/socketService').socketService;
+        setSocketConnected(socketService.isConnected());
+      } catch (error) {
+        setSocketConnected(false);
+      }
+    };
+
+    checkSocketConnection();
+    const interval = setInterval(checkSocketConnection, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Poll for booking requests updates (for real-time status updates from teacher)
+  useEffect(() => {
+    if (!userEmail) return;
+
+    const pollBookingRequests = async () => {
+      try {
+        const auth = await getAuthData();
+        if (!auth?.token) return;
+
+        const response = await axios.get(`${BASE_URL}/api/bookings/student-requests`, {
+          headers: { Authorization: `Bearer ${auth.token}` }
+        });
+
+        if (response.data.success && response.data.requests) {
+          // Only update if data changed to avoid unnecessary re-renders
+          setBookingRequests(prev => {
+            const newRequests = response.data.requests;
+            // Check if any status changed
+            const hasChanges = newRequests.some((newReq: any) => {
+              const oldReq = prev.find(p => p.id === newReq.id);
+              return !oldReq || oldReq.status !== newReq.status;
+            });
+            if (hasChanges) {
+              console.log('🔄 Booking requests updated:', newRequests);
+              return newRequests;
+            }
+            return prev;
+          });
+        }
+      } catch (error) {
+        console.error('Error polling booking requests:', error);
+      }
+    };
+
+    // Poll every 10 seconds
+    const interval = setInterval(pollBookingRequests, 10000);
+
+    return () => clearInterval(interval);
+  }, [userEmail]);
+
+  // WebSocket listener for real-time booking status updates
+  useEffect(() => {
+    let unsubscribeStatusUpdate: (() => void) | null = null;
+
+    const setupSocket = async () => {
+      try {
+        await socketService.connect();
+
+        // Listen for booking status updates from teacher
+        unsubscribeStatusUpdate = socketService.on('booking_status_update', (data) => {
+          console.log('📬 ConnectWeb: Booking status update received:', data);
+
+          // Update the booking request in the list
+          setBookingRequests(prev => {
+            const updated = prev.map(req => {
+              if (req.id === data.bookingId) {
+                console.log(`✅ ConnectWeb: Updating request ${req.id} status to ${data.status}`);
+                return { ...req, status: data.status };
+              }
+              return req;
+            });
+            return updated;
+          });
+        });
+
+      } catch (error) {
+        console.error('❌ ConnectWeb: WebSocket setup failed:', error);
+      }
+    };
+
+    setupSocket();
+
+    return () => {
+      if (unsubscribeStatusUpdate) unsubscribeStatusUpdate();
+    };
+  }, []);
+
   // Fetch student booking requests
   const fetchStudentBookingRequests = async (studentEmail: string) => {
     try {
@@ -211,109 +390,428 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
     }
   };
 
-  // Fetch enrolled students from Firebase
+  // Fetch enrolled students via API (more reliable than direct Firestore)
   const fetchEnrolledStudents = async (studentEmail: string) => {
     try {
       setLoadingStudents(true);
-      
-      const enrollmentsQuery = query(
-        collection(db, "enrollments"),
-        where("studentEmail", "==", studentEmail)
-      );
-      
-      const enrollmentsSnapshot = await getDocs(enrollmentsQuery);
+
+      // Get auth token for API calls
+      const auth = await getAuthData();
+      if (!auth?.token) {
+        console.log("⚠️ No auth token available");
+        setEnrolledStudents([]);
+        setContacts([]);
+        return;
+      }
+
       const enrolledTeachers = [];
-      
-      for (const enrollmentDoc of enrollmentsSnapshot.docs) {
-        const enrollmentData = enrollmentDoc.data();
-        
-        const teacherDoc = await getDoc(doc(db, "users", enrollmentData.teacherEmail));
-        if (teacherDoc.exists()) {
-          const teacherData = teacherDoc.data();
-          enrolledTeachers.push({
-            id: teacherDoc.id,
-            email: teacherData.email,
-            name: teacherData.name || teacherData.displayName || 'Unknown Teacher',
-            profilePic: teacherData.profilePic || teacherData.photoURL || '',
-            role: teacherData.role || 'teacher',
-            subject: enrollmentData.subject || 'Subject',
-            enrollmentDate: enrollmentData.enrollmentDate,
-            lastMessage: '',
-            lastMessageTime: '',
-            unread: 0
-          });
+      const teacherEmails = new Set(); // Track to avoid duplicates
+
+      // 1. Fetch from API endpoint (paid/subscribed teachers from contacts collection)
+      try {
+        const response = await axios.post(
+          `${BASE_URL}/api/firebase-contacts`,
+          {
+            userEmail: studentEmail,
+            type: 'student'
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${auth.token}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000
+          }
+        );
+
+        if (response.data.success && response.data.contacts) {
+          for (const contact of response.data.contacts) {
+            const teacherEmail = contact.teacherEmail || contact.id;
+
+            if (teacherEmails.has(teacherEmail)) continue;
+            teacherEmails.add(teacherEmail);
+
+            enrolledTeachers.push({
+              id: contact.id || teacherEmail,
+              email: teacherEmail,
+              name: contact.teacherName || 'Unknown Teacher',
+              profilePic: contact.teacherProfilePic || contact.profilePic || '',
+              role: 'teacher',
+              subject: contact.subject || 'Subject',
+              enrollmentDate: contact.addedAt || new Date(),
+              lastMessage: contact.lastMessage || '',
+              lastMessageTime: contact.lastMessageTime || '',
+              unread: contact.unread || 0,
+              isPaid: true, // Mark as paid/subscribed from contacts
+              className: contact.className || ''
+            });
+          }
+          console.log(`✅ Loaded ${enrolledTeachers.length} teachers from API`);
+        }
+      } catch (apiError) {
+        console.log("⚠️ API fetch error:", apiError);
+      }
+
+      // 2. Fallback: Fetch from Firestore contacts collection directly if API fails
+      if (enrolledTeachers.length === 0) {
+        try {
+          const contactsRef = collection(db, "contacts", studentEmail, "teachers");
+          const contactsSnapshot = await getDocs(contactsRef);
+
+          for (const contactDoc of contactsSnapshot.docs) {
+            const contactData = contactDoc.data();
+            const teacherEmail = contactData.teacherEmail || contactDoc.id;
+
+            if (teacherEmails.has(teacherEmail)) continue;
+            teacherEmails.add(teacherEmail);
+
+            enrolledTeachers.push({
+              id: contactDoc.id,
+              email: teacherEmail,
+              name: contactData.teacherName || 'Unknown Teacher',
+              profilePic: contactData.teacherProfilePic || '',
+              role: 'teacher',
+              subject: contactData.subject || 'Subject',
+              enrollmentDate: contactData.addedAt,
+              lastMessage: '',
+              lastMessageTime: '',
+              unread: 0,
+              isPaid: true,
+              className: contactData.className || ''
+            });
+          }
+        } catch (firestoreError) {
+          console.log("⚠️ Firestore fetch error:", firestoreError);
         }
       }
-      
+
       setEnrolledStudents(enrolledTeachers);
       setContacts(enrolledTeachers);
     } catch (error) {
       console.error("❌ Error fetching enrolled students:", error);
+      setEnrolledStudents([]);
+      setContacts([]);
     } finally {
       setLoadingStudents(false);
     }
   };
 
-  // Handle contact selection
-  const handleSelectContact = (contact: any) => {
-    setSelectedContact(contact);
-    
-    const chatId = [userEmail, contact.email].sort().join('_');
-    setCurrentChatId(chatId);
-    
-    loadChatMessages(chatId);
-  };
+  // Fetch student broadcast data - groups by class-subject like teacher view
+  const fetchStudentBroadcast = async () => {
+    if (!userEmail || !authToken) return;
 
-  // Load chat messages
-  const loadChatMessages = async (chatId: string) => {
     try {
-      const messagesQuery = query(
-        collection(db, "chats", chatId, "messages"),
-        orderBy("timestamp", "asc")
+      setBroadcastLoading(true);
+      console.log('📢 Fetching student broadcast data...');
+
+      // Fetch from enrolled teachers - they contain class/subject info
+      const response = await axios.post(
+        `${BASE_URL}/api/firebase-contacts`,
+        {
+          userEmail: userEmail,
+          type: 'student'
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        }
       );
-      
-      const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-        const messagesData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
+
+      if (response.data.success && response.data.contacts) {
+        // Group contacts by class-subject combination
+        const groupedData = response.data.contacts.map((contact: any) => ({
+          id: `${contact.className}-${contact.subject}`,
+          classname: contact.className || 'Class',
+          subject: contact.subject || 'Subject',
+          teacherEmail: contact.teacherEmail,
+          teacherName: contact.teacherName,
+          teacherProfilePic: contact.teacherProfilePic,
+          studentEmail: userEmail,
+          studentName: studentName,
+          unreadCount: 0
         }));
-        setChatMessages(messagesData);
-      });
-      
-      return unsubscribe;
+
+        // Remove duplicates by class-subject
+        const uniqueGroups = Array.from(
+          new Map(groupedData.map((item: any) => [`${item.classname}-${item.subject}`, item])).values()
+        );
+
+        setStudentBroadcastData(uniqueGroups);
+        console.log(`✅ Found ${uniqueGroups.length} broadcast groups`);
+      }
+
+      // Also fetch actual broadcast messages for this student
+      const broadcastsRes = await axios.post(
+        `${BASE_URL}/api/broadcasts`,
+        { studentEmail: userEmail },
+        {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        }
+      );
+
+      if (broadcastsRes.data.broadcasts) {
+        setBroadcastMessages(broadcastsRes.data.broadcasts);
+      }
+
+      setBroadcastLoading(false);
     } catch (error) {
-      console.error("❌ Error loading chat messages:", error);
+      console.error("❌ Error fetching student broadcast:", error);
+      setBroadcastLoading(false);
     }
   };
 
-  // Send message
+  // Load broadcast messages for a specific class-subject group
+  const loadBroadcastMessages = async (className: string, subject: string) => {
+    if (!userEmail || !authToken) return;
+
+    // Clear any existing broadcast poll interval
+    if (broadcastPollIntervalRef.current) {
+      clearInterval(broadcastPollIntervalRef.current);
+      broadcastPollIntervalRef.current = null;
+    }
+
+    const fetchBroadcasts = async () => {
+      try {
+        setMessagesLoading(true);
+
+        const response = await axios.post(
+          `${BASE_URL}/api/broadcasts`,
+          {
+            studentEmail: userEmail,
+            className,
+            subject
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000
+          }
+        );
+
+        if (response.data.broadcasts) {
+          const formattedMessages = response.data.broadcasts.map((msg: any) => {
+            // Handle params array format from backend: [teacherEmail, className, subject, batchId, studentEmails, studentNames, isBroadcast, fromEmail, fromName, messageContent, timeString, timestamp]
+            const params = msg.params || [];
+            const messageContent = params[9] || '';
+            const timeString = params[10] || '';
+            const fromName = params[8] || msg.teacherName || 'Teacher';
+            const timestamp = msg.timestamp?._seconds ? new Date(msg.timestamp._seconds * 1000) :
+                              msg.timestamp?.seconds ? new Date(msg.timestamp.seconds * 1000) :
+                              msg.timestamp ? new Date(msg.timestamp) : new Date();
+
+            return {
+              id: msg.id || msg._id,
+              text: messageContent,
+              sender: 'other', // Broadcasts are always from teacher
+              time: timeString || timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              timestamp: timestamp,
+              isBroadcast: true,
+              teacherName: fromName
+            };
+          });
+          setChatMessages(formattedMessages);
+        }
+      } catch (error) {
+        console.error("❌ Error loading broadcast messages:", error);
+      } finally {
+        setMessagesLoading(false);
+      }
+    };
+
+    // Fetch immediately
+    await fetchBroadcasts();
+
+    // Set up polling every 5 seconds
+    broadcastPollIntervalRef.current = setInterval(fetchBroadcasts, 5000);
+  };
+
+  // Handle broadcast selection
+  const handleBroadcastSelect = (broadcastItem: any) => {
+    setSelectedBroadcast(broadcastItem);
+    setSelectedContact(null); // Clear selected contact
+
+    // Load broadcast messages for this class-subject
+    if (broadcastItem.classname && broadcastItem.subject) {
+      loadBroadcastMessages(broadcastItem.classname, broadcastItem.subject);
+    }
+  };
+const loadChatMessages = async (chatId: string) => {
+  try {
+    setMessagesLoading(true);
+
+    // Clear any existing poll interval
+    if (messagePollIntervalRef.current) {
+      clearInterval(messagePollIntervalRef.current);
+      messagePollIntervalRef.current = null;
+    }
+
+    const fetchMessages = async () => {
+      try {
+        // Use correct endpoint: /api/messages/:contactEmail
+        const contactEmail = selectedContact?.email;
+        if (!contactEmail) return;
+
+        const response = await axios.get(
+          `${BASE_URL}/api/messages/${encodeURIComponent(contactEmail)}`,
+          { headers: { 'Authorization': `Bearer ${authToken}` }, timeout: 10000 }
+        );
+        if (response.data.success && response.data.messages) {
+          // Filter out broadcast messages (only show direct teacher messages)
+          const filteredMessages = filterBroadcastMessages(response.data.messages);
+          const formattedMessages = filteredMessages.map((msg: any) => ({
+            id: msg.id || msg._id,
+            text: msg.text || msg.message,
+            sender: msg.sender === userEmail ? 'me' : 'other',
+            receiver: msg.recipient || msg.receiver,
+            timestamp: msg.timestamp,
+            read: msg.read || false
+          }));
+          setChatMessages(formattedMessages);
+        }
+      } catch (apiError) {
+        console.log("⚠️ API fetch failed, using Firestore fallback:", apiError);
+        // Fallback to Firestore getDocs (this is safe – no onSnapshot)
+        try {
+          const messagesQuery = query(
+            collection(db, "chats", chatId, "messages"),
+            orderBy("timestamp", "asc")
+          );
+          const snapshot = await getDocs(messagesQuery);
+          const messagesData = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              text: data.text,
+              sender: data.sender === userEmail ? 'me' : 'other',
+              receiver: data.recipient || data.receiver,
+              timestamp: data.timestamp,
+              read: data.read || false
+            };
+          });
+          // Filter out broadcast messages from Firestore fallback too
+          const filteredMessagesData = filterBroadcastMessages(messagesData);
+          setChatMessages(filteredMessagesData);
+        } catch (firestoreError) {
+          console.error("❌ Firestore fallback failed:", firestoreError);
+        }
+      } finally {
+        setMessagesLoading(false);
+      }
+    };
+
+    await fetchMessages();
+    // Poll every 5 seconds (increase from 3 to reduce load)
+    messagePollIntervalRef.current = setInterval(fetchMessages, 5000);
+  } catch (error) {
+    console.error("❌ Error loading chat messages:", error);
+    setMessagesLoading(false);
+  }
+};
+  // Handle contact selection
+  const handleSelectContact = (contact: any) => {
+    setSelectedContact(contact);
+    setSelectedBroadcast(null); // Clear any selected broadcast
+
+    // Clear broadcast polling when switching to contact chat
+    if (broadcastPollIntervalRef.current) {
+      clearInterval(broadcastPollIntervalRef.current);
+      broadcastPollIntervalRef.current = null;
+    }
+
+    const chatId = [userEmail, contact.email].sort().join('_');
+    setCurrentChatId(chatId);
+
+    loadChatMessages(chatId);
+  };
+
+  // Send message via API with optimistic update
   const sendMessage = async () => {
     if (!messageInput.trim() || !currentChatId || !userEmail || !selectedContact) return;
-    
+
+    const messageText = messageInput.trim();
+    const tempId = `temp_${Date.now()}`;
+    const now = new Date();
+
+    // OPTIMISTIC UPDATE: Add message to chat immediately
+    const optimisticMessage = {
+      id: tempId,
+      text: messageText,
+      sender: 'me', // Use 'me' for optimistic updates to match the expected format
+      time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: now,
+      read: false,
+      pending: true // Mark as pending until confirmed
+    };
+
+    setChatMessages(prev => [...prev, optimisticMessage]);
+    setMessageInput('');
+
     try {
       setIsSending(true);
-      
-      const messageData = {
-        text: messageInput.trim(),
-        sender: userEmail,
-        receiver: selectedContact?.email,
-        timestamp: serverTimestamp(),
-        read: false
-      };
-      
-      await addDoc(collection(db, "chats", currentChatId, "messages"), messageData);
-      
-      const updatedContacts = contacts.map(contact => 
-        contact.email === selectedContact?.email 
-          ? { ...contact, lastMessage: messageInput.trim(), lastMessageTime: 'Just now' }
+
+      // Try API first - use correct endpoint /api/messages/send
+      try {
+        await axios.post(
+          `${BASE_URL}/api/messages/send`,
+          {
+            sender: userEmail,
+            recipient: selectedContact?.email,
+            senderName: studentName || userEmail?.split('@')[0],
+            text: messageText,
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000
+          }
+        );
+
+        // Update the optimistic message to confirmed
+        setChatMessages(prev =>
+          prev.map(msg => msg.id === tempId ? { ...msg, pending: false } : msg)
+        );
+      } catch (apiError) {
+        console.log("⚠️ API send failed, trying Firestore fallback:", apiError);
+        // Fallback to Firestore
+        const messageData = {
+          text: messageText,
+          sender: userEmail,
+          recipient: selectedContact?.email,
+          timestamp: serverTimestamp(),
+          read: false
+        };
+        await addDoc(collection(db, "chats", currentChatId, "messages"), messageData);
+
+        // Update the optimistic message to confirmed
+        setChatMessages(prev =>
+          prev.map(msg => msg.id === tempId ? { ...msg, pending: false } : msg)
+        );
+      }
+
+      // Update local contacts list
+      const updatedContacts = contacts.map(contact =>
+        contact.email === selectedContact?.email
+          ? { ...contact, lastMessage: messageText, lastMessageTime: 'Just now' }
           : contact
       );
       setContacts(updatedContacts);
-      
-      setMessageInput('');
     } catch (error) {
       console.error("❌ Error sending message:", error);
+      // Remove the optimistic message on error
+      setChatMessages(prev => prev.filter(msg => msg.id !== tempId));
       Alert.alert("Error", "Failed to send message");
+      setMessageInput(messageText); // Restore the message text
     } finally {
       setIsSending(false);
     }
@@ -494,53 +992,7 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
     }
   }, []);
 
-  // Real-time messaging
-  useEffect(() => {
-    if (!selectedContact || !userEmail) return;
-
-    const recipientEmail = selectedContact.email;
-    if (!recipientEmail) return;
-
-    const chatId = [userEmail, recipientEmail].sort().join("_");
-    const messagesRef = collection(db, "chats", chatId, "messages");
-    const q = query(messagesRef, orderBy("timestamp", "asc"));
-
-    return onSnapshot(q, (querySnapshot) => {
-      const messagesList: Message[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        const isMe = data.sender === userEmail;
-        const isRecipient = data.recipient === userEmail;
-
-        if (isMe || isRecipient) {
-          messagesList.push({
-            id: doc.id,
-            text: data.text,
-            sender: isMe ? "me" : "other",
-            time: new Date(data.timestamp?.toDate()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            timestamp: data.timestamp?.toDate(),
-            isBroadcast: data.isBroadcast || false,
-          });
-        }
-      });
-
-      setMessages((prevMessages) => ({
-        ...prevMessages,
-        [selectedContact.name]: messagesList,
-      }));
-    
-      if (messagesList.length > 0) {
-        const lastMessage = messagesList[messagesList.length - 1];
-        setContacts((prevContacts) =>
-          prevContacts.map((contact) =>
-            contact.name === selectedContact.name 
-              ? { ...contact, lastMessage: lastMessage.text, lastMessageTime: lastMessage.time }
-              : contact
-          )
-        );
-      }
-    });
-  }, [selectedContact, userEmail]);
+  // NOTE: Message polling is handled by loadChatMessages function - no duplicate useEffect needed
 
   if (!fontsLoaded) {
     return (
@@ -564,7 +1016,8 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
               studentName={studentName || ""}
               profileImage={userImage || null}
               showHamburger={false}
-            >
+              notificationCounts={{ 'Connect': connectNotificationCount }}
+              >
                 <View style={styles.mainWrapper}>
                 <View style={styles.contentColumns}>
                   {/* CENTER: Chat Content */}
@@ -574,8 +1027,46 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                       <View style={styles.chatListHeader}>
                         <BackButton onPress={handleBackPress} color="white" />
                         <Text style={styles.chatListTitle}>Messages</Text>
+                        <TouchableOpacity
+                          onPress={() => userEmail && fetchEnrolledStudents(userEmail)}
+                          style={styles.refreshButton}
+                          disabled={loadingStudents}
+                        >
+                          {loadingStudents ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Ionicons name="refresh" size={20} color="#fff" />
+                          )}
+                        </TouchableOpacity>
                       </View>
-                    
+
+                      {/* Status Banner: WebSocket & Pending Bookings */}
+                      <View style={localStyles.statusBanner}>
+                        <View style={localStyles.statusItem}>
+                          <View style={[
+                            localStyles.statusDot,
+                            socketConnected ? { backgroundColor: '#22C55E' } : { backgroundColor: '#EF4444' }
+                          ]} />
+                          <Text style={localStyles.statusText}>
+                            {socketConnected ? 'Live' : 'Offline'}
+                          </Text>
+                          {!socketConnected && (
+                            <Ionicons name="alert" size={14} color="#EF4444" style={{ marginLeft: 4 }} />
+                          )}
+                        </View>
+                        {bookingRequests.filter(r => r.status === 'pending').length > 0 && (
+                          <TouchableOpacity
+                            style={localStyles.pendingBadge}
+                            onPress={() => setActiveTab('My Requests')}
+                          >
+                            <Ionicons name="time" size={14} color="#92400E" />
+                            <Text style={localStyles.pendingBadgeText}>
+                              {bookingRequests.filter(r => r.status === 'pending').length} Pending
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
                     <View style={styles.tabContainer}>
                       <TouchableOpacity
                         style={[styles.tab, activeTab === 'Teachers' && styles.activeTab]}
@@ -659,7 +1150,42 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                             </View>
                           ))}
                         </>
+                      ) : activeTab === 'Broadcast' ? (
+                        // Broadcast Tab Content - Show Class-Subject Groups
+                        <>
+                          {broadcastLoading ? (
+                            <ActivityIndicator size="large" color={COLORS.primaryBlue} style={{ marginTop: 30 }} />
+                          ) : studentBroadcastData.length === 0 ? (
+                            <View style={styles.emptyContainer}>
+                              <Ionicons name="megaphone-outline" size={64} color={COLORS.textMuted} />
+                              <Text style={styles.emptyText}>No broadcasts yet</Text>
+                              <Text style={styles.emptySubtext}>Join a class to receive broadcast messages from your teacher</Text>
+                            </View>
+                          ) : (
+                            studentBroadcastData.map((broadcastGroup) => (
+                              <TouchableOpacity
+                                key={broadcastGroup.id}
+                                style={[styles.broadcastGroupItem, selectedBroadcast?.id === broadcastGroup.id && styles.broadcastGroupItemActive]}
+                                onPress={() => handleBroadcastSelect(broadcastGroup)}
+                              >
+                                <View style={styles.broadcastGroupIcon}>
+                                  <Ionicons name="school" size={24} color={COLORS.primaryBlue} />
+                                </View>
+                                <View style={styles.broadcastGroupInfo}>
+                                  <Text style={styles.broadcastGroupTitle}>
+                                    {broadcastGroup.classname} - {broadcastGroup.subject}
+                                  </Text>
+                                  <Text style={styles.broadcastGroupSubtitle}>
+                                    Teacher: {broadcastGroup.teacherName || 'Unknown'}
+                                  </Text>
+                                </View>
+                                <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+                              </TouchableOpacity>
+                            ))
+                          )}
+                        </>
                       ) : (
+                        // Teachers Tab Content
                         <>
                           {loadingStudents ? (
                             <ActivityIndicator size="large" color={COLORS.primaryBlue} />
@@ -686,7 +1212,14 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                                   </View>
                                 )}
                                 <View style={styles.contactInfo}>
-                                  <Text style={styles.contactName}>{contact.name}</Text>
+                                  <View style={styles.contactNameRow}>
+                                    <Text style={styles.contactName}>{contact.name}</Text>
+                                    {contact.isPaid && (
+                                      <View style={styles.paidBadge}>
+                                        <Text style={styles.paidBadgeText}>PAID</Text>
+                                      </View>
+                                    )}
+                                  </View>
                                   <Text style={styles.contactLastMessage} numberOfLines={1}>
                                     {contact.lastMessage || 'Click to start chatting'}
                                   </Text>
@@ -719,7 +1252,14 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                               </View>
                             )}
                             <View style={styles.chatHeaderInfo}>
-                              <Text style={styles.chatHeaderName}>{selectedContact.name}</Text>
+                              <View style={styles.contactNameRow}>
+                                <Text style={styles.chatHeaderName}>{selectedContact.name}</Text>
+                                {selectedContact.isPaid && (
+                                  <View style={styles.paidBadge}>
+                                    <Text style={styles.paidBadgeText}>PAID</Text>
+                                  </View>
+                                )}
+                              </View>
                               <Text style={styles.chatHeaderStatus}>Active now</Text>
                             </View>
                           </View>
@@ -729,8 +1269,17 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                         </View>
 
                         {/* Messages Area */}
-                        <ScrollView style={styles.messagesArea}>
-                          {chatMessages.length === 0 ? (
+                        <ScrollView
+                          ref={messagesScrollViewRef}
+                          style={styles.messagesArea}
+                          contentContainerStyle={{ paddingVertical: 16 }}
+                        >
+                          {messagesLoading ? (
+                            <View style={styles.chatEmptyContainer}>
+                              <ActivityIndicator size="large" color={COLORS.primaryBlue} />
+                              <Text style={styles.chatEmptyText}>Loading messages...</Text>
+                            </View>
+                          ) : chatMessages.length === 0 ? (
                             <View style={styles.chatEmptyContainer}>
                               <Text style={styles.chatEmptyText}>Start a conversation with {selectedContact.name}</Text>
                             </View>
@@ -760,7 +1309,7 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                           )}
                         </ScrollView>
 
-                        {/* Message Input */}
+                        {/* Message Input - Only for contact chat, not broadcast */}
                         <View style={styles.messageInputContainer}>
                           <TextInput
                             style={styles.messageInput}
@@ -769,8 +1318,8 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                             onChangeText={setMessageInput}
                             multiline
                           />
-                          <TouchableOpacity 
-                            style={styles.sendButton} 
+                          <TouchableOpacity
+                            style={styles.sendButton}
                             onPress={sendMessage}
                             disabled={isSending || !messageInput.trim()}
                           >
@@ -782,11 +1331,78 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                           </TouchableOpacity>
                         </View>
                       </View>
+                    ) : selectedBroadcast ? (
+                      /* BROADCAST CHAT VIEW - Read Only */
+                      <View style={styles.chatWindow}>
+                        {/* Broadcast Chat Header */}
+                        <View style={styles.chatHeader}>
+                          <View style={styles.chatHeaderLeft}>
+                            <View style={[styles.chatAvatar, { backgroundColor: COLORS.primaryBlue, justifyContent: 'center', alignItems: 'center' }]}>
+                              <Ionicons name="megaphone" size={24} color={COLORS.white} />
+                            </View>
+                            <View style={styles.chatHeaderInfo}>
+                              <Text style={styles.chatHeaderName}>
+                                {selectedBroadcast.classname} - {selectedBroadcast.subject}
+                              </Text>
+                              <Text style={styles.chatHeaderStatus}>Broadcast • Read Only</Text>
+                            </View>
+                          </View>
+                          <TouchableOpacity onPress={() => setSelectedBroadcast(null)}>
+                            <Ionicons name="close" size={24} color={COLORS.textHeader} />
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* Broadcast Messages Area */}
+                        <ScrollView
+                          ref={messagesScrollViewRef}
+                          style={styles.messagesArea}
+                          contentContainerStyle={{ paddingVertical: 16 }}
+                        >
+                          {messagesLoading ? (
+                            <View style={styles.chatEmptyContainer}>
+                              <ActivityIndicator size="large" color={COLORS.primaryBlue} />
+                              <Text style={styles.chatEmptyText}>Loading broadcast messages...</Text>
+                            </View>
+                          ) : chatMessages.length === 0 ? (
+                            <View style={styles.chatEmptyContainer}>
+                              <Ionicons name="megaphone-outline" size={48} color={COLORS.textMuted} />
+                              <Text style={styles.chatEmptyText}>No broadcast messages yet</Text>
+                              <Text style={styles.chatEmptySubtext}>Your teacher will send announcements here</Text>
+                            </View>
+                          ) : (
+                            chatMessages.map((message) => (
+                              <View
+                                key={message.id}
+                                style={[styles.messageItem, styles.receivedMessage, styles.broadcastMessage]}
+                              >
+                                <View style={styles.broadcastHeader}>
+                                  <Ionicons name="megaphone" size={14} color={COLORS.primaryBlue} />
+                                  <Text style={styles.broadcastTeacherName}>{message.teacherName || 'Teacher'}</Text>
+                                </View>
+                                <Text style={[styles.messageText, styles.receivedMessageText]}>
+                                  {message.text}
+                                </Text>
+                                <Text style={[styles.messageTime, styles.receivedMessageTime]}>
+                                  {message.time}
+                                </Text>
+                              </View>
+                            ))
+                          )}
+                        </ScrollView>
+
+                        {/* Read Only Indicator - No Input */}
+                        <View style={[styles.messageInputContainer, { backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' }]}>
+                          <Ionicons name="eye-outline" size={18} color={COLORS.textSecondary} style={{ marginRight: 8 }} />
+                          <Text style={{ color: COLORS.textSecondary, fontFamily: 'Poppins_400Regular', fontSize: 14 }}>
+                            Read Only • You cannot reply to broadcasts
+                          </Text>
+                        </View>
+                      </View>
                     ) : (
                       <View style={styles.chatEmptyState}>
                         <Ionicons name="chatbubble-outline" size={64} color={COLORS.textMuted} />
                         <Text style={styles.chatEmptyTitle}>Select a conversation</Text>
-                        <Text style={styles.chatEmptySubtitle}>Choose a teacher from the list to start chatting</Text>
+                        <Text style={styles.chatEmptySubtitle}>Choose a teacher or broadcast to view messages</Text>
                       </View>
                     )}
                   </View>
@@ -840,7 +1456,8 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
             userEmail={userEmail || ""}
             studentName={studentName || ""}
             profileImage={userImage || null}
-          >
+            notificationCounts={{ 'Connect': connectNotificationCount }}
+            >
             <View style={styles.mainWrapper}>
             <View style={styles.contentColumns}>
               {/* CENTER: Chat Content */}
@@ -850,8 +1467,19 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                   <View style={styles.chatListHeader}>
                     <BackButton onPress={handleBackPress} color="white" />
                     <Text style={styles.chatListTitle}>Messages</Text>
+                    <TouchableOpacity
+                      onPress={() => userEmail && fetchEnrolledStudents(userEmail)}
+                      style={styles.refreshButton}
+                      disabled={loadingStudents}
+                    >
+                      {loadingStudents ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Ionicons name="refresh" size={20} color="#fff" />
+                      )}
+                    </TouchableOpacity>
                   </View>
-                  
+
                   <View style={styles.tabContainer}>
                     <TouchableOpacity
                       style={[styles.tab, activeTab === 'Teachers' && styles.activeTab]}
@@ -935,7 +1563,42 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                           </View>
                         ))}
                       </>
+                    ) : activeTab === 'Broadcast' ? (
+                      // Tablet: Broadcast Tab Content
+                      <>
+                        {broadcastLoading ? (
+                          <ActivityIndicator size="large" color={COLORS.primaryBlue} style={{ marginTop: 30 }} />
+                        ) : studentBroadcastData.length === 0 ? (
+                          <View style={styles.emptyContainer}>
+                            <Ionicons name="megaphone-outline" size={64} color={COLORS.textMuted} />
+                            <Text style={styles.emptyText}>No broadcasts yet</Text>
+                            <Text style={styles.emptySubtext}>Join a class to receive broadcast messages from your teacher</Text>
+                          </View>
+                        ) : (
+                          studentBroadcastData.map((broadcastGroup) => (
+                            <TouchableOpacity
+                              key={broadcastGroup.id}
+                              style={[styles.broadcastGroupItem, selectedBroadcast?.id === broadcastGroup.id && styles.broadcastGroupItemActive]}
+                              onPress={() => handleBroadcastSelect(broadcastGroup)}
+                            >
+                              <View style={styles.broadcastGroupIcon}>
+                                <Ionicons name="school" size={24} color={COLORS.primaryBlue} />
+                              </View>
+                              <View style={styles.broadcastGroupInfo}>
+                                <Text style={styles.broadcastGroupTitle}>
+                                  {broadcastGroup.classname} - {broadcastGroup.subject}
+                                </Text>
+                                <Text style={styles.broadcastGroupSubtitle}>
+                                  Teacher: {broadcastGroup.teacherName || 'Unknown'}
+                                </Text>
+                              </View>
+                              <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+                            </TouchableOpacity>
+                          ))
+                        )}
+                      </>
                     ) : (
+                      // Tablet: Teachers Tab Content
                       <>
                         {loadingStudents ? (
                           <ActivityIndicator size="large" color={COLORS.primaryBlue} />
@@ -962,7 +1625,14 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                                 </View>
                               )}
                               <View style={styles.contactInfo}>
-                                <Text style={styles.contactName}>{contact.name}</Text>
+                                <View style={styles.contactNameRow}>
+                                  <Text style={styles.contactName}>{contact.name}</Text>
+                                  {contact.isPaid && (
+                                    <View style={styles.paidBadge}>
+                                      <Text style={styles.paidBadgeText}>PAID</Text>
+                                    </View>
+                                  )}
+                                </View>
                                 <Text style={styles.contactLastMessage} numberOfLines={1}>
                                   {contact.lastMessage || 'Click to start chatting'}
                                 </Text>
@@ -994,7 +1664,14 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                             </View>
                           )}
                           <View style={styles.chatHeaderInfo}>
-                            <Text style={styles.chatHeaderName}>{selectedContact.name}</Text>
+                            <View style={styles.contactNameRow}>
+                              <Text style={styles.chatHeaderName}>{selectedContact.name}</Text>
+                              {selectedContact.isPaid && (
+                                <View style={styles.paidBadge}>
+                                  <Text style={styles.paidBadgeText}>PAID</Text>
+                                </View>
+                              )}
+                            </View>
                             <Text style={styles.chatHeaderStatus}>Active now</Text>
                           </View>
                         </View>
@@ -1003,8 +1680,17 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                         </TouchableOpacity>
                       </View>
 
-                      <ScrollView style={styles.messagesArea}>
-                        {chatMessages.length === 0 ? (
+                      <ScrollView
+                        ref={messagesScrollViewRef}
+                        style={styles.messagesArea}
+                        contentContainerStyle={{ paddingVertical: 16 }}
+                      >
+                        {messagesLoading ? (
+                          <View style={styles.chatEmptyContainer}>
+                            <ActivityIndicator size="large" color={COLORS.primaryBlue} />
+                            <Text style={styles.chatEmptyText}>Loading messages...</Text>
+                          </View>
+                        ) : chatMessages.length === 0 ? (
                           <View style={styles.chatEmptyContainer}>
                             <Text style={styles.chatEmptyText}>Start a conversation with {selectedContact.name}</Text>
                           </View>
@@ -1042,8 +1728,8 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                           onChangeText={setMessageInput}
                           multiline
                         />
-                        <TouchableOpacity 
-                          style={styles.sendButton} 
+                        <TouchableOpacity
+                          style={styles.sendButton}
                           onPress={sendMessage}
                           disabled={isSending || !messageInput.trim()}
                         >
@@ -1055,11 +1741,75 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                         </TouchableOpacity>
                       </View>
                     </View>
+                  ) : selectedBroadcast ? (
+                    /* TABLET: Broadcast Chat View - Read Only */
+                    <View style={styles.chatWindow}>
+                      <View style={styles.chatHeader}>
+                        <View style={styles.chatHeaderLeft}>
+                          <View style={[styles.chatAvatar, { backgroundColor: COLORS.primaryBlue, justifyContent: 'center', alignItems: 'center' }]}>
+                            <Ionicons name="megaphone" size={24} color={COLORS.white} />
+                          </View>
+                          <View style={styles.chatHeaderInfo}>
+                            <Text style={styles.chatHeaderName}>
+                              {selectedBroadcast.classname} - {selectedBroadcast.subject}
+                            </Text>
+                            <Text style={styles.chatHeaderStatus}>Broadcast • Read Only</Text>
+                          </View>
+                        </View>
+                        <TouchableOpacity onPress={() => setSelectedBroadcast(null)}>
+                          <Ionicons name="close" size={24} color={COLORS.textHeader} />
+                        </TouchableOpacity>
+                      </View>
+
+                      <ScrollView
+                        ref={messagesScrollViewRef}
+                        style={styles.messagesArea}
+                        contentContainerStyle={{ paddingVertical: 16 }}
+                      >
+                        {messagesLoading ? (
+                          <View style={styles.chatEmptyContainer}>
+                            <ActivityIndicator size="large" color={COLORS.primaryBlue} />
+                            <Text style={styles.chatEmptyText}>Loading broadcast messages...</Text>
+                          </View>
+                        ) : chatMessages.length === 0 ? (
+                          <View style={styles.chatEmptyContainer}>
+                            <Ionicons name="megaphone-outline" size={48} color={COLORS.textMuted} />
+                            <Text style={styles.chatEmptyText}>No broadcast messages yet</Text>
+                            <Text style={styles.chatEmptySubtext}>Your teacher will send announcements here</Text>
+                          </View>
+                        ) : (
+                          chatMessages.map((message) => (
+                            <View
+                              key={message.id}
+                              style={[styles.messageItem, styles.receivedMessage, styles.broadcastMessage]}
+                            >
+                              <View style={styles.broadcastHeader}>
+                                <Ionicons name="megaphone" size={14} color={COLORS.primaryBlue} />
+                                <Text style={styles.broadcastTeacherName}>{message.teacherName || 'Teacher'}</Text>
+                              </View>
+                              <Text style={[styles.messageText, styles.receivedMessageText]}>
+                                {message.text}
+                              </Text>
+                              <Text style={[styles.messageTime, styles.receivedMessageTime]}>
+                                {message.time}
+                              </Text>
+                            </View>
+                          ))
+                        )}
+                      </ScrollView>
+
+                      <View style={[styles.messageInputContainer, { backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' }]}>
+                        <Ionicons name="eye-outline" size={18} color={COLORS.textSecondary} style={{ marginRight: 8 }} />
+                        <Text style={{ color: COLORS.textSecondary, fontFamily: 'Poppins_400Regular', fontSize: 14 }}>
+                          Read Only • You cannot reply to broadcasts
+                        </Text>
+                      </View>
+                    </View>
                   ) : (
                     <View style={styles.chatEmptyState}>
                       <Ionicons name="chatbubble-outline" size={64} color={COLORS.textMuted} />
                       <Text style={styles.chatEmptyTitle}>Select a conversation</Text>
-                      <Text style={styles.chatEmptySubtitle}>Choose a teacher from the list to start chatting</Text>
+                      <Text style={styles.chatEmptySubtitle}>Choose a teacher or broadcast to view messages</Text>
                     </View>
                   )}
                 </View>
@@ -1117,6 +1867,44 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
       <View style={styles.mobileContainer}>
         {/* Chat List for Mobile */}
         <View style={styles.mobileChatList}>
+          {/* Status Banner: WebSocket & Pending Bookings */}
+          <View style={localStyles.mobileStatusBanner}>
+            <View style={localStyles.statusItem}>
+              <View style={[
+                localStyles.statusDot,
+                socketConnected ? { backgroundColor: '#22C55E' } : { backgroundColor: '#EF4444' }
+              ]} />
+              <Text style={localStyles.statusText}>
+                {socketConnected ? 'Live' : 'Offline'}
+              </Text>
+              {!socketConnected && (
+                <Ionicons name="alert" size={12} color="#EF4444" style={{ marginLeft: 4 }} />
+              )}
+            </View>
+            {bookingRequests.filter(r => r.status === 'pending').length > 0 && (
+              <TouchableOpacity
+                style={localStyles.mobilePendingBadge}
+                onPress={() => setActiveTab('My Requests')}
+              >
+                <Ionicons name="time" size={12} color="#92400E" />
+                <Text style={localStyles.mobilePendingBadgeText}>
+                  {bookingRequests.filter(r => r.status === 'pending').length} Pending
+                </Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => userEmail && fetchEnrolledStudents(userEmail)}
+              style={[localStyles.mobileRefreshButton, loadingStudents && { opacity: 0.6 }]}
+              disabled={loadingStudents}
+            >
+              {loadingStudents ? (
+                <ActivityIndicator size="small" color={COLORS.primaryBlue} />
+              ) : (
+                <Ionicons name="refresh" size={18} color={COLORS.primaryBlue} />
+              )}
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.mobileTabContainer}>
             <TouchableOpacity 
               style={[styles.mobileTab, activeTab === 'Teachers' && styles.mobileActiveTab]}
@@ -1197,7 +1985,45 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                   </View>
                 ))}
               </>
+            ) : activeTab === 'Broadcast' ? (
+              // Mobile: Broadcast Tab Content
+              <>
+                {broadcastLoading ? (
+                  <View style={styles.mobileLoadingContainer}>
+                    <ActivityIndicator size="large" color={COLORS.primaryBlue} />
+                    <Text style={styles.mobileLoadingText}>Loading broadcasts...</Text>
+                  </View>
+                ) : studentBroadcastData.length === 0 ? (
+                  <View style={styles.mobileEmptyState}>
+                    <Ionicons name="megaphone-outline" size={48} color={COLORS.textMuted} />
+                    <Text style={styles.mobileEmptyStateText}>No broadcasts yet</Text>
+                    <Text style={styles.mobileEmptyStateSubtext}>Join a class to receive broadcast messages</Text>
+                  </View>
+                ) : (
+                  studentBroadcastData.map((broadcastGroup) => (
+                    <TouchableOpacity
+                      key={broadcastGroup.id}
+                      style={styles.mobileBroadcastItem}
+                      onPress={() => handleBroadcastSelect(broadcastGroup)}
+                    >
+                      <View style={styles.mobileBroadcastIcon}>
+                        <Ionicons name="school" size={28} color={COLORS.primaryBlue} />
+                      </View>
+                      <View style={styles.mobileBroadcastInfo}>
+                        <Text style={styles.mobileBroadcastTitle}>
+                          {broadcastGroup.classname} - {broadcastGroup.subject}
+                        </Text>
+                        <Text style={styles.mobileBroadcastSubtitle}>
+                          Teacher: {broadcastGroup.teacherName || 'Unknown'}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+                    </TouchableOpacity>
+                  ))
+                )}
+              </>
             ) : (
+              // Mobile: Teachers Tab Content
               <>
                 {loadingStudents ? (
                   <View style={styles.mobileLoadingContainer}>
@@ -1227,7 +2053,14 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                         </View>
                       )}
                       <View style={styles.mobileContactInfo}>
-                        <Text style={styles.mobileContactName}>{contact.name}</Text>
+                        <View style={styles.contactNameRow}>
+                          <Text style={styles.mobileContactName}>{contact.name}</Text>
+                          {contact.isPaid && (
+                            <View style={styles.paidBadge}>
+                              <Text style={styles.paidBadgeText}>PAID</Text>
+                            </View>
+                          )}
+                        </View>
                         <Text style={styles.mobileContactLastMessage} numberOfLines={1}>
                           {contact.lastMessage || 'Click to start chatting'}
                         </Text>
@@ -1240,7 +2073,7 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
           </ScrollView>
         </View>
       </View>
-      
+
       {/* Chat Screen Modal for Mobile */}
       <Modal
         visible={!!selectedContact}
@@ -1268,16 +2101,29 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                   </View>
                 )}
                 <View style={styles.mobileChatHeaderInfo}>
-                  <Text style={styles.mobileChatHeaderName}>{selectedContact.name}</Text>
+                  <View style={styles.contactNameRow}>
+                    <Text style={styles.mobileChatHeaderName}>{selectedContact.name}</Text>
+                    {selectedContact.isPaid && (
+                      <View style={styles.paidBadge}>
+                        <Text style={styles.paidBadgeText}>PAID</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
               </View>
             </View>
 
-            <FlatList
-              data={chatMessages}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.mobileChatMessagesList}
-              renderItem={({ item }) => (
+            {messagesLoading ? (
+              <View style={styles.chatEmptyContainer}>
+                <ActivityIndicator size="large" color={COLORS.primaryBlue} />
+                <Text style={styles.chatEmptyText}>Loading messages...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={chatMessages}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.mobileChatMessagesList}
+                renderItem={({ item }) => (
                 <View style={[
                   styles.mobileMessageBubble,
                   item.sender === userEmail ? styles.mobileMyMessage : styles.mobileOtherMessage,
@@ -1302,6 +2148,7 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
                 </View>
               }
             />
+            )}
 
             <View style={styles.mobileChatInputContainer}>
               <TextInput
@@ -1426,6 +2273,11 @@ const styles = StyleSheet.create({
     color: COLORS.textHeader,
     fontFamily: 'Poppins_600SemiBold',
   },
+  refreshButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: COLORS.primaryBlue,
+  },
   tabContainer: {
     flexDirection: 'row',
     backgroundColor: COLORS.white,
@@ -1495,6 +2347,23 @@ const styles = StyleSheet.create({
     color: COLORS.textHeader,
     fontFamily: 'Poppins_600SemiBold',
   },
+  contactNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  paidBadge: {
+    backgroundColor: '#22C55E',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  paidBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    fontFamily: 'Poppins_700Bold',
+  },
   contactLastMessage: {
     fontSize: 14,
     color: COLORS.textBody,
@@ -1509,7 +2378,70 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontFamily: 'Poppins_400Regular',
   },
-  
+
+  // Broadcast Group Items
+  broadcastGroupItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    marginBottom: 12,
+    marginHorizontal: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  broadcastGroupItemActive: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 2,
+    borderColor: COLORS.primaryBlue,
+  },
+  broadcastGroupIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  broadcastGroupInfo: {
+    flex: 1,
+  },
+  broadcastGroupTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.textHeader,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  broadcastGroupSubtitle: {
+    fontSize: 13,
+    color: COLORS.textBody,
+    marginTop: 2,
+    fontFamily: 'Poppins_400Regular',
+  },
+
+  // Broadcast Messages in Chat
+  broadcastMessage: {
+    backgroundColor: '#EEF2FF',
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primaryBlue,
+  },
+  broadcastHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 6,
+  },
+  broadcastTeacherName: {
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.primaryBlue,
+  },
+
   // Chat Window
   chatWindowPanel: {
     flex: 1,
@@ -1937,6 +2869,45 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontFamily: 'Poppins_400Regular',
   },
+  // Mobile Broadcast Styles
+  mobileBroadcastItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    marginBottom: 12,
+    marginHorizontal: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  mobileBroadcastIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  mobileBroadcastInfo: {
+    flex: 1,
+  },
+  mobileBroadcastTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.textHeader,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  mobileBroadcastSubtitle: {
+    fontSize: 13,
+    color: COLORS.textBody,
+    marginTop: 2,
+    fontFamily: 'Poppins_400Regular',
+  },
   mobileFullScreenChat: {
     flex: 1,
     backgroundColor: '#f1f1f1',
@@ -2065,6 +3036,73 @@ const styles = StyleSheet.create({
 
 // Local styles for booking requests panel
 const localStyles = StyleSheet.create({
+  statusBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  mobileStatusBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  statusItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: 12,
+    color: COLORS.textBody,
+    fontFamily: 'Poppins_500Medium',
+  },
+  pendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  pendingBadgeText: {
+    fontSize: 12,
+    color: '#92400E',
+    fontFamily: 'Poppins_600SemiBold',
+    marginLeft: 4,
+  },
+  mobilePendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  mobilePendingBadgeText: {
+    fontSize: 11,
+    color: '#92400E',
+    fontFamily: 'Poppins_600SemiBold',
+    marginLeft: 3,
+  },
+  mobileRefreshButton: {
+    padding: 6,
+    borderRadius: 16,
+    backgroundColor: '#EEF2FF',
+  },
   tabContainer: {
     flexDirection: 'row',
     borderBottomWidth: 1,

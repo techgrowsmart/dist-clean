@@ -21,6 +21,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import BackButton from "../../../components/BackButton";
 import WebNavbar from "../../../components/ui/WebNavbar";
 import WebSidebar from "../../../components/ui/WebSidebar";
+import ResponsiveSidebar from "../../../components/ui/ResponsiveSidebar";
 import { TeacherThoughtsBackground } from "../../../components/ui/TeacherThoughtsCard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BASE_URL } from "../../../config";
@@ -619,54 +620,62 @@ const StudentBilling = () => {
       <WebNavbar />
       
       <View style={styles.desktopLayout}>
-        <WebSidebar 
+        <ResponsiveSidebar 
           activeItem="Billing" 
           onItemPress={handleSidebarSelect}
           userEmail={userEmail || ""}
           studentName={studentName || "Student"}
           profileImage={profileImage || null}
-        />
-        
-        <View style={styles.desktopMain}>
-          <TeacherThoughtsBackground>
-            <View style={styles.desktopContent}>
-              <Animated.View style={[styles.desktopHeader, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-                <Text style={styles.desktopTitle}>Student Billing</Text>
-                <Text style={styles.desktopSubtitle}>Manage your tuition fees and payments</Text>
-              </Animated.View>
+        >
+          <View style={styles.desktopMain}>
+            <TeacherThoughtsBackground>
+              <View style={styles.desktopContent}>
+                <Animated.View style={[styles.desktopHeader, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+                  <TouchableOpacity 
+                    style={styles.desktopBackButton} 
+                    onPress={() => router.back()}
+                  >
+                    <Ionicons name="arrow-back" size={20} color="#1F2937" />
+                  </TouchableOpacity>
+                  <View style={styles.desktopHeaderTitle}>
+                    <Text style={styles.desktopTitle}>Student Billing</Text>
+                    <Text style={styles.desktopSubtitle}>Manage your tuition fees and payments</Text>
+                  </View>
+                </Animated.View>
 
-              <View style={styles.desktopGrid}>
-                {/* Left Column - Stats and Filters */}
-                <View style={styles.desktopLeft}>
-                  {renderStatsCard()}
-                  {renderFilters()}
-                </View>
+                <View style={styles.desktopGrid}>
+                  {/* Left Column - Stats and Filters */}
+                  <View style={styles.desktopLeft}>
+                    {renderStatsCard()}
+                    {renderFilters()}
+                  </View>
 
-                {/* Right Column - Invoices */}
-                <View style={styles.desktopRight}>
-                  <View style={styles.desktopInvoicesContainer}>
-                    <View style={styles.invoicesHeader}>
-                      <Text style={styles.invoicesTitle}>Your Invoices</Text>
-                      <Text style={styles.invoicesCount}>{sortedInvoices.length} items</Text>
-                    </View>
-                    
-                    {sortedInvoices.length === 0 ? (
-                      <View style={styles.emptyState}>
-                        <Ionicons name="document-text-outline" size={48} color="#9CA3AF" />
-                        <Text style={styles.emptyText}>No invoices found</Text>
-                        <Text style={styles.emptySubtext}>Your billing history will appear here</Text>
+                  {/* Right Column - Invoices */}
+                  <View style={styles.desktopRight}>
+                    <View style={styles.desktopInvoicesContainer}>
+                      <View style={styles.invoicesHeader}>
+                        <Text style={styles.invoicesTitle}>Your Invoices</Text>
+                        <Text style={styles.invoicesCount}>{sortedInvoices.length} items</Text>
                       </View>
-                    ) : (
-                      <ScrollView showsVerticalScrollIndicator={false}>
-                        {sortedInvoices.map(renderInvoiceItem)}
-                      </ScrollView>
-                    )}
+                      
+                      {sortedInvoices.length === 0 ? (
+                        <View style={styles.emptyState}>
+                          <Ionicons name="document-text-outline" size={48} color="#9CA3AF" />
+                          <Text style={styles.emptyText}>No invoices found</Text>
+                          <Text style={styles.emptySubtext}>Your billing history will appear here</Text>
+                        </View>
+                      ) : (
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                          {sortedInvoices.map(renderInvoiceItem)}
+                        </ScrollView>
+                      )}
+                    </View>
                   </View>
                 </View>
               </View>
-            </View>
-          </TeacherThoughtsBackground>
-        </View>
+            </TeacherThoughtsBackground>
+          </View>
+        </ResponsiveSidebar>
       </View>
 
       {/* Invoice Modal */}
@@ -1071,7 +1080,18 @@ const styles = StyleSheet.create({
     padding: 32,
   },
   desktopHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 32,
+  },
+  desktopBackButton: {
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    marginRight: 16,
+  },
+  desktopHeaderTitle: {
+    flex: 1,
   },
   desktopTitle: {
     fontSize: 32,

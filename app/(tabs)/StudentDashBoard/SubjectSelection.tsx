@@ -211,6 +211,9 @@ export default function SubjectSelection({
     ? effectiveClassId.split('_year_')[1] 
     : effectiveClassId;
   
+  // For universities, use universityId instead of boardId for API calls
+  const effectiveUniversityId = isUniversityFlow ? (universityId || finalBoardId) : effectiveBoardId;
+  
   console.log('🔍 SubjectSelection Props Debug:', {
     propBoardId,
     propClassId,
@@ -271,8 +274,9 @@ export default function SubjectSelection({
         let res;
         if (isUniversityFlow) {
           // University flow: use university-specific endpoint
-          const url = `${BASE_URL}/api/teachers/universities/${effectiveBoardId}/years/${effectiveYearId}/subjects`;
+          const url = `${BASE_URL}/api/universities/${effectiveUniversityId}/years/${effectiveYearId}/subjects`;
           console.log('📡 Making UNIVERSITY API request to:', url);
+          console.log('📤 Using universityId:', effectiveUniversityId, 'yearId:', effectiveYearId);
           res = await axios.post(url, {}, { headers });
         } else {
           // Regular board flow
@@ -578,7 +582,7 @@ export default function SubjectSelection({
                       {/* Subject Grid with Real Data */}
                       <View style={styles.gridContainer}>
                         {subjectList.length > 0 ? (
-                          subjectList.map((subject) => (
+                          paginatedData.map((subject) => (
                             <SubjectCard 
                               key={subject.id} 
                               item={{ 
@@ -605,9 +609,9 @@ export default function SubjectSelection({
                                   // Add university flag for university flow
                                   if (isUniversityFlow) {
                                     params.isUniversity = 'true';
-                                    params.universityId = effectiveBoardId;
-                                    params.universityName = effectiveBoardName;
-                                    params.yearId = effectiveClassId;
+                                    params.universityId = universityId || effectiveBoardId;
+                                    params.universityName = universityName || effectiveBoardName;
+                                    params.yearId = effectiveYearId;
                                     params.yearName = effectiveClassName;
                                   }
                                   router.push({
@@ -732,8 +736,8 @@ export default function SubjectSelection({
                               // Add university flag for university flow
                               if (isUniversityFlow) {
                                 params.isUniversities = 'true';
-                                params.universityId = effectiveBoardId;
-                                params.universityName = effectiveBoardName;
+                                params.universityId = universityId || effectiveBoardId;
+                                params.universityName = universityName || effectiveBoardName;
                                 params.yearId = effectiveYearId;
                                 params.yearName = effectiveClassName;
                                 params.year = year;

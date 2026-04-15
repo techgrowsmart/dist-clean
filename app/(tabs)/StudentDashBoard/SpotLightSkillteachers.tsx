@@ -27,6 +27,8 @@ import { getAuthData } from "../../../utils/authStorage";
 import { autoRefreshToken } from '../../../utils/tokenRefresh';
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { addFavoriteTeacher, removeFavoriteTeacher, checkFavoriteStatus } from '../../../services/favoriteTeachers';
+import { favoritesEvents, FAVORITES_CHANGED_EVENT } from '../../../utils/favoritesEvents';
 
 const { width } = Dimensions.get("window");
 
@@ -132,6 +134,26 @@ export default function SpotLightSkillteachers({ onBack }: {
     fetchTeachers();
   }, []); // Removed currentPage dependency - fetch all data once
 
+  // Check favorite status for teachers when they are loaded
+  useEffect(() => {
+    const checkFavorites = async () => {
+      if (allTeachers.length === 0) return;
+      
+      const likedStatus: {[key: string]: boolean} = {};
+      
+      for (const teacher of allTeachers) {
+        if (teacher.email) {
+          const isFavorited = await checkFavoriteStatus(teacher.email);
+          likedStatus[teacher.email] = isFavorited;
+        }
+      }
+      
+      setLikedTeachers(likedStatus);
+    };
+    
+    checkFavorites();
+  }, [allTeachers]);
+
   const filteredTeachers = allTeachers.filter(teacher => 
     teacher.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     teacher.subject?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -194,11 +216,32 @@ export default function SpotLightSkillteachers({ onBack }: {
     }
   }, []);
 
-  const handleTeacherLike = (teacherId: number) => {
-    setLikedTeachers(prev => ({
-      ...prev,
-      [teacherId]: !prev[teacherId]
-    }));
+  const handleTeacherLike = async (teacherEmail: string) => {
+    const isLiked = likedTeachers[teacherEmail] || false;
+    
+    try {
+      // Optimistic update
+      setLikedTeachers(prev => ({
+        ...prev,
+        [teacherEmail]: !isLiked
+      }));
+      
+      if (isLiked) {
+        await removeFavoriteTeacher(teacherEmail);
+      } else {
+        await addFavoriteTeacher(teacherEmail);
+      }
+      
+      // Trigger refresh for other components
+      favoritesEvents.emit(FAVORITES_CHANGED_EVENT);
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      // Revert optimistic update on error
+      setLikedTeachers(prev => ({
+        ...prev,
+        [teacherEmail]: isLiked
+      }));
+    }
   };
 
   const handleViewProfile = (teacher: any) => {
@@ -375,185 +418,128 @@ export default function SpotLightSkillteachers({ onBack }: {
     );
   }
 
-  // Web Layout
-  if (Platform.OS === 'web') {
+  // Web layout with header, sidebar, and ThoughtsCard
+  if (Platform.OS === 'web' && isDesktop) {
     return (
       <SafeAreaView style={styles.webContainer}>
-        {/* Web Header */}
         <WebNavbar
-          studentName={studentName || "Student"}
+          studentName={studentName || 'Student'}
           profileImage={profileImage}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
         />
-
         <View style={styles.rootContainer}>
-          {/* Left Sidebar */}
           <WebSidebar
             activeItem={sidebarActiveItem}
             onItemPress={handleSidebarItemPress}
-            userEmail={userEmail || "student@example.com"}
-            studentName={studentName || "Student"}
+            userEmail={userEmail || ''}
+            studentName={studentName || 'Student'}
             profileImage={profileImage}
           />
-
-          {/* Main Area */}
           <View style={styles.mainLayout}>
-            {/* Page Header */}
+            {/* Simple Page Header - matching My Tuitions */}
             <View style={styles.pageHeader}>
-              <TouchableOpacity onPress={onBack} style={styles.backButton}>
-                <Ionicons name="arrow-back" size={24} color="#333" />
-              </TouchableOpacity>
-              <View>
-                <Text style={styles.pageTitle}>Spotlight Teachers</Text>
-                <Text style={styles.pageSubtitle}>Featured master instructors and industry leaders</Text>
-              </View>
-              <View style={styles.spotlightBadge}>
-                <Ionicons name="star" size={16} color="#FFA500" />
-                <Text style={styles.spotlightBadgeText}>Premium</Text>
-              </View>
+              <BackButton onPress={onBack} color="white" />
+              <Text style={styles.pageTitle}>Spotlight Teachers</Text>
             </View>
 
             {/* Content */}
-            <View style={styles.contentColumns}>
-              {/* Center: Teachers Grid */}
-              <View style={styles.centerContent}>
-                {/* Search Bar */}
-                <View style={styles.searchSection}>
-                  <View style={styles.searchBar}>
-                    <FontAwesome name="search" size={16} color="#999" style={styles.searchIcon} />
-                    <TextInput
-                      style={styles.searchInput}
-                      placeholder="Search spotlight teachers..."
-                      value={searchQuery}
-                      onChangeText={setSearchQuery}
-                      placeholderTextColor="#999"
-                    />
+            <View style={styles.contentLayout}>
+              {/* Teachers Grid */}
+              <ScrollView style={styles.teachersContainer} showsVerticalScrollIndicator={false}>
+                {loading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#4A7BF7" />
+                    <Text style={styles.loadingText}>Loading spotlight teachers...</Text>
                   </View>
-                </View>
-
-                {/* Teachers Grid */}
-                <ScrollView style={styles.teachersContainer} showsVerticalScrollIndicator={false}>
+                ) : currentTeachers.length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Ionicons name="people-outline" size={60} color="#ccc" />
+                    <Text style={styles.emptyText}>No spotlight teachers found</Text>
+                    <Text style={styles.emptySubtext}>Check back later for featured teachers</Text>
+                  </View>
+                ) : (
                   <View style={styles.teachersGrid}>
-                    {currentTeachers.map((teacher) => (
-                      <View key={teacher.id} style={styles.teacherCard}>
-                        <View style={styles.teacherHeader}>
-                          <Image 
-                            source={
-                              typeof teacher.profilePic === 'string' 
-                                ? { uri: teacher.profilePic.startsWith('http') ? teacher.profilePic : `${BASE_URL}/${teacher.profilePic}` }
-                                : require('../../../assets/images/Profile.png')
-                            } 
-                            style={styles.teacherImage} 
-                          />
-                          <View style={styles.teacherOverlay}>
-                            <View style={styles.spotlightIcon}>
-                              <Ionicons name="star" size={20} color="#FFA500" />
-                            </View>
+                    {currentTeachers.map((item, index) => (
+                      <View key={item.id?.toString() || item.email || `item-${index}`} style={styles.teacherCard}>
+                        <TouchableOpacity
+                          onPress={() => {
+                            router.push({
+                              pathname: "/(tabs)/StudentDashBoard/TeacherDetails",
+                              params: {
+                                name: item.name,
+                                email: item.email,
+                                board: item.board,
+                                subject: item.subject,
+                                language: item.language,
+                                profilePic: item.profilePic,
+                              },
+                            });
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <View style={styles.cardImageContainer}>
+                            <Image source={{ uri: item.profilePic }} style={styles.teacherImage} />
                             <TouchableOpacity 
-                              style={styles.likeBtn}
-                              onPress={() => handleTeacherLike(teacher.id)}
+                              style={styles.heartButton}
+                              onPress={(e) => { e.stopPropagation(); handleLike(item.id); }}
                             >
                               <AntDesign 
-                                name={likedTeachers[teacher.id] ? "heart" : "hearto"} 
-                                size={20} 
-                                color={likedTeachers[teacher.id] ? "#FF4444" : "#fff"} 
+                                name={likedTeachers[item.id] ? "heart" : "hearto"} 
+                                size={16} 
+                                color={likedTeachers[item.id] ? "#FF0000" : "#FFFFFF"} 
                               />
                             </TouchableOpacity>
                           </View>
-                        </View>
-                        <View style={styles.teacherInfo}>
-                          <Text style={styles.teacherName}>{teacher.name || 'Unknown Teacher'}</Text>
-                          <Text style={styles.teacherSpecialty}>{teacher.subject || teacher.specialty || 'Skill Teacher'}</Text>
-                          <View style={styles.teacherMeta}>
-                            <View style={styles.rating}>
-                              <FontAwesome name="star" size={12} color="#FFA500" />
-                              <Text style={styles.ratingText}>{teacher.rating || '4.5'}</Text>
-                              <Text style={styles.reviewsText}>({teacher.reviews || '0'})</Text>
-                            </View>
-                            <Text style={styles.experience}>{teacher.experience || 'Experienced'}</Text>
-                          </View>
-                          <Text style={styles.teacherDescription}>{teacher.description || 'Professional skill teacher dedicated to student success'}</Text>
-                          
-                          {/* Achievements */}
-                          <View style={styles.achievements}>
-                            <Text style={styles.achievementsTitle}>Achievements:</Text>
-                            {(teacher.achievements || teacher.qualification || ['Certified Instructor']).slice(0, 2).map((achievement, index) => (
-                              <View key={index} style={styles.achievementBadge}>
-                                <Ionicons name="trophy" size={10} color="#FFA500" />
-                                <Text style={styles.achievementText}>{achievement}</Text>
+                          <View style={styles.cardBody}>
+                            <View style={styles.cardHeaderRow}>
+                              <Text style={styles.tagText}>{item.specialty || 'SKILL'}</Text>
+                              <View style={styles.ratingBadge}>
+                                <FontAwesome name="star" size={12} color="#FFFFFF" />
+                                <Text style={styles.ratingText}>4.8</Text>
                               </View>
-                            ))}
-                          </View>
-
-                          <View style={styles.teacherFooter}>
-                            <Text style={styles.teacherPrice}>₹{teacher.charge || '500'}/hr</Text>
-                            <View style={styles.teacherActions}>
-                              <TouchableOpacity 
-                                style={styles.viewProfileBtn}
-                                onPress={() => handleViewProfile(teacher)}
-                              >
-                                <Text style={styles.viewProfileBtnText}>View Profile</Text>
-                              </TouchableOpacity>
-                              <TouchableOpacity 
-                                style={styles.bookBtn}
-                                onPress={() => handleBookClass(teacher)}
-                              >
-                                <Text style={styles.bookBtnText}>Book Class</Text>
+                            </View>
+                            <Text style={styles.teacherName}>{item.name || "Unnamed"}</Text>
+                            <Text style={styles.teacherDesc} numberOfLines={2}>Professional teacher dedicated to student success and excellence in education.</Text>
+                            <View style={styles.cardFooter}>
+                              <TouchableOpacity style={styles.reviewBtn}>
+                                <Text style={styles.reviewBtnText}>Your Review</Text>
                               </TouchableOpacity>
                             </View>
                           </View>
-                        </View>
+                        </TouchableOpacity>
                       </View>
                     ))}
                   </View>
-                </ScrollView>
+                )}
+              </ScrollView>
 
-                {/* Pagination */}
+              {/* Pagination - matching My Tuitions style */}
+              {!loading && currentTeachers.length > 0 && totalPages > 1 && (
                 <View style={styles.pagination}>
                   <TouchableOpacity 
                     style={[styles.pageBtn, currentPage === 1 && styles.pageBtnDisabled]}
                     onPress={() => setCurrentPage(Math.max(1, currentPage - 1))}
                     disabled={currentPage === 1}
                   >
-                    <Ionicons name="chevron-back" size={16} color={currentPage === 1 ? '#ccc' : '#333'} />
+                    <Ionicons name="chevron-back" size={16} color={currentPage === 1 ? "#ccc" : "#333"} />
                   </TouchableOpacity>
-                  <Text style={styles.pageText}>Page {currentPage} of {totalPages}</Text>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <TouchableOpacity
+                      key={page}
+                      style={[styles.pageBtn, currentPage === page && styles.pageBtnActive]}
+                      onPress={() => setCurrentPage(page)}
+                    >
+                      <Text style={[styles.pageText, currentPage === page && styles.pageTextActive]}>{page}</Text>
+                    </TouchableOpacity>
+                  ))}
                   <TouchableOpacity 
                     style={[styles.pageBtn, currentPage === totalPages && styles.pageBtnDisabled]}
                     onPress={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                     disabled={currentPage === totalPages}
                   >
-                    <Ionicons name="chevron-forward" size={16} color={currentPage === totalPages ? '#ccc' : '#333'} />
+                    <Ionicons name="chevron-forward" size={16} color={currentPage === totalPages ? "#ccc" : "#333"} />
                   </TouchableOpacity>
                 </View>
-              </View>
-
-              {/* Right: Thoughts Panel */}
-              <View style={styles.rightPanel}>
-                <Text style={styles.rightPanelTitle}>Thoughts</Text>
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.thoughtsList}>
-                  {postsLoading && posts.length === 0 && <ActivityIndicator color="#4A7BF7" style={{ marginTop: 30 }} />}
-                  {!postsLoading && posts.length === 0 && (
-                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                      <Ionicons name="apps-outline" size={40} color="#ccc" />
-                      <Text style={{ color: '#aaa', marginTop: 12, fontFamily: 'Poppins_400Regular' }}>No thoughts yet</Text>
-                    </View>
-                  )}
-                  {posts.map((post) => (
-                    <ThoughtsCard
-                      key={post.id}
-                      post={post}
-                      onLike={handleLike}
-                      onComment={openCommentsModal}
-                      onReport={(p, reasons, comment) => { console.log('Report submitted for post:', p.id, 'Reasons:', reasons, 'Comment:', comment); }}
-                      getProfileImageSource={getProfileImageSource}
-                      initials={initials}
-                      resolvePostAuthor={resolvePostAuthor}
-                    />
-                  ))}
-                </ScrollView>
-              </View>
+              )}
             </View>
           </View>
         </View>
@@ -564,49 +550,38 @@ export default function SpotLightSkillteachers({ onBack }: {
   // Mobile Layout
   return (
     <View style={styles.mobileContainer}>
-      {/* Header */}
+      {/* Simple Header - matching My Tuitions */}
       <View style={styles.mobileHeader}>
         <View style={styles.mobileHeaderLeft}>
           <BackButton size={24} color="#000" onPress={onBack} />
-          <View>
-            <Text style={styles.mobileTitle}>Spotlight Teachers</Text>
-            <Text style={styles.mobileSubtitle}>Featured Masters</Text>
-          </View>
-        </View>
-        <View style={styles.mobileSpotlightBadge}>
-          <Ionicons name="star" size={14} color="#FFA500" />
-          <Text style={styles.mobileSpotlightBadgeText}>Premium</Text>
-        </View>
-      </View>
-
-      {/* Search Bar */}
-      <View style={styles.mobileSearchSection}>
-        <View style={styles.mobileSearchBar}>
-          <FontAwesome name="search" size={16} color="#999" style={styles.mobileSearchIcon} />
-          <TextInput
-            style={styles.mobileSearchInput}
-            placeholder="Search spotlight teachers..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#999"
-          />
+          <Ionicons name="star" size={24} color="#1F2937" />
+          <Text style={styles.mobileTitle}>Spotlight Teachers</Text>
         </View>
       </View>
 
       {/* Teachers List */}
-      <FlatList
-        data={currentTeachers}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.mobileTeachersList}
-        showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => (
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4A7BF7" />
+          <Text style={styles.loadingText}>Loading spotlight teachers...</Text>
+        </View>
+      ) : currentTeachers.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="people-outline" size={60} color="#ccc" />
+          <Text style={styles.emptyText}>No spotlight teachers found</Text>
+          <Text style={styles.emptySubtext}>Check back later for featured teachers</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={currentTeachers}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.mobileTeachersList}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
           <View style={styles.mobileTeacherCard}>
             <View style={styles.mobileTeacherHeader}>
               <Image source={item.profilePic} style={styles.mobileTeacherImage} />
               <View style={styles.mobileTeacherOverlay}>
-                <View style={styles.mobileSpotlightIcon}>
-                  <Ionicons name="star" size={18} color="#FFA500" />
-                </View>
                 <TouchableOpacity 
                   style={styles.mobileLikeBtn}
                   onPress={() => handleLike(item.id)}
@@ -653,25 +628,28 @@ export default function SpotLightSkillteachers({ onBack }: {
           </View>
         )}
       />
+      )}
 
-      {/* Mobile Pagination */}
-      <View style={styles.mobilePagination}>
-        <TouchableOpacity 
-          style={[styles.mobilePageBtn, currentPage === 1 && styles.mobilePageBtnDisabled]}
-          onPress={() => setCurrentPage(Math.max(1, currentPage - 1))}
-          disabled={currentPage === 1}
-        >
-          <Ionicons name="chevron-back" size={16} color={currentPage === 1 ? '#ccc' : '#333'} />
-        </TouchableOpacity>
-        <Text style={styles.mobilePageText}>Page {currentPage} of {totalPages}</Text>
-        <TouchableOpacity 
-          style={[styles.mobilePageBtn, currentPage === totalPages && styles.mobilePageBtnDisabled]}
-          onPress={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-          disabled={currentPage === totalPages}
-        >
-          <Ionicons name="chevron-forward" size={16} color={currentPage === totalPages ? '#ccc' : '#333'} />
-        </TouchableOpacity>
-      </View>
+      {/* Mobile Pagination - only show when not loading and has data */}
+      {!loading && currentTeachers.length > 0 && (
+        <View style={styles.mobilePagination}>
+          <TouchableOpacity 
+            style={[styles.mobilePageBtn, currentPage === 1 && styles.mobilePageBtnDisabled]}
+            onPress={() => setCurrentPage(Math.max(1, currentPage - 1))}
+            disabled={currentPage === 1}
+          >
+            <Ionicons name="chevron-back" size={16} color={currentPage === 1 ? '#ccc' : '#333'} />
+          </TouchableOpacity>
+          <Text style={styles.mobilePageText}>Page {currentPage} of {totalPages}</Text>
+          <TouchableOpacity 
+            style={[styles.mobilePageBtn, currentPage === totalPages && styles.mobilePageBtnDisabled]}
+            onPress={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+            disabled={currentPage === totalPages}
+          >
+            <Ionicons name="chevron-forward" size={16} color={currentPage === totalPages ? '#ccc' : '#333'} />
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -703,282 +681,211 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   pageTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    fontFamily: 'Poppins_700Bold',
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1F2937',
+    fontFamily: 'Poppins_700Bold'
   },
   pageSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    fontFamily: 'Poppins_400Regular',
-    marginTop: 2,
+    fontSize: 15,
+    color: '#6B7280',
+    marginTop: 4
   },
   spotlightBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF3CD',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 5,
+    backgroundColor: '#FFF7ED',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#FFA500'
   },
   spotlightBadgeText: {
-    fontSize: 12,
-    color: '#856404',
-    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#C2410C',
+    marginLeft: 6
   },
-  contentColumns: {
+  contentLayout: {
     flex: 1,
-    flexDirection: 'row',
-  },
-  centerContent: {
-    flex: 2,
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingBottom: 24
   },
   searchSection: {
-    marginBottom: 20,
+    marginBottom: 24
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 25,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4
   },
   searchIcon: {
-    marginRight: 10,
+    marginRight: 16
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
-    color: '#333',
-    fontFamily: 'Poppins_400Regular',
+    fontSize: 16,
+    color: '#1F2937',
+    fontFamily: 'Poppins_400Regular'
   },
   teachersContainer: {
     flex: 1,
+    marginBottom: 24
   },
   teachersGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 20,
     justifyContent: 'space-between',
+    gap: 16,
   },
   teacherCard: {
-    width: '48%',
+    width: '31%',
+    marginBottom: 16,
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#e8e8e8',
+    borderColor: '#E5E7EB',
     overflow: 'hidden',
-    marginBottom: 20,
-    ...Platform.select({
-      web: {
-        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-    }),
-    elevation: 5,
+    shadowColor: 'rgba(0,0,0,0.05)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  teacherHeader: {
+  cardImageContainer: {
+    width: '100%',
+    height: 180,
     position: 'relative',
   },
   teacherImage: {
     width: '100%',
-    height: 180,
+    height: '100%',
+    resizeMode: 'cover',
   },
-  teacherOverlay: {
+  heartButton: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 16,
+    padding: 6,
+  },
+  cardBody: {
+    padding: 16,
+  },
+  cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 10,
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  spotlightIcon: {
-    backgroundColor: '#FFA500',
-    borderRadius: 20,
-    padding: 8,
-  },
-  likeBtn: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 20,
-    padding: 8,
-  },
-  teacherInfo: {
-    padding: 15,
-  },
-  teacherName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    fontFamily: 'Poppins_700Bold',
-    marginBottom: 4,
-  },
-  teacherSpecialty: {
-    fontSize: 14,
-    color: '#4A7BF7',
+  tagText: {
+    color: '#3B5BFE',
     fontFamily: 'Poppins_600SemiBold',
-    marginBottom: 8,
+    fontSize: 10,
+    letterSpacing: 0.5,
   },
-  teacherMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  rating: {
+  ratingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#22C55E',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
   ratingText: {
-    fontSize: 12,
-    color: '#333',
+    color: '#FFFFFF',
     fontFamily: 'Poppins_600SemiBold',
+    fontSize: 11,
     marginLeft: 4,
   },
-  reviewsText: {
-    fontSize: 12,
-    color: '#666',
-    fontFamily: 'Poppins_400Regular',
-    marginLeft: 2,
-  },
-  experience: {
-    fontSize: 12,
-    color: '#666',
-    fontFamily: 'Poppins_400Regular',
-  },
-  teacherDescription: {
-    fontSize: 13,
-    color: '#666',
-    fontFamily: 'Poppins_400Regular',
-    lineHeight: 18,
-    marginBottom: 10,
-  },
-  achievements: {
-    marginBottom: 10,
-  },
-  achievementsTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#333',
+  teacherName: {
     fontFamily: 'Poppins_600SemiBold',
-    marginBottom: 5,
+    fontSize: 14,
+    color: '#1F2937',
+    marginBottom: 4,
   },
-  achievementBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF3CD',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 3,
-    gap: 5,
-  },
-  achievementText: {
-    fontSize: 10,
-    color: '#856404',
+  teacherDesc: {
     fontFamily: 'Poppins_400Regular',
+    fontSize: 11,
+    color: '#6B7280',
+    lineHeight: 16,
+    marginBottom: 12,
   },
-  teacherFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  cardFooter: {
+    alignItems: 'flex-end',
   },
-  teacherPrice: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#4A7BF7',
-    fontFamily: 'Poppins_700Bold',
-  },
-  teacherActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  viewProfileBtn: {
-    backgroundColor: '#f0f4ff',
-    paddingHorizontal: 12,
+  reviewBtn: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 16,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: 20,
   },
-  viewProfileBtnText: {
+  reviewBtnText: {
+    color: '#1F2937',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 12,
-    color: '#4A7BF7',
-    fontFamily: 'Poppins_600SemiBold',
-  },
-  bookBtn: {
-    backgroundColor: '#4A7BF7',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  bookBtnText: {
-    fontSize: 12,
-    color: '#fff',
-    fontFamily: 'Poppins_600SemiBold',
   },
   pagination: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: 15,
-    padding: 20,
+    justifyContent: 'center',
+    gap: 20,
+    paddingVertical: 24,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: '#E5E7EB'
   },
   pageBtn: {
-    padding: 8,
-    borderRadius: 6,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   pageBtnDisabled: {
-    opacity: 0.5,
+    opacity: 0.4
   },
   pageText: {
-    fontSize: 14,
-    color: '#666',
-    fontFamily: 'Poppins_400Regular',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6B7280',
+    fontFamily: 'Poppins_600SemiBold'
   },
-  rightPanel: {
+  loadingContainer: {
     flex: 1,
-    borderLeftWidth: 1,
-    borderLeftColor: '#eee',
-    backgroundColor: '#f9fafb',
-    padding: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60
   },
-  rightPanelTitle: {
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+    fontFamily: 'Poppins_400Regular'
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60
+  },
+  emptyText: {
+    marginTop: 16,
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    fontFamily: 'Poppins_700Bold',
-    marginBottom: 15,
-  },
-  thoughtsList: {
-    paddingBottom: 20,
-  },
-  webHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  webHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   webBackBtn: {
     padding: 8,
@@ -1488,5 +1395,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fff',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+    fontFamily: 'Poppins_400Regular',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    marginTop: 16,
+    fontSize: 18,
+    color: '#666',
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  emptySubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#999',
+    fontFamily: 'Poppins_400Regular',
   },
 });

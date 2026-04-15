@@ -78,11 +78,12 @@ const SidebarMenu = ({
     try {
       await clearAllStorage();
       
+      // Navigate directly to EmailInputScreen with login type
+      const targetPath = '/auth/EmailInputScreen?type=login';
       if (Platform.OS === "web") {
-        // Force redirect to login page on web
-        window.location.href = '/login';
+        window.location.href = targetPath;
       } else {
-        router.replace("/(tabs)/LoginScreen");
+        router.replace({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } });
       }
       
       Toast.show({
@@ -103,10 +104,11 @@ const SidebarMenu = ({
         visibilityTime: 3000,
       });
       // Still try to navigate even if storage clear fails
+      const targetPath = '/auth/EmailInputScreen?type=login';
       if (Platform.OS === "web") {
-        window.location.href = '/login';
+        window.location.href = targetPath;
       } else {
-        router.replace("/(tabs)/LoginScreen");
+        router.replace({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } });
       }
       onClose();
     } finally {

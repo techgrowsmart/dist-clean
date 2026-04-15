@@ -2,15 +2,20 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
+  Image,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import ThoughtsCard, { ThoughtsFeed, ThoughtsBackground } from '../../app/(tabs)/StudentDashBoard/ThoughtsCard';
+import { BASE_URL } from '../../config';
 
 // Colors constant (mirroring from Student dashboard)
 const COLORS = {
@@ -59,6 +64,10 @@ interface StudentThoughtsCardProps {
 // Mobile version - thin vertical line that expands
 const MobileThoughtsPanel: React.FC<StudentThoughtsCardProps> = (props) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<any | null>(null);
+  const [postComments, setPostComments] = useState<any[]>([]);
+  const [commentText, setCommentText] = useState('');
   const {
     posts,
     postsLoading,
@@ -76,6 +85,53 @@ const MobileThoughtsPanel: React.FC<StudentThoughtsCardProps> = (props) => {
     formatTimeAgo,
     router,
   } = props;
+
+  const fetchPostComments = async (postId: string) => {
+    if (!authToken) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/posts/${postId}/comments`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPostComments(data.data.map((c: any) => ({ 
+          ...c, 
+          createdAt: formatTimeAgo ? formatTimeAgo(c.createdAt) : c.createdAt, 
+          isLiked: false 
+        })));
+      }
+    } catch { setPostComments([]); }
+  };
+
+  const openCommentsModal = async (post: any) => {
+    setSelectedPost(post);
+    setShowCommentsModal(true);
+    setCommentText('');
+    await fetchPostComments(post.id);
+  };
+
+  const addComment = async () => {
+    if (!commentText.trim() || !selectedPost || !authToken) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/posts/${selectedPost.id}/comments`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${authToken}`, 
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify({ content: commentText.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const newC = { ...data.data, createdAt: 'Just now', isLiked: false };
+        setPostComments(prev => [newC, ...prev]);
+        setCommentText('');
+        await fetchPostComments(selectedPost.id);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to add comment');
+    }
+  };
 
   const handleLikeLocal = (postId: string) => {
     if (handleLike) {
@@ -147,7 +203,7 @@ const MobileThoughtsPanel: React.FC<StudentThoughtsCardProps> = (props) => {
                   <ThoughtsCard
                     post={post}
                     onLike={handleLikeLocal}
-                    onComment={onComment}
+                    onComment={openCommentsModal}
                     onReport={() => {}}
                     getProfileImageSource={getProfileImageSource}
                     initials={initials}
@@ -160,6 +216,73 @@ const MobileThoughtsPanel: React.FC<StudentThoughtsCardProps> = (props) => {
               ))}
             </ScrollView>
           </ThoughtsBackground>
+
+          {/* Comments Modal */}
+          <Modal
+            visible={showCommentsModal}
+            animationType="slide"
+            transparent
+            onRequestClose={() => setShowCommentsModal(false)}
+          >
+            <View style={modalStyles.modalOverlay}>
+              <View style={modalStyles.modalBox}>
+                <View style={modalStyles.modalHeader}>
+                  <Text style={modalStyles.modalTitle}>Comments</Text>
+                  <TouchableOpacity onPress={() => setShowCommentsModal(false)}>
+                    <Ionicons name="close" size={24} color="#666" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Comment Input */}
+                <View style={modalStyles.commentInputRow}>
+                  <TextInput
+                    style={modalStyles.commentInput}
+                    placeholder="Add a comment..."
+                    placeholderTextColor="#999"
+                    value={commentText}
+                    onChangeText={setCommentText}
+                    multiline
+                    maxLength={200}
+                  />
+                  <TouchableOpacity
+                    style={[modalStyles.postBtn, !commentText.trim() && { backgroundColor: '#ccc' }]}
+                    onPress={addComment}
+                    disabled={!commentText.trim()}
+                  >
+                    <Text style={modalStyles.postBtnText}>Post</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Comments List */}
+                <ScrollView style={{ maxHeight: 300 }}>
+                  {postComments.length === 0 ? (
+                    <Text style={modalStyles.noCommentsText}>No comments yet</Text>
+                  ) : (
+                    postComments.map((c) => {
+                      const ca = resolvePostAuthor({ author: c.author });
+                      const cSrc = getProfileImageSource(ca.pic || undefined);
+                      return (
+                        <View key={c.id} style={modalStyles.commentItem}>
+                          {cSrc ? (
+                            <Image source={cSrc} style={modalStyles.commentAvatar} />
+                          ) : (
+                            <View style={[modalStyles.commentAvatar, modalStyles.avatarPlaceholder]}>
+                              <Text style={modalStyles.avatarText}>{initials(ca.name)}</Text>
+                            </View>
+                          )}
+                          <View style={modalStyles.commentContent}>
+                            <Text style={modalStyles.commentAuthor}>{ca.name}</Text>
+                            <Text style={modalStyles.commentText}>{c.content}</Text>
+                            <Text style={modalStyles.commentTime}>{c.createdAt}</Text>
+                          </View>
+                        </View>
+                      );
+                    })
+                  )}
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
         </View>
       )}
     </View>
@@ -168,6 +291,10 @@ const MobileThoughtsPanel: React.FC<StudentThoughtsCardProps> = (props) => {
 
 // Desktop version - full panel
 const DesktopThoughtsPanel: React.FC<StudentThoughtsCardProps> = (props) => {
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<any | null>(null);
+  const [postComments, setPostComments] = useState<any[]>([]);
+  const [commentText, setCommentText] = useState('');
   const {
     posts,
     postsLoading,
@@ -185,6 +312,53 @@ const DesktopThoughtsPanel: React.FC<StudentThoughtsCardProps> = (props) => {
     formatTimeAgo,
     router,
   } = props;
+
+  const fetchPostComments = async (postId: string) => {
+    if (!authToken) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/posts/${postId}/comments`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPostComments(data.data.map((c: any) => ({ 
+          ...c, 
+          createdAt: formatTimeAgo ? formatTimeAgo(c.createdAt) : c.createdAt, 
+          isLiked: false 
+        })));
+      }
+    } catch { setPostComments([]); }
+  };
+
+  const openCommentsModal = async (post: any) => {
+    setSelectedPost(post);
+    setShowCommentsModal(true);
+    setCommentText('');
+    await fetchPostComments(post.id);
+  };
+
+  const addComment = async () => {
+    if (!commentText.trim() || !selectedPost || !authToken) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/posts/${selectedPost.id}/comments`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${authToken}`, 
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify({ content: commentText.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const newC = { ...data.data, createdAt: 'Just now', isLiked: false };
+        setPostComments(prev => [newC, ...prev]);
+        setCommentText('');
+        await fetchPostComments(selectedPost.id);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to add comment');
+    }
+  };
 
   const handleLikeLocal = (postId: string) => {
     if (handleLike) {
@@ -240,7 +414,7 @@ const DesktopThoughtsPanel: React.FC<StudentThoughtsCardProps> = (props) => {
               <ThoughtsCard
                 post={post}
                 onLike={handleLikeLocal}
-                onComment={onComment}
+                onComment={openCommentsModal}
                 onReport={() => {}}
                 getProfileImageSource={getProfileImageSource}
                 initials={initials}
@@ -253,6 +427,73 @@ const DesktopThoughtsPanel: React.FC<StudentThoughtsCardProps> = (props) => {
           ))}
         </ScrollView>
       </ThoughtsBackground>
+
+      {/* Comments Modal */}
+      <Modal
+        visible={showCommentsModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowCommentsModal(false)}
+      >
+        <View style={modalStyles.modalOverlay}>
+          <View style={modalStyles.modalBox}>
+            <View style={modalStyles.modalHeader}>
+              <Text style={modalStyles.modalTitle}>Comments</Text>
+              <TouchableOpacity onPress={() => setShowCommentsModal(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Comment Input */}
+            <View style={modalStyles.commentInputRow}>
+              <TextInput
+                style={modalStyles.commentInput}
+                placeholder="Add a comment..."
+                placeholderTextColor="#999"
+                value={commentText}
+                onChangeText={setCommentText}
+                multiline
+                maxLength={200}
+              />
+              <TouchableOpacity
+                style={[modalStyles.postBtn, !commentText.trim() && { backgroundColor: '#ccc' }]}
+                onPress={addComment}
+                disabled={!commentText.trim()}
+              >
+                <Text style={modalStyles.postBtnText}>Post</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Comments List */}
+            <ScrollView style={{ maxHeight: 300 }}>
+              {postComments.length === 0 ? (
+                <Text style={modalStyles.noCommentsText}>No comments yet</Text>
+              ) : (
+                postComments.map((c) => {
+                  const ca = resolvePostAuthor({ author: c.author });
+                  const cSrc = getProfileImageSource(ca.pic || undefined);
+                  return (
+                    <View key={c.id} style={modalStyles.commentItem}>
+                      {cSrc ? (
+                        <Image source={cSrc} style={modalStyles.commentAvatar} />
+                      ) : (
+                        <View style={[modalStyles.commentAvatar, modalStyles.avatarPlaceholder]}>
+                          <Text style={modalStyles.avatarText}>{initials(ca.name)}</Text>
+                        </View>
+                      )}
+                      <View style={modalStyles.commentContent}>
+                        <Text style={modalStyles.commentAuthor}>{ca.name}</Text>
+                        <Text style={modalStyles.commentText}>{c.content}</Text>
+                        <Text style={modalStyles.commentTime}>{c.createdAt}</Text>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -425,6 +666,118 @@ const desktopStyles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Poppins_600SemiBold',
     color: COLORS.textDark,
+  },
+});
+
+// Modal styles
+const modalStyles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  modalBox: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    width: '90%',
+    maxWidth: 500,
+    maxHeight: '80%'
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    fontFamily: 'Poppins_600SemiBold'
+  },
+  commentInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    marginBottom: 12
+  },
+  commentInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    maxHeight: 80,
+    marginRight: 10
+  },
+  postBtn: {
+    backgroundColor: '#4A7BF7',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20
+  },
+  postBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium'
+  },
+  noCommentsText: {
+    textAlign: 'center',
+    color: '#aaa',
+    paddingVertical: 30,
+    fontFamily: 'Poppins_400Regular'
+  },
+  commentItem: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0'
+  },
+  commentAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18
+  },
+  avatarPlaceholder: {
+    backgroundColor: '#4A7BF7',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  avatarText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: 'Poppins_600SemiBold'
+  },
+  commentContent: {
+    flex: 1,
+    marginLeft: 10
+  },
+  commentAuthor: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#222',
+    fontFamily: 'Poppins_600SemiBold'
+  },
+  commentText: {
+    fontSize: 13,
+    color: '#374151',
+    marginTop: 2,
+    fontFamily: 'Poppins_400Regular'
+  },
+  commentTime: {
+    fontSize: 11,
+    color: '#aaa',
+    marginTop: 3,
+    fontFamily: 'Poppins_400Regular'
   },
 });
 

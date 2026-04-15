@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ImageBackground, Dimensions, Platform, StatusBar, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { authService } from '../../services/authService';
+import authService from '../../services/authService';
 import { safeBack } from '../../utils/navigation';
 
 const { width, height } = Dimensions.get('window');
@@ -99,7 +99,24 @@ export default function SignupOTPScreen() {
       }
     } catch (error: any) {
       console.error('OTP verification error:', error);
-      Alert.alert('Error', error.message || 'Failed to verify OTP. Please try again.');
+      
+      // Check if user is already registered
+      if (error.message?.includes('already registered') || error.message?.includes('already registered')) {
+        Alert.alert(
+          'Already Registered', 
+          'This email is already registered. Please login instead.',
+          [
+            { 
+              text: 'Go to Login', 
+              onPress: () => router.replace('/auth/LoginOptionsScreen')
+            },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      } else {
+        Alert.alert('Error', error.message || 'Failed to verify OTP. Please try again.');
+      }
+      
       // Reset OTP inputs
       setOtp(['', '', '', '']);
       inputRefs.current[0]?.focus();
@@ -118,7 +135,7 @@ export default function SignupOTPScreen() {
     if (!canResend) return;
 
     try {
-      const response = await authService.sendOTP(email, '', true, signupName);
+      const response = await authService.sendOTP(email, '', true, signupName, signupPhone || '+0000000000');
       
       if (response.success) {
         setTimer(60);

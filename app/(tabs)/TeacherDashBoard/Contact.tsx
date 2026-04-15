@@ -12,7 +12,7 @@ import {
   Platform,
   TextInput,
   KeyboardAvoidingView,
-  TouchableWithoutFeedback,
+  Pressable,
   Keyboard,
   Linking,
 } from 'react-native';
@@ -89,6 +89,14 @@ export default function Contact() {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       setScreenWidth(window.width);
       setScreenHeight(window.height);
+      // Auto-collapse sidebar and thoughts on mobile, expand on desktop
+      if (window.width < 768) {
+        setSidebarCollapsed(true);
+        setIsThoughtsCollapsed(true);
+      } else {
+        setSidebarCollapsed(false);
+        setIsThoughtsCollapsed(false);
+      }
     });
     return () => subscription?.remove();
   }, []);
@@ -108,6 +116,24 @@ export default function Contact() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
 
+
+  // Handle back button press
+  const handleBackPress = () => {
+    router.push("/(tabs)/TeacherDashBoard/Teacher");
+  };
+
+  // ESC key handler for web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleBackPress();
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+      return () => document.removeEventListener('keydown', handleEsc);
+    }
+  }, []);
 
   // Handle sidebar navigation
   const handleSelect = (itemName: string) => {
@@ -157,42 +183,30 @@ export default function Contact() {
     setSidebarCollapsed(!sidebarCollapsed);
   };
 
-  // Contact form submission
+  // Contact form submission - opens email client
   const handleSubmit = async () => {
     if (!message.trim()) {
       Alert.alert('Error', 'Please enter your message');
       return;
     }
 
-    setIsSubmitting(true);
     try {
-      // TODO: Replace with actual API endpoint
-      const response = await fetch(`${BASE_URL}/api/contact`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          category: selectedCategory,
-          message: message.trim(),
-          userType: 'teacher',
-          email: userEmail,
-        }),
-      });
-
-      if (response.ok) {
+      const subject = `Contact Form: ${selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)}`;
+      const body = `Category: ${selectedCategory}\n\nMessage:\n${message.trim()}\n\n---\nFrom: ${userEmail || 'Teacher'}`;
+      const mailtoUrl = `mailto:contact@gogrowsmart.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      
+      const canOpen = await Linking.canOpenURL(mailtoUrl);
+      if (canOpen) {
+        await Linking.openURL(mailtoUrl);
         setShowSuccessModal(true);
         setMessage('');
         setSelectedCategory('general');
       } else {
-        Alert.alert('Error', 'Failed to send message. Please try again.');
+        Alert.alert('Error', 'Unable to open email client. Please ensure you have an email app installed.');
       }
     } catch (error) {
-      console.error('Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message. Please try again.');
-    } finally {
-      setIsSubmitting(false);
+      console.error('Error opening email client:', error);
+      Alert.alert('Error', 'Failed to open email client. Please try again.');
     }
   };
 
@@ -254,19 +268,24 @@ export default function Contact() {
             {/* ── CENTER: scrollable contact content ── */}
             <View style={styles.centerContent}>
               <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
                   <ScrollView 
                     style={styles.mainScroll} 
                     showsVerticalScrollIndicator={false}
                   >
                     {/* Welcome banner */}
-                    <View style={styles.welcomeBannerScreen}>
-                      <Text style={styles.welcomeTextScreen}>
-                        CONTACT US
-                      </Text>
-                      <Text style={styles.welcomeSubtextScreen}>
-                        We're here to help! Reach out with any questions or feedback.
-                      </Text>
+                    <View style={styles.pageHeader}>
+                      <TouchableOpacity style={styles.backBtnCircle} onPress={handleBackPress}>
+                        <Ionicons name="arrow-back" size={20} color={COLORS.textHeader} />
+                      </TouchableOpacity>
+                      <View style={styles.welcomeBannerScreen}>
+                        <Text style={styles.welcomeTextScreen}>
+                          CONTACT US
+                        </Text>
+                        <Text style={styles.welcomeSubtextScreen}>
+                          tdr Reach out with any questions or feedback.
+                        </Text>
+                      </View>
                     </View>
 
                     {/* Contact Information */}
@@ -295,29 +314,31 @@ export default function Contact() {
                     </View>
 
                     {/* Contact Form */}
-                    <View style={styles.contactFormCard}>
-                      <Text style={styles.contactFormTitle}>Send us a Message</Text>
+                    <View style={[styles.contactFormCard, isMobile && { margin: 12, padding: 16 }]}>
+                      <Text style={[styles.contactFormTitle, isMobile && { fontSize: 16, marginBottom: 16 }]}>Send us a Message</Text>
                       
                       {/* Category Selection */}
                       <Text style={styles.formLabel}>Category</Text>
-                      <View style={styles.categoryGrid}>
+                      <View style={[styles.categoryGrid, isMobile && { flexDirection: 'column', gap: 8 }]}>
                         {categories.map((category) => (
                           <TouchableOpacity
                             key={category.id}
                             style={[
                               styles.categoryItem,
+                              isMobile && { width: '100%', padding: 12 },
                               selectedCategory === category.id && styles.categoryItemSelected
                             ]}
                             onPress={() => setSelectedCategory(category.id)}
                           >
                             <Ionicons 
                               name={category.icon} 
-                              size={20} 
+                              size={isMobile ? 18 : 20} 
                               color={selectedCategory === category.id ? COLORS.white : category.color} 
                             />
                             <Text style={[
                               styles.categoryText,
-                              selectedCategory === category.id && styles.categoryTextSelected
+                              selectedCategory === category.id && styles.categoryTextSelected,
+                              isMobile && { fontSize: 14 }
                             ]}>
                               {category.label}
                             </Text>
@@ -328,10 +349,11 @@ export default function Contact() {
                       {/* Message */}
                       <Text style={styles.formLabel}>Message</Text>
                       <TextInput
-                        style={styles.messageInput}
+                        style={[styles.messageInput, isMobile && { minHeight: 100, padding: 10, fontSize: 14 }]}
                         multiline
-                        numberOfLines={6}
+                        numberOfLines={isMobile ? 4 : 6}
                         placeholder="Tell us more about your question or feedback..."
+                        placeholderTextColor={COLORS.textMuted}
                         value={message}
                         onChangeText={setMessage}
                         textAlignVertical="top"
@@ -339,20 +361,20 @@ export default function Contact() {
 
                       {/* Submit Button */}
                       <TouchableOpacity
-                        style={styles.submitButton}
+                        style={[styles.submitButton, isMobile && { padding: 14 }]}
                         onPress={handleSubmit}
                         disabled={isSubmitting}
                       >
                         {isSubmitting ? (
                           <ActivityIndicator color={COLORS.white} size="small" />
                         ) : (
-                          <Text style={styles.submitButtonText}>Send Message</Text>
+                          <Text style={[styles.submitButtonText, isMobile && { fontSize: 15 }]}>Send Message</Text>
                         )}
                       </TouchableOpacity>
                     </View>
 
                   </ScrollView>
-                </TouchableWithoutFeedback>
+                </Pressable>
               </KeyboardAvoidingView>
             </View>
 
@@ -391,7 +413,7 @@ export default function Contact() {
 // Styles
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  contentLayout: { flex: 1, flexDirection: 'row' },
+  contentLayout: { flex: 1, flexDirection: 'row', gap: 8 },
   mainWrapper: { flex: 1, flexDirection: 'row' },
   contentColumns: { flex: 1, flexDirection: 'row' },
   centerContent: { flex: 1, backgroundColor: COLORS.background },
@@ -465,6 +487,22 @@ const styles = StyleSheet.create({
     fontSize: 14, 
     color: COLORS.textBody,
     fontFamily: 'Poppins_400Regular'
+  },
+  pageHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 16, marginBottom: 8 },
+  backBtnCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    marginTop: 16,
+    marginLeft: 16,
   },
   welcomeBannerScreen: {
     backgroundColor: COLORS.primaryBlue,

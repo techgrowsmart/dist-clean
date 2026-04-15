@@ -168,7 +168,7 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
         if (isUniversities && selectedUniversity) {
           // Show years for selected university
           console.log('🎓 Fetching years for university:', selectedUniversity.universityName);
-          response = await axios.post(`${BASE_URL}/api/teachers/universities/${selectedUniversity.universityId}/years`, {}, { headers });
+          response = await axios.post(`${BASE_URL}/api/universities/${selectedUniversity.universityId}/years`, {}, { headers });
           
           if (response.data && response.data.years) {
             console.log('✅ Years received from API:', response.data.years);
@@ -208,8 +208,10 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
           }
         } else if (isUniversities) {
           // For universities, fetch universities list
-          console.log('🎓 Fetching universities list');
-          response = await axios.post(`${BASE_URL}/api/teachers/universities`, {}, { headers });
+          console.log('🎓 Fetching universities list from:', `${BASE_URL}/api/universities`);
+          response = await axios.post(`${BASE_URL}/api/universities`, {}, { headers });
+          
+          console.log('📡 Full API response:', response.data);
           
           if (response.data && Array.isArray(response.data)) {
             console.log('✅ Universities received from API:', response.data);
@@ -222,30 +224,31 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
               teacherCount: university.teacherCount || 0,
               universityId: university.universityId,
               universityName: university.universityName,
-              isUniversity: true
+              isUniversity: true,
+              image: university.image || null
             }));
             
             console.log('🎯 Universities list:', universitiesList);
             
-            // Add images for universities
+            // Add images for universities if not provided by API
             const imageUrls = [
-              'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=300&q=80',
-              'https://images.unsplash.com/photo-1546410531-bea422015320?w=300&q=80',
-              'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=300&q=80',
-              'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=300&q=80',
-              'https://images.unsplash.com/photo-1588072432836-e10032774350?w=300&q=80',
-              'https://images.unsplash.com/photo-1522661067900-ab829854a57f?w=300&q=80',
-              'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&q=80'
+              'https://images.unsplash.com/photo-1592280771190-3e2e4d571952?w=400&q=80',
+              'https://images.unsplash.com/photo-1562774053-701939374585?w=400&q=80',
+              'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=400&q=80',
+              'https://images.unsplash.com/photo-1571260899304-425eee4c7efc?w=400&q=80',
+              'https://images.unsplash.com/photo-1544531586-fde5298cdd40?w=400&q=80',
+              'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=400&q=80',
+              'https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=400&q=80'
             ];
             
             const universitiesWithImages = universitiesList.map((uni: any, index: number) => ({
               ...uni,
-              image: imageUrls[index % imageUrls.length]
+              image: uni.image || imageUrls[index % imageUrls.length]
             }));
             
             setClassesData(universitiesWithImages);
           } else {
-            console.log('⚠️ No universities data received');
+            console.log('⚠️ No universities data received, response.data:', response.data);
             setClassesData([]);
           }
         } else {
@@ -540,7 +543,7 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
                       <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
                         <Ionicons name="arrow-back" size={20} color={COLORS.textPrimary} />
                       </TouchableOpacity>
-                      <Text style={styles.pageTitle}>{selectedUniversity ? selectedUniversity.universityName + ' - Years' : finalBoardName + ' | Universities'}</Text>
+                      <Text style={styles.pageTitle}>{selectedUniversity ? selectedUniversity.universityName + ' - Years' : (isUniversities ? 'Universities' : finalBoardName + ' | Class')}</Text>
                     </View>
 
                     {/* Main Bounded Container */}
@@ -557,7 +560,7 @@ const ClassSelection = ({ boardName, boardId, onBack, onClassSelect }: {
                         ) : classesData.length > 0 ? (
                           classesData.map((classItem, index) => (
                             <ClassCard
-                              key={classItem.id || `class-${index}`}
+                              key={`${classItem.id || classItem.classId || 'class'}-${index}`}
                               item={classItem}
                               isFromFallback={classItem.isFromFallback}
                               onPress={() => {

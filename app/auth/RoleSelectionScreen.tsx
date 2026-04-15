@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Animated, Dimensions, ImageBackground, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { authService } from '../../services/authService';
+import authService, { AuthService } from '../../services/authService';
 import { safeBack } from '../../utils/navigation';
 
 const { width, height } = Dimensions.get('window');
@@ -29,52 +29,54 @@ export default function RoleSelectionScreen() {
         duration: 100,
         useNativeDriver: true,
       }),
-    ]).start();
-    callback();
-  };
-
-  const handleStudentRole = async () => {
-    animateButton(studentScale, async () => {
-      setLoading(true);
-      try {
-        await authService.updateRole(email, 'student');
-      } catch (error: any) {
-        console.error('Update role error:', error);
-        // Continue to profile even if role update fails
-      } finally {
-        setLoading(false);
-        // Navigate to student profile page with name and phone
-        router.push({ 
-          pathname: '/(tabs)/StudentDashBoard/Profile' as any, 
-          params: { 
-            email: email,
-            name: name,
-            phone: phone
-          } 
-        });
-      }
+    ]).start(() => {
+      callback();
     });
   };
 
-  const handleTeacherRole = async () => {
-    animateButton(teacherScale, async () => {
+  const handleStudentRole = () => {
+    if (loading) return;
+    animateButton(studentScale, () => {
       setLoading(true);
-      try {
-        await authService.updateRole(email, 'teacher');
-        // Navigate to teacher registration step 2 with name and phone
-        router.push({ 
-          pathname: '/auth/TeacherRegistration2' as any, 
-          params: { 
-            email: email,
-            name: name,
-            phone: phone
-          } 
+      authService.updateProfile(email, 'student')
+        .catch((error: any) => {
+          console.error('Update role error:', error);
+          // Continue to profile even if role update fails
+        })
+        .finally(() => {
+          setLoading(false);
+          // Navigate to student profile page with name and phone
+          router.push({
+            pathname: '/(tabs)/StudentDashBoard/Profile' as any,
+            params: {
+              email: email,
+              name: name,
+              phone: phone
+            }
+          });
         });
-      } catch (error: any) {
-        Alert.alert('Error', error.message || 'Failed to set role. Please try again.');
-      } finally {
-        setLoading(false);
-      }
+    });
+  };
+
+  const handleTeacherRole = () => {
+    animateButton(teacherScale, () => {
+      console.log('Teacher button clicked, navigating to SignUpteacher...');
+      console.log('Params:', { email, name, phone });
+
+      // Navigate immediately to teacher registration
+      router.push({
+        pathname: '/(tabs)/TeacherDashBoard/SignUpteacher' as any,
+        params: {
+          email: email,
+          name: name,
+          phone: phone
+        }
+      });
+
+      // Update role in background (don't block navigation)
+      authService.updateProfile(email, 'teacher')
+        .then(() => console.log('Role updated to teacher'))
+        .catch((error: any) => console.error('Update role error:', error));
     });
   };
 

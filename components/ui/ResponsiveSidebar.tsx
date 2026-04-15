@@ -3,9 +3,6 @@ import { View, TouchableOpacity, StyleSheet, Dimensions, Platform } from 'react-
 import { Ionicons } from '@expo/vector-icons';
 import WebSidebar from './WebSidebar';
 
-const { width } = Dimensions.get('window');
-const isMobile = width < 768;
-
 type ResponsiveSidebarProps = {
   activeItem: string;
   onItemPress: (itemName: string) => void;
@@ -14,6 +11,7 @@ type ResponsiveSidebarProps = {
   profileImage: string | null;
   children?: React.ReactNode;
   showHamburger?: boolean;
+  notificationCounts?: Record<string, number>;
 };
 
 const ResponsiveSidebar: React.FC<ResponsiveSidebarProps> = ({
@@ -24,14 +22,17 @@ const ResponsiveSidebar: React.FC<ResponsiveSidebarProps> = ({
   profileImage,
   children,
   showHamburger = true,
+  notificationCounts = {},
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isMobileView, setIsMobileView] = useState(isMobile);
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
+  const isMobileView = screenWidth < 768;
 
   useEffect(() => {
     const handleResize = () => {
-      const newIsMobile = Dimensions.get('window').width < 768;
-      setIsMobileView(newIsMobile);
+      const newWidth = Dimensions.get('window').width;
+      setScreenWidth(newWidth);
+      const newIsMobile = newWidth < 768;
       if (!newIsMobile) {
         setIsMobileMenuOpen(false);
       }
@@ -66,6 +67,7 @@ const ResponsiveSidebar: React.FC<ResponsiveSidebarProps> = ({
         profileImage={profileImage}
         isMobileMenuOpen={isMobileMenuOpen}
         onMobileMenuToggle={setIsMobileMenuOpen}
+        notificationCounts={notificationCounts}
       />
 
       {/* Main content */}
