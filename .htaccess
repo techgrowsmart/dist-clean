@@ -45,10 +45,12 @@ RewriteRule ^api/students$ /api/posts [L]
 RewriteRule ^api/favorites/ - [L]
 RewriteRule ^api/messages/ - [L]
 RewriteRule ^api/posts/ - [L]
+RewriteRule ^api/posts/all$ /api/posts [L]
 RewriteRule ^api/profile/ - [L]
 RewriteRule ^api/user/ - [L]
 RewriteRule ^api/userProfile$ /api/userProfile [L]
 RewriteRule ^api/notifications/ - [L]
+RewriteRule ^api/notifications/unread-count$ /api/notifications/unread-count [L]
 # Note: Proxying is handled by mod_proxy directives below, not rewrite rules
 
 # ============================================
