@@ -32,6 +32,23 @@ RewriteRule ^(assets|video)/ - [L]
 # ============================================
 # API PROXY ROUTES - Backend Services & Database Access
 # ============================================
+# Map frontend API calls to backend endpoints before proxying
+RewriteRule ^api/signup$ /api/auth/sendotp [L]
+RewriteRule ^api/login$ /api/auth/login [L]
+RewriteRule ^api/verify-otp$ /api/auth/verify-otp [L]
+# Map growth thoughts to posts endpoint
+RewriteRule ^api/growth$ /api/posts [L]
+RewriteRule ^api/growth-thoughts$ /api/posts [L]
+RewriteRule ^api/teachers$ /api/posts [L]
+RewriteRule ^api/students$ /api/posts [L]
+# Additional endpoints
+RewriteRule ^api/favorites/ - [L]
+RewriteRule ^api/messages/ - [L]
+RewriteRule ^api/posts/ - [L]
+RewriteRule ^api/profile/ - [L]
+RewriteRule ^api/user/ - [L]
+RewriteRule ^api/userProfile$ /api/userProfile [L]
+RewriteRule ^api/notifications/ - [L]
 # Note: Proxying is handled by mod_proxy directives below, not rewrite rules
 
 # ============================================
@@ -61,8 +78,9 @@ RewriteRule ^ - [R=204,L]
 
 <IfModule mod_headers.c>
     # CORS - Allow all necessary origins for gogrowsmart.com domain
-    SetEnvIf Origin "^https://(www\.)?(gogrowsmart\.com|portal\.gogrowsmart\.com|growsmartserver\.gogrowsmart\.com|growsmartserve\.gogrowsmart\.com|api\.gogrowsmart\.com)$" ACAO=$0
+    SetEnvIf Origin "^https://(www\.)?(gogrowsmart\.com|portal\.gogrowsmart\.com|growsmartserver\.gogrowsmart\.com|growsmartserve\.gogrowsmart\.com|api\.gogrowsmart\.com|localhost|127\.0\.0\.1)$" ACAO=$0
     Header always set Access-Control-Allow-Origin "%{ACAO}e" env=ACAO
+    Header always set Access-Control-Allow-Origin "https://portal.gogrowsmart.com" env=!ACAO
     Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
     Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Api-Key, X-CSRF-Token, Cache-Control, Pragma, X-Database-Connection"
     Header always set Access-Control-Expose-Headers "Content-Length, Content-Range, X-Total-Count, X-Database-Status"
@@ -118,17 +136,18 @@ RewriteRule ^ - [R=204,L]
 
     # Cache static assets for 1 hour (not 1 year to allow updates)
     <FilesMatch "\.(css|js)$">
-        Header set Cache-Control "public, max-age=3600, must-revalidate"
+        Header set Cache-Control "public, max-age=3600, must-revalidate, immutable"
     </FilesMatch>
 
     # Cache images for 1 day
     <FilesMatch "\.(png|jpg|jpeg|gif|svg|ico|webp)$">
-        Header set Cache-Control "public, max-age=86400, must-revalidate"
+        Header set Cache-Control "public, max-age=86400, must-revalidate, immutable"
     </FilesMatch>
 
-    # Cache fonts for 1 day
+    # Cache fonts for 1 day with longer timeout for slow connections
     <FilesMatch "\.(woff|woff2|ttf|otf|eot)$">
-        Header set Cache-Control "public, max-age=86400, must-revalidate"
+        Header set Cache-Control "public, max-age=86400, must-revalidate, immutable"
+        Header set Connection "keep-alive"
     </FilesMatch>
 </IfModule>
 
@@ -136,18 +155,37 @@ RewriteRule ^ - [R=204,L]
 # DATABASE & EXTERNAL SERVICE PROXY CONFIG
 # ============================================
 <IfModule mod_proxy.c>
-    # Proxy all API calls to deployed backend
-    ProxyPass /api/ https://growsmartserver.gogrowsmart.com/api/
-    ProxyPassReverse /api/ https://growsmartserver.gogrowsmart.com/api/
+    # Proxy all API calls to deployed backend (strip /api/ prefix to avoid double /api/)
+    ProxyPass /api/ https://growsmartserver.gogrowsmart.com/
+    ProxyPassReverse /api/ https://growsmartserver.gogrowsmart.com/
     
     # WebSocket support for real-time features
     ProxyPass /ws/ ws://growsmartserver.gogrowsmart.com/ws/
     ProxyPassReverse /ws/ ws://growsmartserver.gogrowsmart.com/ws/
     
-    # Proxy timeout settings
+    # Proxy timeout settings (increased for slow connections)
     ProxyTimeout 300
     ProxyPreserveHost On
+    
+    # SSL Proxy settings
+    SSLProxyEngine On
+    SSLProxyVerify None
+    SSLProxyCheckPeerCN Off
+    SSLProxyCheckPeerName Off
 </IfModule>
+
+# Add CORS headers to proxied responses using Location block
+<Location "/api/">
+    <IfModule mod_headers.c>
+        Header always set Access-Control-Allow-Origin "https://portal.gogrowsmart.com"
+        Header always set Access-Control-Allow-Origin "*" env=ACAO
+        Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
+        Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Api-Key, X-CSRF-Token, Cache-Control, Pragma, X-Database-Connection"
+        Header always set Access-Control-Allow-Credentials "true"
+        Header always set Access-Control-Max-Age "86400"
+        Header always set Vary "Origin"
+    </IfModule>
+</Location>
 
 # ============================================
 # PERFORMANCE OPTIMIZATION
@@ -160,6 +198,22 @@ RewriteRule ^ - [R=204,L]
 # Connection keep-alive
 <IfModule mod_headers.c>
     Header set Connection keep-alive
+    Header set Keep-Alive "timeout=5, max=1000"
+</IfModule>
+
+# Enable browser caching for static assets
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 year"
+    ExpiresByType application/javascript "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/jpg "access plus 1 year"
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/gif "access plus 1 year"
+    ExpiresByType image/svg+xml "access plus 1 year"
+    ExpiresByType image/ico "access plus 1 year"
+    ExpiresByType font/woff "access plus 1 year"
+    ExpiresByType font/woff2 "access plus 1 year"
 </IfModule>
 
 # ============================================
