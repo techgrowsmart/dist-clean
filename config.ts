@@ -1,6 +1,7 @@
 // Backend URL configuration
 const DEV_SERVER_URL = 'http://localhost:3000';
-const PROD_SERVER_URL = 'https://growsmartserver.gogrowsmart.com';
+// Use empty string in production for relative paths (proxied by .htaccess)
+const PROD_SERVER_URL = '';
 
 // Use production URL for production, dev URL for development
 export const BASE_URL = process.env.NODE_ENV === 'production' || process.env.EXPO_PUBLIC_DEV_MODE === 'false'

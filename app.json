@@ -53,9 +53,12 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "server",
+      "output": "static",
       "favicon": "./assets/images/growsmart-icon.png",
-      "excludedPlatforms": ["ios", "android"]
+      "excludedPlatforms": ["ios", "android"],
+      "minify": true,
+      "optimization": true,
+      "assetPattern": "**/*"
     },
     "plugins": [
       "expo-router",
