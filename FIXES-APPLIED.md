@@ -61,19 +61,20 @@
 - Added `Connection: keep-alive` header for font files to improve loading reliability
 - Increased proxy timeout to 300 seconds for slow connections
 
-### 7. Hardcoded Backend URL Removal (Critical Fix)
-**Problem**: The JavaScript bundle had `BASE_URL` hardcoded to `https://growsmartserver.gogrowsmart.com`, causing all API calls to bypass the Apache proxy. This resulted in:
-- CORS errors (requests went directly to backend without CORS headers)
-- 429 rate limiting errors (direct backend hits)
-- Network errors (proxy configuration not being used)
+### 7. Hostinger Shared Hosting Compatibility (Critical Fix)
+**Problem**: Hostinger shared hosting does not support `ProxyPass`/`ProxyPassReverse` directives or `mod_proxy` module. The previous configuration attempted to proxy API calls through Apache, but this doesn't work on Hostinger's shared hosting environment.
 
 **Solution**:
-- Removed all hardcoded backend URLs from the JavaScript bundle using sed
-- Changed `BASE_URL` from absolute URL to empty string (relative paths)
-- Changed WebSocket URL from `wss://growsmartserver.gogrowsmart.com` to relative path
-- Now all API calls use relative URLs (e.g., `/api/login`) which go through the Apache proxy
-- CORS headers in the `<Location "/api/">` block are now properly applied to all responses
-- This fixes CORS errors, reduces rate limiting issues, and ensures proxy configuration is used
+- Removed all `ProxyPass` and `ProxyPassReverse` directives from `.htaccess`
+- Removed `mod_proxy` and SSL proxy configuration blocks
+- Removed API rewrite rules (not needed for direct backend calls)
+- Restored `BASE_URL` in JavaScript to `https://growsmartserver.gogrowsmart.com`
+- Restored WebSocket URL to `wss://growsmartserver.gogrowsmart.com`
+- API calls now go directly from frontend to backend (cross-origin)
+- CORS headers configured on backend server must allow requests from `portal.gogrowsmart.com`
+- Updated cache-busting version to `v=20250417` to force browser reload
+
+**Note**: For this configuration to work, the backend server at `growsmartserver.gogrowsmart.com` must have CORS headers properly configured to allow requests from `https://portal.gogrowsmart.com`.
 
 ## API Endpoint Verification
 

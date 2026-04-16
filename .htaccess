@@ -30,28 +30,10 @@ RewriteRule ^_expo/ - [L]
 RewriteRule ^(assets|video)/ - [L]
 
 # ============================================
-# API PROXY ROUTES - Backend Services & Database Access
+# API ROUTES - Direct calls to backend (no proxying on Hostinger)
 # ============================================
-# Map frontend API calls to backend endpoints before proxying
-RewriteRule ^api/signup$ /api/auth/sendotp [L]
-RewriteRule ^api/login$ /api/auth/login [L]
-RewriteRule ^api/verify-otp$ /api/auth/verify-otp [L]
-# Map growth thoughts to posts endpoint
-RewriteRule ^api/growth$ /api/posts [L]
-RewriteRule ^api/growth-thoughts$ /api/posts [L]
-RewriteRule ^api/teachers$ /api/posts [L]
-RewriteRule ^api/students$ /api/posts [L]
-# Additional endpoints
-RewriteRule ^api/favorites/ - [L]
-RewriteRule ^api/messages/ - [L]
-RewriteRule ^api/posts/ - [L]
-RewriteRule ^api/posts/all$ /api/posts [L]
-RewriteRule ^api/profile/ - [L]
-RewriteRule ^api/user/ - [L]
-RewriteRule ^api/userProfile$ /api/userProfile [L]
-RewriteRule ^api/notifications/ - [L]
-RewriteRule ^api/notifications/unread-count$ /api/notifications/unread-count [L]
-# Note: Proxying is handled by mod_proxy directives below, not rewrite rules
+# API calls are made directly to https://growsmartserver.gogrowsmart.com
+# from the frontend JavaScript. No rewrite rules needed.
 
 # ============================================
 # EXPO ROUTER SPA ROUTING
@@ -154,40 +136,11 @@ RewriteRule ^ - [R=204,L]
 </IfModule>
 
 # ============================================
-# DATABASE & EXTERNAL SERVICE PROXY CONFIG
+# HOSTINGER SHARED HOSTING - NO PROXY SUPPORT
 # ============================================
-<IfModule mod_proxy.c>
-    # Proxy all API calls to deployed backend (strip /api/ prefix to avoid double /api/)
-    ProxyPass /api/ https://growsmartserver.gogrowsmart.com/
-    ProxyPassReverse /api/ https://growsmartserver.gogrowsmart.com/
-    
-    # WebSocket support for real-time features
-    ProxyPass /ws/ ws://growsmartserver.gogrowsmart.com/ws/
-    ProxyPassReverse /ws/ ws://growsmartserver.gogrowsmart.com/ws/
-    
-    # Proxy timeout settings (increased for slow connections)
-    ProxyTimeout 300
-    ProxyPreserveHost On
-    
-    # SSL Proxy settings
-    SSLProxyEngine On
-    SSLProxyVerify None
-    SSLProxyCheckPeerCN Off
-    SSLProxyCheckPeerName Off
-</IfModule>
-
-# Add CORS headers to proxied responses using Location block
-<Location "/api/">
-    <IfModule mod_headers.c>
-        Header always set Access-Control-Allow-Origin "https://portal.gogrowsmart.com"
-        Header always set Access-Control-Allow-Origin "*" env=ACAO
-        Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
-        Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Api-Key, X-CSRF-Token, Cache-Control, Pragma, X-Database-Connection"
-        Header always set Access-Control-Allow-Credentials "true"
-        Header always set Access-Control-Max-Age "86400"
-        Header always set Vary "Origin"
-    </IfModule>
-</Location>
+# Note: Hostinger shared hosting does not support ProxyPass directives
+# API calls are made directly to the backend server from the frontend
+# Backend URL is configured in the JavaScript bundle
 
 # ============================================
 # PERFORMANCE OPTIMIZATION
