@@ -1,0 +1,206 @@
+# GROWSMART Portal - Production Configuration for portal.gogrowsmart.com
+# =====================================================================
+
+# Enable rewrite engine FIRST (must be before any rewrite rules)
+RewriteEngine On
+
+# ============================================
+# FORCE HTTPS (Production)
+# ============================================
+# Commented out to prevent redirect loop - enable once SSL is properly configured
+# RewriteCond %{HTTPS} off
+# RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# ============================================
+# TRAILING SLASH HANDLING
+# ============================================
+# Keep trailing slashes for directories, allow both with and without for SPA routes
+# Don't redirect trailing slashes - Safari has issues with this
+
+# ============================================
+# SERVE EXPO STATIC FILES DIRECTLY
+# ============================================
+# Serve _expo static files directly without any rewrite
+RewriteRule ^_expo/ - [L]
+
+# ============================================
+# SERVE STATIC ASSETS DIRECTLY
+# ============================================
+# Serve assets, video, and other static files directly
+RewriteRule ^(assets|video)/ - [L]
+
+# ============================================
+# API PROXY ROUTES - Backend Services & Database Access
+# ============================================
+# Note: Proxying is handled by mod_proxy directives below, not rewrite rules
+
+# ============================================
+# EXPO ROUTER SPA ROUTING
+# ============================================
+# If the requested file/directory exists, serve it directly
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# ============================================
+# FALLBACK - SPA INDEX.HTML (Must be LAST)
+# ============================================
+# If no file/directory exists, serve index.html (Expo Router SPA fallback)
+RewriteCond %{REQUEST_URI} !^/_expo/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ /index.html [L]
+
+# ============================================
+# CORS HEADERS & SECURITY
+# ============================================
+
+# Handle OPTIONS preflight BEFORE setting headers
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^ - [R=204,L]
+
+<IfModule mod_headers.c>
+    # CORS - Allow all necessary origins for gogrowsmart.com domain
+    SetEnvIf Origin "^https://(www\.)?(gogrowsmart\.com|portal\.gogrowsmart\.com|growsmartserver\.gogrowsmart\.com|growsmartserve\.gogrowsmart\.com|api\.gogrowsmart\.com)$" ACAO=$0
+    Header always set Access-Control-Allow-Origin "%{ACAO}e" env=ACAO
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Api-Key, X-CSRF-Token, Cache-Control, Pragma, X-Database-Connection"
+    Header always set Access-Control-Expose-Headers "Content-Length, Content-Range, X-Total-Count, X-Database-Status"
+    Header always set Access-Control-Allow-Credentials "true"
+    Header always set Access-Control-Max-Age "86400"
+    
+    # Vary header for proper caching with CORS
+    Header always set Vary "Origin"
+    
+    # Security Headers
+    Header always set X-Content-Type-Options "nosniff"
+    # X-Frame-Options removed to allow iframe embedding
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(self), microphone=(self), camera=(self), payment=(self)"
+    
+    # HSTS - Force HTTPS (commented out temporarily for testing)
+    # Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+</IfModule>
+
+# ============================================
+# COMPRESSION
+# ============================================
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json application/x-javascript
+</IfModule>
+
+<IfModule mod_brotli.c>
+    AddOutputFilterByType BROTLI_COMPRESS text/html text/plain text/xml text/css text/javascript application/javascript application/json
+</IfModule>
+
+# ============================================
+# CACHE CONTROL - DISABLE CACHING FOR SPA
+# ============================================
+<IfModule mod_expires.c>
+    ExpiresActive Off
+</IfModule>
+
+<IfModule mod_headers.c>
+    # Disable caching for HTML files (SPA routing)
+    <FilesMatch "\.(html|htm)$">
+        Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0, private"
+        Header set Pragma "no-cache"
+        Header set Expires "Wed, 11 Jan 1984 05:00:00 GMT"
+    </FilesMatch>
+
+    # Disable caching for JSON (API responses)
+    <FilesMatch "\.json$">
+        Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0, private"
+        Header set Pragma "no-cache"
+        Header set Expires "Wed, 11 Jan 1984 05:00:00 GMT"
+    </FilesMatch>
+
+    # Cache static assets for 1 hour (not 1 year to allow updates)
+    <FilesMatch "\.(css|js)$">
+        Header set Cache-Control "public, max-age=3600, must-revalidate"
+    </FilesMatch>
+
+    # Cache images for 1 day
+    <FilesMatch "\.(png|jpg|jpeg|gif|svg|ico|webp)$">
+        Header set Cache-Control "public, max-age=86400, must-revalidate"
+    </FilesMatch>
+
+    # Cache fonts for 1 day
+    <FilesMatch "\.(woff|woff2|ttf|otf|eot)$">
+        Header set Cache-Control "public, max-age=86400, must-revalidate"
+    </FilesMatch>
+</IfModule>
+
+# ============================================
+# DATABASE & EXTERNAL SERVICE PROXY CONFIG
+# ============================================
+<IfModule mod_proxy.c>
+    # Proxy all API calls to deployed backend
+    ProxyPass /api/ https://growsmartserver.gogrowsmart.com/api/
+    ProxyPassReverse /api/ https://growsmartserver.gogrowsmart.com/api/
+    
+    # WebSocket support for real-time features
+    ProxyPass /ws/ ws://growsmartserver.gogrowsmart.com/ws/
+    ProxyPassReverse /ws/ ws://growsmartserver.gogrowsmart.com/ws/
+    
+    # Proxy timeout settings
+    ProxyTimeout 300
+    ProxyPreserveHost On
+</IfModule>
+
+# ============================================
+# PERFORMANCE OPTIMIZATION
+# ============================================
+# Enable HTTP/2
+<IfModule mod_http2.c>
+    Protocols h2 h2c http/1.1
+</IfModule>
+
+# Connection keep-alive
+<IfModule mod_headers.c>
+    Header set Connection keep-alive
+</IfModule>
+
+# ============================================
+# MIME TYPES
+# ============================================
+<IfModule mod_mime.c>
+    AddType application/javascript .js .mjs
+    AddType application/json .json
+    AddType application/manifest+json .webmanifest
+    AddType image/svg+xml .svg
+    AddType image/x-icon .ico
+</IfModule>
+
+# ============================================
+# DIRECTORY & FILE PROTECTION
+# ============================================
+Options -Indexes -MultiViews
+
+# Protect sensitive files
+<FilesMatch "^\.(env|git|svn|htaccess|htpasswd)">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Hide .htaccess
+<Files .htaccess>
+    Order allow,deny
+    Deny from all
+</Files>
+
+# ============================================
+# CHARACTER ENCODING
+# ============================================
+AddDefaultCharset UTF-8
+AddCharset UTF-8 .html .css .js .json .xml .svg .woff .woff2
+
+# ============================================
+# ERROR PAGES (Fallback to SPA)
+# ============================================
+ErrorDocument 404 /index.html
+ErrorDocument 500 /index.html
+ErrorDocument 502 /index.html
+ErrorDocument 503 /index.html
+ErrorDocument 504 /index.html
