@@ -395,6 +395,11 @@ export default function TeacherDetails() {
                     onPress: () => {
                       const tuition = teacher?.tuitions?.[bookingIndex!];
                       if (tuition) {
+                        // Determine class info based on board type
+                        const isUniversity = tuition?.board === 'Universities';
+                        const className = isUniversity 
+                          ? `${tuition?.university} (${tuition?.year})`
+                          : (tuition?.class || tuition?.className);
                         router.push({
                           pathname: "/(tabs)/StudentDashBoard/BookClass",
                           params: {
@@ -402,7 +407,7 @@ export default function TeacherDetails() {
                             teacherName: teacher?.name,
                             teacherProfilePic: teacher?.profilepic,
                             selectedSubject: tuition?.subject || tuition?.skill,
-                            selectedClass: tuition?.class || tuition?.className,
+                            selectedClass: className,
                             charge: tuition?.charge?.toString().replace(/[₹,]/g, '').trim(),
                             description: teacher?.introduction,
                           },
@@ -511,6 +516,11 @@ export default function TeacherDetails() {
                         onPress: () => {
                           const tuition = teacher?.tuitions?.[tuitionIndex];
                           if (tuition) {
+                            // Determine class info based on board type
+                            const isUniversity = tuition?.board === 'Universities';
+                            const className = isUniversity 
+                              ? `${tuition?.university} (${tuition?.year})`
+                              : (tuition?.class || tuition?.className);
                             router.push({
                               pathname: "/(tabs)/StudentDashBoard/BookClass",
                               params: {
@@ -518,7 +528,7 @@ export default function TeacherDetails() {
                                 teacherName: teacher?.name,
                                 teacherProfilePic: teacher?.profilepic,
                                 selectedSubject: tuition?.subject || tuition?.skill,
-                                selectedClass: tuition?.class || tuition?.className,
+                                selectedClass: className,
                                 charge: tuition?.charge?.toString().replace(/[₹,]/g, '').trim(),
                                 description: teacher?.introduction,
                               },
@@ -667,6 +677,11 @@ const handleBookNow = async (tuition: any, index: number) => {
 
     // If teacher has accepted, navigate to BookClass for payment
     if (state.status === 'accepted') {
+      // Determine class info based on board type
+      const isUniversity = tuition?.board === 'Universities';
+      const className = isUniversity 
+        ? `${tuition?.university} (${tuition?.year})`
+        : (tuition?.class || tuition?.className);
       router.push({
         pathname: "/(tabs)/StudentDashBoard/BookClass",
         params: {
@@ -674,7 +689,7 @@ const handleBookNow = async (tuition: any, index: number) => {
           teacherName: teacher?.name,
           teacherProfilePic: teacher?.profilepic,
           selectedSubject: tuition?.subject || tuition?.skill,
-          selectedClass: tuition?.class || tuition?.className,
+          selectedClass: className,
           charge: tuition?.charge?.toString().replace(/[₹,]/g, '').trim(),
           description: teacher?.introduction,
         },

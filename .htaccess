@@ -7,35 +7,24 @@ RewriteEngine On
 # ============================================
 # FORCE HTTPS (Production)
 # ============================================
-# Commented out to prevent redirect loop - enable once SSL is properly configured
+# Uncomment once SSL is properly configured
 # RewriteCond %{HTTPS} off
 # RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
 # ============================================
-# TRAILING SLASH HANDLING
+# SERVE STATIC FILES DIRECTLY (DIST FILES)
 # ============================================
-# Keep trailing slashes for directories, allow both with and without for SPA routes
-# Don't redirect trailing slashes - Safari has issues with this
+# Serve all static files without rewrite - dist build files
+RewriteRule ^(assets|_next|static|images|fonts|videos|audio)/ - [L]
+RewriteRule \.(js|css|png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|ttf|eot|json|xml|txt)$ - [L]
 
 # ============================================
-# SERVE EXPO STATIC FILES DIRECTLY
+# API PROXY ROUTES - Backend Services
 # ============================================
-# Serve _expo static files directly without any rewrite
-RewriteRule ^_expo/ - [L]
+# API requests are proxied via mod_proxy below, not rewritten
 
 # ============================================
-# SERVE STATIC ASSETS DIRECTLY
-# ============================================
-# Serve assets, video, and other static files directly
-RewriteRule ^(assets|video)/ - [L]
-
-# ============================================
-# API PROXY ROUTES - Backend Services & Database Access
-# ============================================
-# Note: Proxying is handled by mod_proxy directives below, not rewrite rules
-
-# ============================================
-# EXPO ROUTER SPA ROUTING
+# SPA ROUTING - EXPO/REACT DIST
 # ============================================
 # If the requested file/directory exists, serve it directly
 RewriteCond %{REQUEST_FILENAME} -f [OR]
@@ -45,8 +34,7 @@ RewriteRule ^ - [L]
 # ============================================
 # FALLBACK - SPA INDEX.HTML (Must be LAST)
 # ============================================
-# If no file/directory exists, serve index.html (Expo Router SPA fallback)
-RewriteCond %{REQUEST_URI} !^/_expo/
+# All non-file, non-directory requests go to index.html
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ /index.html [L]
@@ -55,31 +43,32 @@ RewriteRule ^ /index.html [L]
 # CORS HEADERS & SECURITY
 # ============================================
 
-# Handle OPTIONS preflight BEFORE setting headers
+# Handle OPTIONS preflight requests
 RewriteCond %{REQUEST_METHOD} OPTIONS
 RewriteRule ^ - [R=204,L]
 
 <IfModule mod_headers.c>
-    # CORS - Allow all necessary origins for gogrowsmart.com domain
-    SetEnvIf Origin "^https://(www\.)?(gogrowsmart\.com|portal\.gogrowsmart\.com|growsmartserver\.gogrowsmart\.com|growsmartserve\.gogrowsmart\.com|api\.gogrowsmart\.com)$" ACAO=$0
-    Header always set Access-Control-Allow-Origin "%{ACAO}e" env=ACAO
+    # CORS - Allow all origins for development/production flexibility
+    Header always set Access-Control-Allow-Origin "*"
     Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
-    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Api-Key, X-CSRF-Token, Cache-Control, Pragma, X-Database-Connection"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Api-Key, X-CSRF-Token, Cache-Control, Pragma, X-Database-Connection, Access-Control-Request-Method, Access-Control-Request-Headers"
     Header always set Access-Control-Expose-Headers "Content-Length, Content-Range, X-Total-Count, X-Database-Status"
     Header always set Access-Control-Allow-Credentials "true"
     Header always set Access-Control-Max-Age "86400"
     
-    # Vary header for proper caching with CORS
-    Header always set Vary "Origin"
+    # Vary header for proper caching
+    Header always set Vary "Origin, Accept-Encoding"
     
     # Security Headers
     Header always set X-Content-Type-Options "nosniff"
-    # X-Frame-Options removed to allow iframe embedding
     Header always set X-XSS-Protection "1; mode=block"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
     Header always set Permissions-Policy "geolocation=(self), microphone=(self), camera=(self), payment=(self)"
     
-    # HSTS - Force HTTPS (commented out temporarily for testing)
+    # Remove X-Frame-Options to allow iframe embedding if needed
+    # Header always set X-Frame-Options "SAMEORIGIN"
+    
+    # HSTS - Uncomment when SSL is fully configured
     # Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 </IfModule>
 
@@ -87,66 +76,104 @@ RewriteRule ^ - [R=204,L]
 # COMPRESSION
 # ============================================
 <IfModule mod_deflate.c>
-    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json application/x-javascript
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json application/x-javascript application/xml+xml
+    AddOutputFilterByType DEFLATE application/rss+xml application/atom+xml image/svg+xml
 </IfModule>
 
 <IfModule mod_brotli.c>
-    AddOutputFilterByType BROTLI_COMPRESS text/html text/plain text/xml text/css text/javascript application/javascript application/json
+    AddOutputFilterByType BROTLI_COMPRESS text/html text/plain text/xml text/css text/javascript application/javascript application/json application/xml+xml
 </IfModule>
 
 # ============================================
-# CACHE CONTROL - DISABLE CACHING FOR SPA
+# CACHE CONTROL - OPTIMIZED FOR DIST BUILD
 # ============================================
 <IfModule mod_expires.c>
-    ExpiresActive Off
+    ExpiresActive On
+    
+    # HTML files - no cache for SPA routing
+    ExpiresByType text/html "access plus 0 seconds"
+    
+    # CSS and JS with hash filenames - cache for 1 year
+    ExpiresByType text/css "access plus 1 year"
+    ExpiresByType application/javascript "access plus 1 year"
+    ExpiresByType application/x-javascript "access plus 1 year"
+    
+    # Images - cache for 1 month
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/jpg "access plus 1 month"
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/gif "access plus 1 month"
+    ExpiresByType image/svg+xml "access plus 1 month"
+    ExpiresByType image/ico "access plus 1 month"
+    ExpiresByType image/webp "access plus 1 month"
+    
+    # Fonts - cache for 1 year
+    ExpiresByType font/woff "access plus 1 year"
+    ExpiresByType font/woff2 "access plus 1 year"
+    ExpiresByType application/font-woff "access plus 1 year"
+    ExpiresByType application/font-woff2 "access plus 1 year"
+    ExpiresByType application/x-font-woff "access plus 1 year"
+    ExpiresByType application/x-font-ttf "access plus 1 year"
+    
+    # JSON - no cache for API responses
+    ExpiresByType application/json "access plus 0 seconds"
 </IfModule>
 
 <IfModule mod_headers.c>
-    # Disable caching for HTML files (SPA routing)
+    # HTML files - no cache
     <FilesMatch "\.(html|htm)$">
         Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0, private"
         Header set Pragma "no-cache"
         Header set Expires "Wed, 11 Jan 1984 05:00:00 GMT"
     </FilesMatch>
 
-    # Disable caching for JSON (API responses)
+    # JSON files - no cache
     <FilesMatch "\.json$">
         Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0, private"
         Header set Pragma "no-cache"
         Header set Expires "Wed, 11 Jan 1984 05:00:00 GMT"
     </FilesMatch>
 
-    # Cache static assets for 1 hour (not 1 year to allow updates)
+    # CSS and JS with hashes - long cache with immutable
     <FilesMatch "\.(css|js)$">
-        Header set Cache-Control "public, max-age=3600, must-revalidate"
+        Header set Cache-Control "public, max-age=31536000, immutable"
     </FilesMatch>
 
-    # Cache images for 1 day
+    # Images - cache for 1 month
     <FilesMatch "\.(png|jpg|jpeg|gif|svg|ico|webp)$">
-        Header set Cache-Control "public, max-age=86400, must-revalidate"
+        Header set Cache-Control "public, max-age=2592000, must-revalidate"
     </FilesMatch>
 
-    # Cache fonts for 1 day
+    # Fonts - cache for 1 year
     <FilesMatch "\.(woff|woff2|ttf|otf|eot)$">
-        Header set Cache-Control "public, max-age=86400, must-revalidate"
+        Header set Cache-Control "public, max-age=31536000, immutable"
     </FilesMatch>
 </IfModule>
 
 # ============================================
-# DATABASE & EXTERNAL SERVICE PROXY CONFIG
+# BACKEND PROXY CONFIG - GROWSMARTSERVER
 # ============================================
 <IfModule mod_proxy.c>
-    # Proxy all API calls to deployed backend
+    # Proxy API requests to backend server
     ProxyPass /api/ https://growsmartserver.gogrowsmart.com/api/
     ProxyPassReverse /api/ https://growsmartserver.gogrowsmart.com/api/
     
     # WebSocket support for real-time features
-    ProxyPass /ws/ ws://growsmartserver.gogrowsmart.com/ws/
-    ProxyPassReverse /ws/ ws://growsmartserver.gogrowsmart.com/ws/
+    ProxyPass /ws/ wss://growsmartserver.gogrowsmart.com/ws/
+    ProxyPassReverse /ws/ wss://growsmartserver.gogrowsmart.com/ws/
     
     # Proxy timeout settings
     ProxyTimeout 300
     ProxyPreserveHost On
+    
+    # SSL proxy settings
+    SSLProxyEngine On
+    SSLProxyVerify None
+    SSLProxyCheckPeerCN Off
+    SSLProxyCheckPeerName Off
+    
+    # Disable proxy for static assets
+    ProxyPass ^(assets|_next|static|images|fonts|videos|audio)/ !
 </IfModule>
 
 # ============================================
@@ -154,12 +181,13 @@ RewriteRule ^ - [R=204,L]
 # ============================================
 # Enable HTTP/2
 <IfModule mod_http2.c>
-    Protocols h2 h2c http/1.1
+    Protocols h2 http/1.1
 </IfModule>
 
 # Connection keep-alive
 <IfModule mod_headers.c>
     Header set Connection keep-alive
+    Header set Keep-Alive "timeout=5, max=100"
 </IfModule>
 
 # ============================================
@@ -171,30 +199,38 @@ RewriteRule ^ - [R=204,L]
     AddType application/manifest+json .webmanifest
     AddType image/svg+xml .svg
     AddType image/x-icon .ico
+    AddType font/woff .woff
+    AddType font/woff2 .woff2
+    AddType application/font-woff .woff
+    AddType application/font-woff2 .woff2
+    AddType application/vnd.ms-fontobject .eot
+    AddType font/truetype .ttf
+    AddType font/opentype .otf
+    AddType application/wasm .wasm
 </IfModule>
 
 # ============================================
 # DIRECTORY & FILE PROTECTION
 # ============================================
-Options -Indexes -MultiViews
+Options -Indexes -MultiViews +FollowSymLinks
 
 # Protect sensitive files
-<FilesMatch "^\.(env|git|svn|htaccess|htpasswd)">
+<FilesMatch "^\.(env|git|svn|htaccess|htpasswd|log|lock)$">
     Order allow,deny
     Deny from all
 </FilesMatch>
 
-# Hide .htaccess
-<Files .htaccess>
+# Hide .htaccess and other config files
+<FilesMatch "(^\.htaccess|^\.env|^\.git)">
     Order allow,deny
     Deny from all
-</Files>
+</FilesMatch>
 
 # ============================================
 # CHARACTER ENCODING
 # ============================================
 AddDefaultCharset UTF-8
-AddCharset UTF-8 .html .css .js .json .xml .svg .woff .woff2
+AddCharset UTF-8 .html .css .js .json .xml .svg .woff .woff2 .ttf .otf
 
 # ============================================
 # ERROR PAGES (Fallback to SPA)

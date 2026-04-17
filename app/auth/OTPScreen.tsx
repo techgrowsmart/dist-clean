@@ -41,7 +41,7 @@ export default function OTPScreen() {
 
   // Auto-login for known test users to bypass OTP screen
   useEffect(() => {
-    const testUsers = ['student1@example.com', 'teacher56@example.com'];
+    const testUsers = ['student1@example.com', 'teacher31@example.com', 'teacher56@example.com'];
     if (email && testUsers.includes(email)) {
       (async () => {
         setVerifying(true);
@@ -123,22 +123,64 @@ export default function OTPScreen() {
             }
           });
         } else {
-          // For login verification, navigate to appropriate dashboard
-          if (response.user?.role === 'teacher') {
+          // For login verification, navigate to appropriate dashboard based on determined role
+          // Use the role passed from EmailInputScreen or fallback to response.user.role
+          const userRole = role === 'teacher' ? 'teacher' : (response.user?.role === 'teacher' ? 'teacher' : 'student');
+          
+          if (userRole === 'teacher') {
             router.replace('/(tabs)/TeacherDashBoard' as any);
           } else {
             router.replace('/(tabs)/StudentDashBoard' as any);
           }
         }
       } else {
-        Alert.alert('Error', response.message || 'Invalid OTP. Please try again.');
+        const errorMessage = response.message || 'Invalid OTP. Please try again.';
+        if (isWeb) {
+          alert(errorMessage);
+        } else {
+          Alert.alert('Error', errorMessage);
+        }
         // Reset OTP inputs
         setOtp(['', '', '', '']);
         inputRefs.current[0]?.focus();
       }
     } catch (error: any) {
       console.error('OTP verification error:', error);
-      Alert.alert('Error', error.message || 'Failed to verify OTP. Please try again.');
+      const errorMessage = error.message || 'Failed to verify OTP. Please try again.';
+      
+      // Handle specific error messages
+      if (errorMessage.toLowerCase().includes('already registered')) {
+        if (isWeb) {
+          const goToLogin = confirm('This email is already registered. Would you like to login instead?');
+          if (goToLogin) {
+            router.push({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } });
+          }
+        } else {
+          Alert.alert(
+            'Already Registered',
+            'This email is already registered. Would you like to login instead?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Go to Login', 
+                onPress: () => router.push({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } })
+              }
+            ]
+          );
+        }
+      } else if (errorMessage.toLowerCase().includes('invalid otp')) {
+        if (isWeb) {
+          alert('Invalid OTP. Please check and try again.');
+        } else {
+          Alert.alert('Invalid OTP', 'Please check your OTP and try again.');
+        }
+      } else {
+        if (isWeb) {
+          alert(errorMessage);
+        } else {
+          Alert.alert('Error', errorMessage);
+        }
+      }
       // Reset OTP inputs
       setOtp(['', '', '', '']);
       inputRefs.current[0]?.focus();
@@ -165,13 +207,50 @@ export default function OTPScreen() {
         // Reset OTP inputs
         setOtp(['', '', '', '']);
         inputRefs.current[0]?.focus();
-        Alert.alert('Success', 'OTP sent successfully!');
+        if (isWeb) {
+          alert('OTP sent successfully!');
+        } else {
+          Alert.alert('Success', 'OTP sent successfully!');
+        }
       } else {
-        Alert.alert('Error', response.message || 'Failed to resend OTP');
+        const errorMessage = response.message || 'Failed to resend OTP';
+        if (isWeb) {
+          alert(errorMessage);
+        } else {
+          Alert.alert('Error', errorMessage);
+        }
       }
     } catch (error: any) {
       console.error('Resend OTP error:', error);
-      Alert.alert('Error', error.message || 'Failed to resend OTP');
+      const errorMessage = error.message || 'Failed to resend OTP';
+      
+      // Handle specific error messages
+      if (errorMessage.toLowerCase().includes('already registered')) {
+        if (isWeb) {
+          const goToLogin = confirm('This email is already registered. Would you like to login instead?');
+          if (goToLogin) {
+            router.push({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } });
+          }
+        } else {
+          Alert.alert(
+            'Already Registered',
+            'This email is already registered. Would you like to login instead?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Go to Login', 
+                onPress: () => router.push({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } })
+              }
+            ]
+          );
+        }
+      } else {
+        if (isWeb) {
+          alert(errorMessage);
+        } else {
+          Alert.alert('Error', errorMessage);
+        }
+      }
     }
   };
 

@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ImageBackground, Dimensions, Platform, StatusBar, TextInput, ActivityIndicator, Alert, Animated, KeyboardAvoidingView, ScrollView } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Ionicons, FontAwesome, MaterialIcons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useState } from 'react';
+import { ActivityIndicator, Alert, Dimensions, ImageBackground, Platform, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import authService from '../../services/authService';
-import { safeBack } from '../../utils/navigation';
 
 const { width, height } = Dimensions.get('window');
 const windowWidth = width;
@@ -58,6 +56,21 @@ export default function EmailInputScreen() {
     setLoading(true);
 
     try {
+      // For login, check user's role before sending OTP
+      let userRole = role;
+      if (isLogin) {
+        try {
+          const userCheck = await authService.checkUserExists(trimmedEmail);
+          if (userCheck.exists && userCheck.role) {
+            userRole = userCheck.role;
+            console.log('User role determined:', userRole);
+          }
+        } catch (checkError) {
+          console.log('Role check failed, will use default:', checkError);
+          // Continue with default role if check fails
+        }
+      }
+
       // Try to send OTP for login/signup (with phone number for signup)
       const fullPhoneNumber = phoneNumber ? `${phoneCountry}${phoneNumber}` : '+0000000000';
       const response = await authService.sendOTP(trimmedEmail, '', !isLogin, fullName, fullPhoneNumber);
@@ -66,14 +79,14 @@ export default function EmailInputScreen() {
       if (response.isTestUser && response.token) {
         // Store auth data and navigate directly to dashboard
         await authService.storeAuthData({
-          role: response.role || role,
+          role: response.role || userRole,
           email: trimmedEmail,
           token: response.token,
           name: (response as any).name || trimmedEmail.split('@')[0],
         });
         
         // Navigate to appropriate dashboard
-        if (response.role === 'teacher') {
+        if (response.role === 'teacher' || userRole === 'teacher') {
           router.replace('/(tabs)/TeacherDashBoard' as any);
         } else {
           router.replace('/(tabs)/StudentDashBoard' as any);
@@ -81,13 +94,13 @@ export default function EmailInputScreen() {
         return;
       }
       
-      // For regular users, navigate to OTP verification screen
+      // For regular users, navigate to OTP verification screen with determined role
       router.push({ 
         pathname: '/auth/OTPScreen' as any,
         params: { 
           email: trimmedEmail, 
           isLogin: isLogin ? 'true' : 'false', 
-          role: role,
+          role: userRole,
           otpId: response.otpId || '',
           isSignup: isLogin ? 'false' : 'true',
           name: fullName,
@@ -96,23 +109,35 @@ export default function EmailInputScreen() {
       });
     } catch (error: any) {
       console.error('OTP sending error:', error);
+      const errorMessage = error.message || 'Failed to send OTP';
+      console.log('Error message:', errorMessage);
+      console.log('Checking for not registered:', errorMessage.toLowerCase().includes('not registered'));
       
       // Check if user is already registered
-      if (error.message?.includes('already registered')) {
-        Alert.alert(
-          'Already Registered',
-          'This email is already registered. Would you like to login instead?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Go to Login', 
-              onPress: () => router.push({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } })
-            }
-          ]
-        );
+      if (errorMessage.toLowerCase().includes('already registered')) {
+        console.log('Showing already registered alert');
+        if (isWeb) {
+          alert('This email is already registered. Redirecting to login...');
+        } else {
+          Alert.alert('Already Registered', 'This email is already registered. Redirecting to login...');
+        }
+        router.push({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } });
+      } else if (errorMessage.toLowerCase().includes('not registered')) {
+        console.log('Showing not registered alert');
+        if (isWeb) {
+          alert('This email is not registered. Redirecting to signup...');
+        } else {
+          Alert.alert('Account Not Found', 'This email is not registered. Redirecting to signup...');
+        }
+        router.push({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'signup' } });
       } else {
         // Show other error messages from the backend
-        Alert.alert('Error', error.message || 'Failed to send OTP');
+        console.log('Showing generic error alert');
+        if (isWeb) {
+          alert(errorMessage);
+        } else {
+          Alert.alert('Error', errorMessage);
+        }
       }
     } finally {
       setLoading(false);
@@ -452,9 +477,8 @@ const webStyles = StyleSheet.create({
     height: 54,
   },
   inputContainerFocused: {
-    borderColor: '#7C4DDB',
+    borderColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
-    boxShadow: '0px 2px 4px rgba(124, 77, 219, 0.1)',
   },
   inputIcon: {
     marginRight: 12,
@@ -464,6 +488,8 @@ const webStyles = StyleSheet.create({
     fontSize: 16,
     color: '#1A1A1A',
     paddingVertical: 0,
+    outlineWidth: 0,
+    outlineColor: '#F9FAFB',
   },
   phoneRow: {
     width: '100%',
@@ -483,9 +509,8 @@ const webStyles = StyleSheet.create({
     height: 54,
   },
   phoneInputContainerFocused: {
-    borderColor: '#7C4DDB',
+    borderColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
-    boxShadow: '0px 2px 4px rgba(124, 77, 219, 0.1)',
   },
   countryPicker: {
     flexDirection: 'row',
@@ -499,7 +524,7 @@ const webStyles = StyleSheet.create({
     minWidth: 90,
   },
   countryPickerFocused: {
-    borderColor: '#7C4DDB',
+    borderColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
   },
   countryPickerText: {
@@ -516,6 +541,8 @@ const webStyles = StyleSheet.create({
     fontSize: 16,
     color: '#1A1A1A',
     paddingVertical: 0,
+    outlineWidth: 0,
+    outlineColor: '#F9FAFB',
   },
   countryList: {
     position: 'absolute',
@@ -719,6 +746,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1A1A1A',
     width: '100%',
+    outlineWidth: 0,
+    outlineColor: '#F9FAFB',
   },
   mobileContinueButton: {
     backgroundColor: '#7C4DDB',

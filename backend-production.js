@@ -114,9 +114,23 @@ async function initializeDatabase() {
   }
 }
 
+// In-memory storage for testing when database is not available
+const inMemoryUsers = new Map();
+const inMemoryTeacherProfiles = new Map();
+
 // Helper function to get database or fallback to in-memory
 const getUsersCollection = () => db ? db.collection('users') : null;
 const getTeacherProfilesCollection = () => db ? db.collection('teacherProfiles') : null;
+
+// In-memory user operations
+const findUserInMemory = async (email) => {
+  return inMemoryUsers.get(email.toLowerCase()) || null;
+};
+
+const addUserToMemory = async (userData) => {
+  const email = userData.email.toLowerCase();
+  inMemoryUsers.set(email, { ...userData, email, createdAt: new Date() });
+};
 
 // Validation functions
 const validateEmail = (email) => {
@@ -342,6 +356,243 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
+// Check if user exists endpoint
+app.post('/api/auth/check-user', async (req, res) => {
+  try {
+    console.log('Check user request:', req.body);
+    
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+    
+    // Validate email format
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      return res.status(400).json({
+        success: false,
+        message: emailValidation.error,
+        invalidEmail: true
+      });
+    }
+    
+    // Check for existing users
+    const usersCollection = getUsersCollection();
+    let existingUser = null;
+    
+    if (usersCollection) {
+      // Use database if available
+      existingUser = await usersCollection.findOne({
+        email: emailValidation.email.toLowerCase()
+      });
+    } else {
+      // Use in-memory storage for testing
+      existingUser = await findUserInMemory(emailValidation.email);
+    }
+    
+    if (existingUser) {
+      return res.status(200).json({
+        success: true,
+        exists: true,
+        message: 'User already exists'
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      exists: false,
+      message: 'User does not exist'
+    });
+    
+  } catch (error) {
+    console.error('Check user error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
+// Login endpoint - send OTP for login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    console.log('Login request:', req.body);
+    
+    const { email, password } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+    
+    // Validate email format
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email format'
+      });
+    }
+    
+    const normalizedEmail = emailValidation.email.toLowerCase();
+    
+    // Check if user is a test user - bypass OTP for test users
+    const testUsers = ['student1@example.com', 'teacher31@example.com', 'teacher56@example.com'];
+    if (testUsers.includes(normalizedEmail)) {
+      console.log('Test user detected, bypassing OTP:', normalizedEmail);
+      
+      // Fetch user from database to get their actual data
+      let existingUser;
+      if (db) {
+        existingUser = await User.findOne({ email: normalizedEmail });
+      } else {
+        existingUser = await findUserInMemory(normalizedEmail);
+      }
+      
+      // If test user doesn't exist in database, create them
+      if (!existingUser) {
+        const testUserData = {
+          email: normalizedEmail,
+          role: normalizedEmail.includes('teacher') ? 'teacher' : 'student',
+          name: normalizedEmail.includes('teacher31') ? 'Test Teacher 31' : 
+                normalizedEmail.includes('teacher56') ? 'Test Teacher 56' : 'Test Student',
+          phone: '+919876543210',
+          createdAt: new Date()
+        };
+        
+        if (db) {
+          existingUser = await User.create(testUserData);
+        } else {
+          existingUser = testUserData;
+          existingUser._id = normalizedEmail;
+          inMemoryUsers.push(existingUser);
+        }
+      }
+      
+      // Generate a token for the test user
+      const jwt = require('jsonwebtoken');
+      const token = jwt.sign(
+        { 
+          userId: existingUser._id || existingUser.id,
+          email: existingUser.email,
+          role: existingUser.role 
+        },
+        'growsmart-secret-key',
+        { expiresIn: '30d' }
+      );
+      
+      return res.status(200).json({
+        success: true,
+        isTestUser: true,
+        token: token,
+        user: {
+          email: existingUser.email,
+          name: existingUser.name,
+          role: existingUser.role,
+          id: existingUser._id || existingUser.id,
+          phone: existingUser.phone
+        },
+        role: existingUser.role,
+        message: 'Test user login successful'
+      });
+    }
+    
+    // Check if user exists
+    let existingUser;
+    if (db) {
+      existingUser = await User.findOne({
+        email: normalizedEmail
+      });
+    } else {
+      // Use in-memory storage for testing
+      existingUser = await findUserInMemory(normalizedEmail);
+    }
+    
+    if (!existingUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found. Please sign up first.'
+      });
+    }
+    
+    // Generate and send OTP for login
+    const otpId = generateOTPId();
+    const otp = generateOTP();
+    
+    // Store OTP in memory
+    otpStore.set(otpId, {
+      email: normalizedEmail,
+      otp: otp,
+      timestamp: Date.now(),
+      type: 'login'
+    });
+    
+    console.log(`Login OTP for ${normalizedEmail}: ${otp}`);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'OTP sent successfully for login',
+      otpId: otpId,
+      email: normalizedEmail
+    });
+    
+  } catch (error) {
+    console.error('Login error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
+// Test endpoint to add user directly to in-memory storage
+app.post('/api/add-test-user', async (req, res) => {
+  try {
+    console.log('Adding test user:', req.body);
+    
+    const { email, fullName, phone, role = 'student' } = req.body;
+    
+    // Validate email
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      return res.status(400).json({
+        success: false,
+        message: emailValidation.error
+      });
+    }
+    
+    // Add user to in-memory storage
+    await addUserToMemory({
+      email: emailValidation.email,
+      fullName: fullName || 'Test User',
+      phone: phone || '+0000000000',
+      role: role
+    });
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Test user added successfully',
+      email: emailValidation.email
+    });
+    
+  } catch (error) {
+    console.error('Add test user error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
 // Enhanced signup endpoint
 app.post('/api/signup', async (req, res) => {
   try {
@@ -379,31 +630,40 @@ app.post('/api/signup', async (req, res) => {
     
     // Check for existing users
     const usersCollection = getUsersCollection();
+    let existingUserByEmail = null;
+    let existingUserByPhone = null;
+    
     if (usersCollection) {
-      const existingUserByEmail = await usersCollection.findOne({
+      // Use database if available
+      existingUserByEmail = await usersCollection.findOne({
         email: emailValidation.email.toLowerCase()
       });
       
-      if (existingUserByEmail) {
-        return res.status(409).json({
-          success: false,
-          message: 'This email is already registered. Please use a different email or try logging in.',
-          alreadyRegistered: true,
-          emailExists: true
-        });
-      }
-      
-      const existingUserByPhone = await usersCollection.findOne({
+      existingUserByPhone = await usersCollection.findOne({
         phone: phoneValidation.phone
       });
-      
-      if (existingUserByPhone) {
-        return res.status(409).json({
-          success: false,
-          message: 'This phone number is already registered. Please use a different phone number.',
-          phoneExists: true
-        });
-      }
+    } else {
+      // Use in-memory storage for testing
+      existingUserByEmail = await findUserInMemory(emailValidation.email);
+      // For phone checking in memory, we'd need to iterate through users
+      // For now, just check email
+    }
+    
+    if (existingUserByEmail) {
+      return res.status(409).json({
+        success: false,
+        message: 'This email is already registered. Please use a different email or try logging in.',
+        alreadyRegistered: true,
+        emailExists: true
+      });
+    }
+    
+    if (existingUserByPhone) {
+      return res.status(409).json({
+        success: false,
+        message: 'This phone number is already registered. Please use a different phone number.',
+        phoneExists: true
+      });
     }
     
     // Generate OTP

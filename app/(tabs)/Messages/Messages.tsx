@@ -153,7 +153,7 @@ const Messages = () => {
               "Content-Type": "application/json",
             };
             const res = await axios.post(
-                `${BASE_URL}/api/get_teacher_broadcast`,
+                `${BASE_URL}/api/messages/get_teacher_broadcast`,
                 {userEmail, type: "teacher"},
                 {headers}
             );

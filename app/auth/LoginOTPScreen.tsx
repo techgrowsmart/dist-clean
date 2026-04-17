@@ -24,7 +24,7 @@ export default function LoginOTPScreen() {
 
   // Auto-login for known test users to bypass OTP screen
   useEffect(() => {
-    const testUsers = ['student1@example.com', 'teacher56@example.com'];
+    const testUsers = ['student1@example.com', 'teacher31@example.com', 'teacher56@example.com'];
     if (email && testUsers.includes(email)) {
       (async () => {
         setVerifying(true);
@@ -91,7 +91,7 @@ export default function LoginOTPScreen() {
   useEffect(() => {
     if (email && !serverOTP) {
       // For test users, always use 1234 as fallback
-      if (email === 'student1@example.com' || email === 'teacher56@example.com') {
+      if (email === 'student1@example.com' || email === 'teacher31@example.com' || email === 'teacher56@example.com') {
         const testOTP = '1234';
         setServerOTP(testOTP);
         console.log(`🔧 Test user OTP for ${email}: ${testOTP}`);

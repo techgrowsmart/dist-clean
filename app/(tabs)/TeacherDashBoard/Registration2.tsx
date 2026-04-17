@@ -241,7 +241,7 @@ const getCurrentLocation = async () => {
 
       setTimeout(() => {
         Toast.hide();
-        router.replace("/(tabs)/Login");
+        router.replace("/auth/EmailInputScreen");
       }, 3000);
 
     } catch (err) { 
@@ -263,7 +263,7 @@ const getCurrentLocation = async () => {
 
       setTimeout(() => {
         Toast.hide();
-        router.replace("/(tabs)/Login");
+        router.replace("/auth/EmailInputScreen");
       }, 3000);
     } 
     finally { 
@@ -378,59 +378,47 @@ const getCurrentLocation = async () => {
 export default Registration2;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FFF" },
-  spinnerOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, backgroundColor: "rgba(255,255,255,0.8)", justifyContent: "center", alignItems: "center", zIndex: 999 },
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  spinnerOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, backgroundColor: "rgba(255,255,255,0.9)", justifyContent: "center", alignItems: "center", zIndex: 999 },
   scrollContainer: { paddingBottom: hp("8%"), paddingHorizontal: wp("5%") },
-  backButton: { position: "absolute", left: 0, backgroundColor: "#f5f6f8", width: wp("10%"), height: wp("10%"), borderRadius: wp("50%"), alignItems: "center", justifyContent: "center", zIndex: 1, top: hp("5%") },
+  backButton: { position: "absolute", left: 0, backgroundColor: "#ffffff", width: wp("10%"), height: wp("10%"), borderRadius: wp("50%"), alignItems: "center", justifyContent: "center", zIndex: 1, top: hp("5%"), shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
   header: { paddingTop: hp("4%"), paddingBottom: hp("2%"), flexDirection: "row", alignItems: "center", justifyContent: "center", position: "relative" },
-  title: { fontSize: wp("5%"), fontFamily: "Poppins_600SemiBold", color: "#030303", textAlign: "center", flex: 1, marginHorizontal: wp("10%") },
-  tutor: { fontSize: wp("4.5%"), fontFamily: "Poppins_600SemiBold", color: "#030303", marginTop: hp("1%") },
+  title: { fontSize: wp("5%"), fontFamily: "Poppins_600SemiBold", color: "#1E293B", textAlign: "center", flex: 1, marginHorizontal: wp("10%") },
+  tutor: { fontSize: wp("4.5%"), fontFamily: "Poppins_600SemiBold", color: "#1E293B", marginTop: hp("1%") },
   content: { paddingTop: hp("2%") },
-  mainContent: { marginTop: hp("2%") },
-  mainContentTitle: { color: "#030303", fontSize: wp("3.8%"), fontFamily: "Roboto_400Regular", marginBottom: hp("1%") },
-  inputs: { gap: hp("1.5%") },
-  contentInput: { width: "100%", height: hp("6%"), borderRadius: wp("2%"), backgroundColor: "#ffffff", paddingHorizontal: wp("4%"), fontSize: wp("3.5%"), borderWidth: 1, borderColor: "#d1d5db", fontFamily: "Poppins_400Regular" },
-  pincodeInput: { width: "50%", height: hp("6%"), borderRadius: wp("2%"), backgroundColor: "#ffffff", paddingHorizontal: wp("4%"), fontSize: wp("3.5%"), borderWidth: 1, borderColor: "#d1d5db", fontFamily: "Poppins_400Regular" },
-  inputError: { borderColor: "red", borderWidth: 1 },
-  errorText: { color: "red", fontSize: wp("3%"), fontFamily: "Poppins_400Regular", marginTop: hp("0.5%") },
-  checkboxContainer: { marginTop: hp("3%"), flexDirection: "row", alignItems: "flex-start" },
-  checkbox: { width: wp("5%"), height: wp("5%"), borderWidth: 1, borderColor: "#3164f4", backgroundColor: "#ffffff", borderRadius: wp("1%"), marginRight: wp("3%"), marginTop: wp("0.5%"), alignItems: "center", justifyContent: "center" },
-  checked: { backgroundColor: "#f0f4ff" },
-  checkboxLabel: { flex: 1, fontSize: wp("3.5%"), fontFamily: "Roboto_400Regular", color: "#000", lineHeight: hp("2.5%") },
-  btn: { marginTop: hp("4%"), alignSelf: "center", width: wp("35%"), height: hp("5%"), backgroundColor: "#5f5fff", borderRadius: wp("2%") },
+  mainContent: { marginTop: hp("2.5%"), backgroundColor: "#FFFFFF", borderRadius: wp("4%"), padding: wp("5%"), shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  mainContentTitle: { color: "#1E293B", fontSize: wp("4%"), fontFamily: "Poppins_600SemiBold", marginBottom: hp("2%") },
+  inputs: { gap: hp("2%") },
+  contentInput: { width: "100%", height: hp("6.5%"), borderRadius: wp("2.5%"), backgroundColor: "#F8FAFC", paddingHorizontal: wp("4%"), fontSize: wp("3.5%"), borderWidth: 1.5, borderColor: "#E2E8F0", fontFamily: "Poppins_400Regular", color: "#1E293B" },
+  pincodeInput: { width: "50%", height: hp("6.5%"), borderRadius: wp("2.5%"), backgroundColor: "#F8FAFC", paddingHorizontal: wp("4%"), fontSize: wp("3.5%"), borderWidth: 1.5, borderColor: "#E2E8F0", fontFamily: "Poppins_400Regular", color: "#1E293B" },
+  inputError: { borderColor: "#EF4444", backgroundColor: "#FEF2F2" },
+  errorText: { color: "#EF4444", fontSize: wp("3%"), fontFamily: "Poppins_400Regular", marginTop: hp("0.5%") },
+  checkboxContainer: { marginTop: hp("3%"), flexDirection: "row", alignItems: "flex-start", backgroundColor: "#FFFFFF", borderRadius: wp("3%"), padding: wp("4%"), shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
+  checkbox: { width: wp("5.5%"), height: wp("5.5%"), borderWidth: 2, borderColor: "#3B82F6", backgroundColor: "#ffffff", borderRadius: wp("1%"), marginRight: wp("3%"), marginTop: wp("0.3%"), alignItems: "center", justifyContent: "center" },
+  checked: { backgroundColor: "#3B82F6", borderColor: "#3B82F6" },
+  checkboxLabel: { flex: 1, fontSize: wp("3.5%"), fontFamily: "Poppins_400Regular", color: "#475569", lineHeight: hp("2.5%") },
+  btn: { marginTop: hp("5%"), alignSelf: "center", width: wp("40%"), height: hp("6%"), backgroundColor: "#3B82F6", borderRadius: wp("2.5%"), shadowColor: "#3B82F6", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   btnContainer: { width: "100%", height: "100%", justifyContent: "center", alignItems: "center" },
-  btnTxt: { color: "#ffffff", fontSize: wp("4%"), fontFamily: "Poppins_400Regular", includeFontPadding: false, textAlignVertical: 'center' },
+  btnTxt: { color: "#ffffff", fontSize: wp("4%"), fontFamily: "Poppins_600SemiBold", includeFontPadding: false, textAlignVertical: 'center' },
 customMarker: {
   alignItems: 'center',
   justifyContent: 'center',
 },
-// markerPin: {
-//   width: 12,
-//   height: 12,
-//   borderRadius: 6,
-//   backgroundColor: '#5f5fff',
-//   borderWidth: 2,
-//   borderColor: 'white',
-//   shadowColor: '#000',
-//   shadowOffset: { width: 0, height: 2 },
-//   shadowOpacity: 0.3,
-//   shadowRadius: 2,
-//   elevation: 3,
-// },
 markerBase: {
   width: 6,
   height: 6,
   borderRadius: 3,
-  backgroundColor: '#5f5fff',
+  backgroundColor: '#3B82F6',
   opacity: 0.5,
   marginTop: 2,
 },
 mapContainer: { 
   marginTop: hp("2%"),
-  borderRadius: wp("2%"),
+  borderRadius: wp("3%"),
   overflow: "hidden",
-  borderWidth: 1,
-  borderColor: "#e9ecef",
+  borderWidth: 1.5,
+  borderColor: "#E2E8F0",
+  backgroundColor: "#FFFFFF",
 },
 map: { 
   width: "100%", 
@@ -444,18 +432,18 @@ mapLoading: {
   bottom: 0,
   justifyContent: 'center',
   alignItems: 'center',
-  backgroundColor: '#f8f9fa',
+  backgroundColor: '#F8FAFC',
 },
 loadingText: {
   marginTop: hp('2%'),
   fontSize: wp('3.5%'),
   fontFamily: 'Poppins_400Regular',
-  color: '#5f5fff',
+  color: '#3B82F6',
 },
 mapPlaceholder: {
   width: '100%',
   height: hp('25%'),
-  backgroundColor: '#f8f9fa',
+  backgroundColor: '#F8FAFC',
   justifyContent: 'center',
   alignItems: 'center',
   padding: wp('5%'),
@@ -463,7 +451,7 @@ mapPlaceholder: {
 placeholderText: {
   fontSize: wp('3.8%'),
   fontFamily: 'Poppins_400Regular',
-  color: '#999',
+  color: '#94A3B8',
   marginTop: hp('2%'),
   marginBottom: hp('3%'),
   textAlign: 'center',
@@ -472,26 +460,31 @@ enableLocationBtn: {
   flexDirection: 'row',
   alignItems: 'center',
   justifyContent: 'center',
-  backgroundColor: '#5f5fff',
+  backgroundColor: '#3B82F6',
   paddingHorizontal: wp('6%'),
-  paddingVertical: hp('1.5%'),
-  borderRadius: wp('1%'),
+  paddingVertical: hp('1.8%'),
+  borderRadius: wp('2%'),
+  shadowColor: '#3B82F6',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.3,
+  shadowRadius: 4,
+  elevation: 3,
 },
 enableLocationText: {
   color: 'white',
   fontSize: wp('3.8%'),
-  fontFamily: 'Poppins_400Regular',
+  fontFamily: 'Poppins_600SemiBold',
   marginLeft: wp('2%'),
 },
 mapButton: {
   width: '100%',
   height: hp('25%'),
-  backgroundColor: '#f8f9fa',
-  borderRadius: wp('2%'),
+  backgroundColor: '#F8FAFC',
+  borderRadius: wp('3%'),
   justifyContent: 'center',
   alignItems: 'center',
-  borderWidth: 1,
-  borderColor: '#e9ecef',
+  borderWidth: 1.5,
+  borderColor: '#E2E8F0',
 },
 mapPreview: {
   alignItems: 'center',
@@ -501,14 +494,14 @@ mapPreview: {
 mapText: {
   fontSize: wp('4%'),
   fontFamily: 'Poppins_600SemiBold',
-  color: '#030303',
+  color: '#1E293B',
   marginTop: hp('2%'),
   marginBottom: hp('1%'),
 },
 coordinates: {
   fontSize: wp('3.2%'),
   fontFamily: 'Poppins_400Regular',
-  color: '#666',
+  color: '#64748B',
   textAlign: 'center',
 },
 });

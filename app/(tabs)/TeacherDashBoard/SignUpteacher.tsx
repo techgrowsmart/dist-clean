@@ -1,4 +1,3 @@
-import { LogBox } from 'react-native';
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -13,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Alert,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import {
   Poppins_400Regular,
@@ -21,25 +21,24 @@ import {
   useFonts,
 } from "@expo-google-fonts/poppins";
 import { Roboto_300Light, Roboto_400Regular } from "@expo-google-fonts/roboto";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { BASE_URL } from "../../../config";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAuthData } from "../../../utils/authStorage";
-import { Platform } from "react-native";
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from "react-native-responsive-screen";
 import { ImageManipulator } from 'expo-image-manipulator';
 
-LogBox.ignoreLogs([
-  'Text strings must be rendered within a <Text> component',
-]);
-
 const { height, width } = Dimensions.get("window");
+const isTablet = width >= 768;
+const isDesktop = width >= 1024;
+
 const RegistrationSecond = () => {
-  const [errors, setErrors] = useState<Record<string, string>>({}); // FIXED: Added type
+  const params = useLocalSearchParams();
+  const [errors, setErrors] = useState<Record<string, string>>({}); 
   const [fullName, setFullName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [email, setEmail] = useState("");
@@ -111,23 +110,60 @@ const RegistrationSecond = () => {
   useEffect(() => {
     const loadUserData = async () => {
       try {
-        const storedName = await AsyncStorage.getItem("name");
-        const storedPhone = await AsyncStorage.getItem("phoneNumber");
-        const storedEmail = await AsyncStorage.getItem("email");
+        console.log("Loading user data with params:", params);
 
-        if (storedName) setFullName(storedName);
-        if (storedPhone) setPhoneNumber(storedPhone);
-        if (storedEmail) setEmail(storedEmail);
+        // Prioritize URL params over AsyncStorage
+        const paramEmail = params.email as string;
+        const paramName = params.name as string;
+        const paramPhone = params.phone as string;
+
+        console.log("URL params:", { paramEmail, paramName, paramPhone });
+
+        if (paramName) {
+          setFullName(paramName);
+          console.log("Set fullName from URL params:", paramName);
+        }
+        if (paramPhone) {
+          setPhoneNumber(paramPhone);
+          console.log("Set phoneNumber from URL params:", paramPhone);
+        }
+        if (paramEmail) {
+          setEmail(paramEmail);
+          console.log("Set email from URL params:", paramEmail);
+        }
+
+        // Only fall back to AsyncStorage if URL params are not provided
+        if (!paramName || !paramPhone || !paramEmail) {
+          const storedName = await AsyncStorage.getItem("name");
+          const storedPhone = await AsyncStorage.getItem("phoneNumber");
+          const storedEmail = await AsyncStorage.getItem("email");
+
+          console.log("AsyncStorage data:", { storedName, storedPhone, storedEmail });
+
+          if (storedName && !paramName) {
+            setFullName(storedName);
+            console.log("Set fullName from AsyncStorage:", storedName);
+          }
+          if (storedPhone && !paramPhone) {
+            setPhoneNumber(storedPhone);
+            console.log("Set phoneNumber from AsyncStorage:", storedPhone);
+          }
+          if (storedEmail && !paramEmail) {
+            setEmail(storedEmail);
+            console.log("Set email from AsyncStorage:", storedEmail);
+          }
+        }
+
         const auth = await getAuthData();
         const token = auth?.token;
-        console.log("Token", token);
+        console.log("Token from getAuthData:", token);
       } catch (error) {
         console.error("Failed to load user data from storage:", error);
       }
     };
 
     loadUserData();
-  }, []);
+  }, [params]);
 
   const uploadSingleImage = async (uri: string, fieldName: string) => {
     if (!uri || !uri.startsWith("file://")) {
@@ -185,7 +221,7 @@ const RegistrationSecond = () => {
   ) => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         quality: 0.7,
       });
@@ -216,10 +252,25 @@ const RegistrationSecond = () => {
     }
     setIsSubmitting(true);
     try {
+      console.log("Form submission started");
+      console.log("Current state:", {
+        fullName,
+        phoneNumber,
+        email,
+        residentialAddress,
+        state,
+        country,
+        highestDegree,
+        specialization,
+        experience,
+      });
+
       const formData = new FormData();
       const userId = await AsyncStorage.getItem("userId");
 
-      formData.append("userId", userId);
+      console.log("UserId:", userId);
+
+      formData.append("userId", userId || "");
       formData.append("fullname", fullName);
       formData.append("phoneNumber", phoneNumber);
       formData.append("email", email);
@@ -229,6 +280,8 @@ const RegistrationSecond = () => {
       formData.append("experience", experience);
       formData.append("specialization", specialization);
       formData.append("highest_degree", highestDegree);
+
+      console.log("Basic fields appended to FormData");
 
       // Helper function to convert base64 to blob
       const base64ToBlob = (base64Data: string, contentType: string = 'image/jpeg'): Blob => {
@@ -257,7 +310,12 @@ const RegistrationSecond = () => {
         fileUri: string, 
         fileName: string = "image.jpg"
       ) => {
-        if (!fileUri) return;
+        if (!fileUri) {
+          console.warn(`Skipping ${fieldName}: no file URI provided`);
+          return;
+        }
+
+        console.log(`Appending ${fieldName} with URI:`, fileUri.substring(0, 50) + "...");
 
         if (Platform.OS === "web") {
           try {
@@ -280,6 +338,7 @@ const RegistrationSecond = () => {
               type: blob.type || "image/jpeg",
             });
             formData.append(fieldName, file);
+            console.log(`Successfully appended ${fieldName} to FormData`);
           } catch (error) {
             console.warn(`Failed to append ${fieldName} for web`, error);
           }
@@ -289,6 +348,7 @@ const RegistrationSecond = () => {
             name: fileName,
             type: "image/jpeg",
           } as any);
+          console.log(`Successfully appended ${fieldName} to FormData (native)`);
         }
       };
 
@@ -330,12 +390,18 @@ const RegistrationSecond = () => {
         token = auth.token;
       }
 
+      console.log("Token:", token);
+      console.log("FormData fields:", Object.keys(formData));
+
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`${BASE_URL}/api/register`, {
         method: "POST",
         body: formData,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
       });
 
       if (response.ok) {
@@ -365,7 +431,7 @@ const RegistrationSecond = () => {
     }
 
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: false,
       quality: 0.7,
     });
@@ -378,7 +444,7 @@ const RegistrationSecond = () => {
   const handleImageSelection = async (onPick: (uri: string) => void) => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.7,
@@ -582,15 +648,15 @@ const RegistrationSecond = () => {
                     style={[styles.imageContainer, panUpload && styles.imageContainerFilled]}
                   >
                     {panUpload ? (
-                      <>
-                        <Image source={{ uri: panUpload }} style={styles.iconImage} />
+                      <View style={{ width: '100%', height: '100%' }}>
+                        <Image source={{ uri: panUpload }} style={styles.iconImage} resizeMode="cover" />
                         <TouchableOpacity 
                           style={styles.removeImageButton}
                           onPress={() => setPanUpload("")}
                         >
                           <Text style={{ fontFamily: "Poppins-Regular", fontSize: wp("5%") }}>&#10060;</Text>
                         </TouchableOpacity>
-                      </>
+                      </View>
                     ) : (
                       <View style={styles.uploadIconContainer}>
                         <Text style={{ fontFamily: "Poppins-Regular", fontSize: wp("12%") }}>&#128247;</Text>
@@ -609,15 +675,15 @@ const RegistrationSecond = () => {
                     style={[styles.imageContainer, aadharFront && styles.imageContainerFilled]}
                   >
                     {aadharFront ? (
-                      <>
-                        <Image source={{ uri: aadharFront }} style={styles.iconImage} />
+                      <View style={{ width: '100%', height: '100%' }}>
+                        <Image source={{ uri: aadharFront }} style={styles.iconImage} resizeMode="cover" />
                         <TouchableOpacity 
                           style={styles.removeImageButton}
                           onPress={() => setAadharFront("")}
                         >
                           <Text style={{ fontFamily: "Poppins-Regular", fontSize: wp("5%") }}>&#10060;</Text>
                         </TouchableOpacity>
-                      </>
+                      </View>
                     ) : (
                       <View style={styles.uploadIconContainer}>
                         <Text style={{ fontFamily: "Poppins-Regular", fontSize: wp("12%") }}>&#128247;</Text>
@@ -636,15 +702,15 @@ const RegistrationSecond = () => {
                     style={[styles.imageContainer, aadharBack && styles.imageContainerFilled]}
                   >
                     {aadharBack ? (
-                      <>
-                        <Image source={{ uri: aadharBack }} style={styles.iconImage} />
+                      <View style={{ width: '100%', height: '100%' }}>
+                        <Image source={{ uri: aadharBack }} style={styles.iconImage} resizeMode="cover" />
                         <TouchableOpacity 
                           style={styles.removeImageButton}
                           onPress={() => setAadharBack("")}
                         >
                           <Text style={{ fontFamily: "Poppins-Regular", fontSize: wp("5%") }}>&#10060;</Text>
                         </TouchableOpacity>
-                      </>
+                      </View>
                     ) : (
                       <View style={styles.uploadIconContainer}>
                         <Text style={{ fontFamily: "Poppins-Regular", fontSize: wp("12%") }}>&#128247;</Text>
@@ -668,10 +734,11 @@ const RegistrationSecond = () => {
                   onPress={() => handleCamera(setSelfieAadharFront)}
                 >
                   {selfieAadharFront ? (
-                    <>
+                    <View style={{ width: '100%', height: '100%' }}>
                       <Image
                         source={{ uri: selfieAadharFront }}
                         style={styles.iconImage}
+                        resizeMode="cover"
                       />
                       <TouchableOpacity 
                         style={styles.removeImageButton}
@@ -679,7 +746,7 @@ const RegistrationSecond = () => {
                       >
                         <Text style={{ fontFamily: "Poppins-Regular", fontSize: wp("5%") }}>&#10060;</Text>
                       </TouchableOpacity>
-                    </>
+                    </View>
                   ) : (
                     <View style={styles.cameraIconContainer}>
                       <Text style={{ fontFamily: "Poppins-Regular", fontSize: wp("7%") }}>&#128247;</Text>
@@ -702,10 +769,11 @@ const RegistrationSecond = () => {
                   onPress={() => handleCamera(setSelfieAadharBack)}
                 >
                   {selfieAadharBack ? (
-                    <>
+                    <View style={{ width: '100%', height: '100%' }}>
                       <Image
                         source={{ uri: selfieAadharBack }}
                         style={styles.iconImage}
+                        resizeMode="cover"
                       />
                       <TouchableOpacity 
                         style={styles.removeImageButton}
@@ -713,7 +781,7 @@ const RegistrationSecond = () => {
                       >
                         <Text style={{ fontFamily: "Poppins-Regular", fontSize: wp("5%") }}>&#10060;</Text>
                       </TouchableOpacity>
-                    </>
+                    </View>
                   ) : (
                     <View style={styles.cameraIconContainer}>
                       <Text style={{ fontFamily: "Poppins-Regular", fontSize: wp("7%") }}>&#128247;</Text>
@@ -807,10 +875,11 @@ const RegistrationSecond = () => {
                     style={[styles.imageBox, certifications[index] && styles.imageBoxFilled]}
                   >
                     {certifications[index] ? (
-                      <>
+                      <View style={{ width: '100%', height: '100%' }}>
                         <Image
                           source={{ uri: certifications[index] }}
                           style={styles.iconImage}
+                          resizeMode="cover"
                         />
                         <TouchableOpacity 
                           style={styles.removeImageButton}
@@ -822,7 +891,7 @@ const RegistrationSecond = () => {
                         >
                           <Text style={{ fontFamily: "Poppins-Regular", fontSize: wp("5%") }}>&#10060;</Text>
                         </TouchableOpacity>
-                      </>
+                      </View>
                     ) : (
                       <View style={styles.uploadIconContainer}>
                         <Text style={{ fontFamily: "Poppins-Regular", fontSize: wp("12%") }}>&#128247;</Text>
@@ -852,10 +921,11 @@ const RegistrationSecond = () => {
                     style={[styles.imageBox, highestQualificationCertificate[index] && styles.imageBoxFilled]}
                   >
                     {highestQualificationCertificate[index] ? (
-                      <>
+                      <View style={{ width: '100%', height: '100%' }}>
                         <Image
                           source={{ uri: highestQualificationCertificate[index] }}
                           style={styles.iconImage}
+                          resizeMode="cover"
                         />
                         <TouchableOpacity 
                           style={styles.removeImageButton}
@@ -867,7 +937,7 @@ const RegistrationSecond = () => {
                         >
                           <Text style={{ fontFamily: "Poppins-Regular", fontSize: wp("5%") }}>&#10060;</Text>
                         </TouchableOpacity>
-                      </>
+                      </View>
                     ) : (
                       <View style={styles.uploadIconContainer}>
                         <Text style={{ fontFamily: "Poppins-Regular", fontSize: wp("12%") }}>&#128247;</Text>
@@ -904,8 +974,31 @@ const RegistrationSecond = () => {
 
 export default RegistrationSecond;
 
+const webStyles = StyleSheet.create({
+  backButton: { boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)' },
+  imageContainer: { boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)' },
+  imageBox: { boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)' },
+  camera: { boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)' },
+  btn: { boxShadow: '0 4px 8px rgba(99, 102, 241, 0.3)' },
+  contentInput: { boxShadow: '0 1px 4px rgba(0, 0, 0, 0.05)' },
+  AddressInput: { boxShadow: '0 1px 4px rgba(0, 0, 0, 0.05)' },
+});
+
+const nativeStyles = StyleSheet.create({
+  backButton: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  imageContainer: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 },
+  imageBox: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 },
+  camera: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 },
+  btn: { shadowColor: '#6366f1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
+  btnDisabled: { shadowOpacity: 0 },
+  contentInput: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  AddressInput: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+});
+
+const platformStyles = Platform.OS === 'web' ? webStyles : nativeStyles;
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc", marginTop: hp("2%") },
+  container: { flex: 1, backgroundColor: "#f8fafc" },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -913,18 +1006,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   inputError: { borderColor: "#ef4444", borderWidth: 2 },
-  errorText: { color: "#ef4444", fontSize: wp("3.2%"), marginBottom: hp("0.5%"), marginTop: hp("0.3%"), fontFamily: "Poppins_400Regular" },
-  backButton: { backgroundColor: "#ffffff", width: wp("10%"), height: wp("10%"), borderRadius: wp("50%"), padding: wp("2.5%"), alignItems: "center", justifyContent: "center", position: "absolute", left: 0, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-  scrollContainer: { paddingBottom: hp("8%"), paddingHorizontal: wp("5%") },
-  header: { paddingTop: hp("2%"), paddingBottom: hp("2%"), flexDirection: "row", alignItems: "center", justifyContent: "center", position: "relative", backgroundColor: "#fff" },
+  errorText: { color: "#ef4444", fontSize: isDesktop ? 14 : wp("3.2%"), marginBottom: isDesktop ? 8 : hp("0.5%"), marginTop: isDesktop ? 4 : hp("0.3%"), fontFamily: "Poppins_400Regular" },
+  backButton: { backgroundColor: "#ffffff", width: isDesktop ? 40 : wp("10%"), height: isDesktop ? 40 : wp("10%"), borderRadius: isDesktop ? 20 : wp("50%"), padding: isDesktop ? 10 : wp("2.5%"), alignItems: "center", justifyContent: "center", position: "absolute", left: 0, ...platformStyles.backButton },
+  scrollContainer: { paddingBottom: isDesktop ? 40 : hp("8%"), paddingHorizontal: isDesktop ? 40 : wp("5%") },
+  header: { paddingTop: isDesktop ? 20 : hp("2%"), paddingBottom: isDesktop ? 20 : hp("2%"), flexDirection: "row", alignItems: "center", justifyContent: "center", position: "relative", backgroundColor: "#fff" },
   title: { 
-    fontSize: wp("5.5%"),
+    fontSize: isDesktop ? 28 : wp("5.5%"),
     fontWeight: "600", 
     fontFamily: "Poppins_600SemiBold", 
     color: "#0f172a", 
-    lineHeight: hp("6.5%"),
+    lineHeight: isDesktop ? 36 : hp("6.5%"),
     textAlign: "center", 
-    paddingHorizontal: wp("3%"),
+    paddingHorizontal: isDesktop ? 20 : wp("3%"),
     flex: 1,
   },
   btnContainer: {
@@ -945,29 +1038,29 @@ const styles = StyleSheet.create({
   individualUpload: { flexDirection: "column", alignItems: "center", justifyContent: "center", gap: hp("1.5%"), flex: 1 },
   uploads: { flexDirection: "row", justifyContent: "space-between", marginTop: hp("2.5%"), paddingHorizontal: wp("0%"), gap: wp("2.5%"), flexWrap: 'nowrap' },
   uploadLabel: { textAlign: 'center', fontSize: wp("3.2%"), fontFamily: "Roboto_400Regular", color: "#64748b" },
-  imageContainer: { width: wp("28%"), height: hp("12%"), borderStyle: "dashed", borderWidth: 2, borderRadius: wp("4%"), borderColor: "#cbd5e1", alignItems: "center", justifyContent: "center", overflow: "hidden", backgroundColor: "#f8fafc", shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 },
+  imageContainer: { width: wp("28%"), height: hp("12%"), borderStyle: "dashed", borderWidth: 2, borderRadius: wp("4%"), borderColor: "#cbd5e1", alignItems: "center", justifyContent: "center", overflow: "hidden", backgroundColor: "#f8fafc", ...platformStyles.imageContainer },
   imageContainerFilled: { borderColor: "#6366f1", backgroundColor: "#fff", borderStyle: "solid" },
-  imageBox: { width: wp("28%"), height: hp("12%"), borderStyle: "dashed", borderWidth: 2, borderColor: "#cbd5e1", borderRadius: wp("4%"), alignItems: "center", justifyContent: "center", overflow: "hidden", marginBottom: hp("1%"), backgroundColor: "#f8fafc", shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 },
+  imageBox: { width: wp("28%"), height: hp("12%"), borderStyle: "dashed", borderWidth: 2, borderColor: "#cbd5e1", borderRadius: wp("4%"), alignItems: "center", justifyContent: "center", overflow: "hidden", marginBottom: hp("1%"), backgroundColor: "#f8fafc", ...platformStyles.imageBox },
   imageBoxFilled: { borderColor: "#6366f1", backgroundColor: "#fff", borderStyle: "solid" },
-  camera: { width: wp("55%"), height: hp("10%"), paddingHorizontal: wp("2%"), borderWidth: 2, borderStyle: "dashed", borderRadius: wp("4%"), borderColor: "#cbd5e1", alignItems: "center", justifyContent: "center", marginTop: hp("2%"), backgroundColor: "#f8fafc", position: "relative", shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 },
+  camera: { width: wp("55%"), height: hp("10%"), paddingHorizontal: wp("2%"), borderWidth: 2, borderStyle: "dashed", borderRadius: wp("4%"), borderColor: "#cbd5e1", alignItems: "center", justifyContent: "center", marginTop: hp("2%"), backgroundColor: "#f8fafc", position: "relative", ...platformStyles.camera },
   cameraFilled: { borderColor: "#6366f1", backgroundColor: "#fff", borderStyle: "solid" },
   tutor: { fontSize: wp("5%"), fontWeight: "600", fontFamily: "Poppins_600SemiBold", color: "#0f172a", lineHeight: hp("6%"), marginTop: hp("0.5%") },
   heroSubtitle: { fontSize: wp("3.5%"), fontFamily: "Poppins_400Regular", color: "#64748b", marginTop: hp("0.5%"), marginBottom: hp("2%") },
   heroSection: { marginBottom: hp("3%") },
   identityVerification: { flexDirection: "column", gap: hp("2.5%"), marginTop: hp("4%"), paddingHorizontal: wp("1%") },
   documentSection: { marginBottom: hp("3%") },
-  btn: { marginTop: hp("4%"), alignSelf: "center", justifyContent: "center", alignItems: "center", width: wp("90%"), height: hp("7%"), backgroundColor: "#6366f1", borderRadius: wp("4%"), shadowColor: '#6366f1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
-  btnDisabled: { backgroundColor: "#cbd5e1", shadowOpacity: 0 },
+  btn: { marginTop: hp("4%"), alignSelf: "center", justifyContent: "center", alignItems: "center", width: wp("90%"), height: hp("7%"), backgroundColor: "#6366f1", borderRadius: wp("4%"), ...platformStyles.btn },
+  btnDisabled: { backgroundColor: "#cbd5e1", ...(Platform.OS !== 'web' && { shadowOpacity: 0 }) },
   cameraContainer: { flexDirection: "column", justifyContent: "flex-start", marginTop: hp("2.5%") },
   cameraTitle: { fontSize: wp("3.8%"), lineHeight: hp("2.3%"), color: "#475569", fontFamily: "Poppins_400Regular", marginBottom: hp("1%") },
   mainContent: { flexDirection: "column", marginTop: hp("2%") },
   mainContentTtile: { color: "#0f172a", fontSize: wp("4.2%"), fontWeight: "600", lineHeight: hp("2.6%"), fontFamily: "Poppins_600SemiBold" },
-  contentInput: { alignContent: "center", width: "100%", height: hp("6.5%"), borderRadius: wp("3%"), backgroundColor: "#ffffff", paddingHorizontal: wp("4%"), fontSize: wp("3.6%"), borderWidth: 1.5, borderColor: "#e2e8f0", textAlignVertical: "center", fontFamily: "Poppins_400Regular", shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  AddressInput: { width: "100%", height: hp("12%"), borderRadius: wp("3%"), backgroundColor: "#ffffff", paddingHorizontal: wp("4%"), paddingVertical: wp("2%"), fontSize: wp("3.6%"), lineHeight: hp("5%"), borderWidth: 1.5, borderColor: "#e2e8f0", textAlignVertical: "top", fontFamily: "Poppins_400Regular", shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  inputs: { flexDirection: "column", gap: hp("1.8%"), marginTop: hp("2%") },
-  content: { paddingTop: hp("2.5%") },
-  imageRow: { flexDirection: "row", justifyContent: "space-between", marginTop: hp("2%") },
-  iconImage: { width: "100%", height: "100%", resizeMode: "cover" },
+  contentInput: { alignContent: "center", width: "100%", height: isDesktop ? 50 : hp("6.5%"), borderRadius: isDesktop ? 8 : wp("3%"), backgroundColor: "#ffffff", paddingHorizontal: isDesktop ? 16 : wp("4%"), fontSize: isDesktop ? 16 : wp("3.6%"), borderWidth: 1.5, borderColor: "#e2e8f0", textAlignVertical: "center", fontFamily: "Poppins_400Regular", ...platformStyles.contentInput },
+  AddressInput: { width: "100%", height: isDesktop ? 120 : hp("12%"), borderRadius: isDesktop ? 8 : wp("3%"), backgroundColor: "#ffffff", paddingHorizontal: isDesktop ? 16 : wp("4%"), paddingVertical: isDesktop ? 12 : wp("2%"), fontSize: isDesktop ? 16 : wp("3.6%"), lineHeight: isDesktop ? 24 : hp("5%"), borderWidth: 1.5, borderColor: "#e2e8f0", textAlignVertical: "top", fontFamily: "Poppins_400Regular", ...platformStyles.AddressInput },
+  inputs: { flexDirection: "column", gap: isDesktop ? 16 : hp("1.8%"), marginTop: isDesktop ? 16 : hp("2%") },
+  content: { paddingTop: isDesktop ? 24 : hp("2.5%") },
+  imageRow: { flexDirection: "row", justifyContent: "space-between", marginTop: isDesktop ? 16 : hp("2%"), flexWrap: isDesktop ? "nowrap" : "wrap" },
+  iconImage: { width: "100%", height: "100%" },
   uploadIconContainer: { width: "100%", height: "100%", alignItems: "center", justifyContent: "center", backgroundColor: "#f8fafc" },
   cameraIconContainer: { 
     width: "100%", 
@@ -977,10 +1070,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fafc" 
   },
   // New modern styles
-  sectionHeader: { flexDirection: "row", alignItems: "center", gap: wp("2.5%"), marginBottom: hp("2%") },
-  sectionIcon: { width: wp("10%"), height: wp("10%"), borderRadius: wp("3%"), backgroundColor: "#eef2ff", alignItems: "center", justifyContent: "center" },
-  inputWrapper: { marginBottom: hp("0.5%") },
-  inputLabel: { fontSize: wp("3.4%"), fontFamily: "Poppins_600SemiBold", color: "#475569", marginBottom: hp("0.8%"), marginLeft: wp("1%") },
-  uploadPlaceholderText: { fontSize: wp("2.8%"), fontFamily: "Poppins_400Regular", color: "#64748b", marginTop: hp("0.5%") },
-  removeImageButton: { position: "absolute", top: wp("2%"), right: wp("2%"), backgroundColor: "rgba(255, 255, 255, 0.9)", borderRadius: wp("50%"), padding: wp("1%") },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: isDesktop ? 16 : wp("2.5%"), marginBottom: isDesktop ? 16 : hp("2%") },
+  sectionIcon: { width: isDesktop ? 48 : wp("10%"), height: isDesktop ? 48 : wp("10%"), borderRadius: isDesktop ? 12 : wp("3%"), backgroundColor: "#eef2ff", alignItems: "center", justifyContent: "center" },
+  inputWrapper: { marginBottom: isDesktop ? 8 : hp("0.5%") },
+  inputLabel: { fontSize: isDesktop ? 14 : wp("3.4%"), fontFamily: "Poppins_600SemiBold", color: "#475569", marginBottom: isDesktop ? 8 : hp("0.8%"), marginLeft: isDesktop ? 4 : wp("1%") },
+  uploadPlaceholderText: { fontSize: isDesktop ? 12 : wp("2.8%"), fontFamily: "Poppins_400Regular", color: "#64748b", marginTop: isDesktop ? 4 : hp("0.5%") },
+  removeImageButton: { position: "absolute", top: isDesktop ? 8 : wp("2%"), right: isDesktop ? 8 : wp("2%"), backgroundColor: "rgba(255, 255, 255, 0.9)", borderRadius: isDesktop ? 12 : wp("50%"), padding: isDesktop ? 4 : wp("1%") },
 });

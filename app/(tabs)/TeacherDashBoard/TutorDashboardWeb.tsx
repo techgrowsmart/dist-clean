@@ -1813,12 +1813,7 @@ export default function TutorDashboardWeb({
   }
 
   if (!fontsLoaded || isDashboardLoading) {
-    return (
-      <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color={COLORS.primaryBlue} />
-        <Text style={styles.loadingText}>Loading dashboard...</Text>
-      </View>
-    );
+    return null;
   }
 
   // ── Derived display values ────────────────────────────────────────────────

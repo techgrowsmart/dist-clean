@@ -85,36 +85,62 @@ export default function SignupOTPScreen() {
       const response = await authService.verifySignupOTP(email, otpValue, userName, role, signupPhone);
       
       if (response.success) {
-        // Route to appropriate dashboard based on role
-        if (role === 'teacher') {
+        // Use role from response for accurate routing
+        const userRole = response.user?.role || role;
+        console.log('Routing based on role:', userRole);
+        
+        if (userRole === 'teacher') {
           router.replace('/(tabs)/TeacherDashBoard' as any);
         } else {
           router.replace('/(tabs)/StudentDashBoard' as any);
         }
       } else {
-        Alert.alert('Error', response.message || 'Invalid OTP. Please try again.');
+        const errorMessage = response.message || 'Invalid OTP. Please try again.';
+        if (isWeb) {
+          alert(errorMessage);
+        } else {
+          Alert.alert('Error', errorMessage);
+        }
         // Reset OTP inputs
         setOtp(['', '', '', '']);
         inputRefs.current[0]?.focus();
       }
     } catch (error: any) {
       console.error('OTP verification error:', error);
+      const errorMessage = error.message || 'Failed to verify OTP. Please try again.';
       
-      // Check if user is already registered
-      if (error.message?.includes('already registered') || error.message?.includes('already registered')) {
-        Alert.alert(
-          'Already Registered', 
-          'This email is already registered. Please login instead.',
-          [
-            { 
-              text: 'Go to Login', 
-              onPress: () => router.replace('/auth/LoginOptionsScreen')
-            },
-            { text: 'Cancel', style: 'cancel' }
-          ]
-        );
+      // Handle specific error messages
+      if (errorMessage.toLowerCase().includes('already registered')) {
+        if (isWeb) {
+          const goToLogin = confirm('This email is already registered. Would you like to login instead?');
+          if (goToLogin) {
+            router.push({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } });
+          }
+        } else {
+          Alert.alert(
+            'Already Registered',
+            'This email is already registered. Would you like to login instead?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Go to Login', 
+                onPress: () => router.push({ pathname: '/auth/EmailInputScreen' as any, params: { type: 'login' } })
+              }
+            ]
+          );
+        }
+      } else if (errorMessage.toLowerCase().includes('invalid otp')) {
+        if (isWeb) {
+          alert('Invalid OTP. Please check and try again.');
+        } else {
+          Alert.alert('Invalid OTP', 'Please check your OTP and try again.');
+        }
       } else {
-        Alert.alert('Error', error.message || 'Failed to verify OTP. Please try again.');
+        if (isWeb) {
+          alert(errorMessage);
+        } else {
+          Alert.alert('Error', errorMessage);
+        }
       }
       
       // Reset OTP inputs

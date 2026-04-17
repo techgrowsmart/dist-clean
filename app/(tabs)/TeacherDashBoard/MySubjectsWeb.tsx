@@ -284,19 +284,13 @@ export default function SubjectsList() {
   if (Platform.OS === 'web') {
     return (
       <View style={styles.webLayout}>
-        <TeacherWebHeader 
-          teacherName={teacherName}
-          profileImage={profileImage}
-          showSearch={true}
-        />
+        <TeacherWebHeader showSearch={true} />
         
         <View style={styles.webContent}>
           <TeacherWebSidebar 
             activeItem={sidebarActiveItem}
             onItemPress={handleSidebarSelect}
             userEmail={userEmail}
-            teacherName={teacherName}
-            profileImage={profileImage}
             subjectCount={subjects.length}
             studentCount={0}
             revenue="₹0"

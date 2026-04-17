@@ -885,7 +885,7 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
       };
 
       const res = await axios.post(
-        `${BASE_URL}/api/get_teacher_broadcast`,
+        `${BASE_URL}/api/messages/get_teacher_broadcast`,
         { userEmail: teacherEmail, type: 'teacher' },
         { headers, timeout: 10000 }
       );
@@ -1639,10 +1639,7 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
   return (
     <View style={styles.container}>
       {/* Header at top level like TutorDashboardWeb */}
-      <TeacherWebHeader 
-        teacherName={teacherName}
-        profileImage={profileImage}
-      />
+      <TeacherWebHeader />
       
       <View style={styles.contentLayout}>
         {/* Sidebar */}
@@ -1650,8 +1647,6 @@ export default function ConnectWeb({ onBack, isEmbedded = false }: ConnectWebPro
           activeItem={sidebarActiveItem}
           onItemPress={handleSelect}
           userEmail={teacherEmail}
-          teacherName={teacherName}
-          profileImage={profileImage}
           subjectCount={0}
           studentCount={contacts.length}
           revenue="₹12.5K"

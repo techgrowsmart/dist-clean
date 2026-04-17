@@ -1,15 +1,14 @@
-import React from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Dimensions,
-  ScrollView,
-  TouchableOpacity,
-  Platform,
-} from "react-native";
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import {
+    Dimensions,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
 import ConfettiCannon from 'react-native-confetti-cannon';
 
 const { width, height } = Dimensions.get("window");
@@ -26,7 +25,7 @@ const CongratsStudent = () => {
   };
 
   const handleExploreTeachers = () => {
-    router.push("/(tabs)/StudentDashBoard/TeachersList");
+    router.replace("/(tabs)/StudentDashBoard/Student");
   };
 
   const formatDate = (dateString: string) => {

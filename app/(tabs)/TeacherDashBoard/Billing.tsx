@@ -417,7 +417,7 @@ const Billing = () => {
     return (
       <View style={styles.container}>
         {/* Header */}
-        <TeacherWebHeader teacherName={teacherName} profileImage={profileImage} />
+        <TeacherWebHeader />
 
         <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
           <ScrollView 
@@ -524,14 +524,12 @@ const Billing = () => {
   return (
     <View style={styles.container}>
       {/* ── Top header ── */}
-      <TeacherWebHeader teacherName={teacherName} profileImage={profileImage} />
+      <TeacherWebHeader />
 
       {/* ── Body: sidebar + content area ── */}
       <View style={styles.contentLayout}>
 
         <TeacherWebSidebar
-  teacherName={teacherName}
-  profileImage={profileImage}
   activeItem={activeItem}
   onItemPress={handleSelect}
   userEmail={userEmail}

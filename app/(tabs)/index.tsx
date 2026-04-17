@@ -11,43 +11,35 @@ export default function SplashScreen() {
         const timer = setTimeout(async () => {
             setIsCheckingAuth(true);
             try {
-              
+
                 const authData = await getAuthData();
 
                 if (authData) {
                     console.log("User is logged in as:", authData.role);
-                    
+
                     if (authData.role === "teacher") {
                         router.replace("/(tabs)/TeacherDashBoard");
                     } else {
-                      
+
                         router.replace("/(tabs)/StudentDashBoard");
                     }
                 } else {
                     console.log("User is not logged in");
-                  
-                    router.replace("/(tabs)/MainScreen");
+
+                    router.replace("/auth/InitialScreen");
                 }
             } catch (error) {
                 console.error("Auth check error:", error);
-              
-                router.replace("/(tabs)/MainScreen");
+
+                router.replace("/auth/InitialScreen");
             }
-        }, 6500);
+        }, 1000);
 
         return () => clearTimeout(timer);
     }, []);
 
     return (
         <View style={styles.container}>
-          
-            <Image
-                source={require("../../assets/images/growsmart-icon.png")}
-                style={styles.video}
-                resizeMode="contain"
-            />
-
-          
             {isCheckingAuth && (
                 <ActivityIndicator
                     style={styles.loader}
@@ -68,15 +60,9 @@ const styles = StyleSheet.create({
         backgroundColor: "white",
         alignItems: "center",
         justifyContent: "center",
-        position: "relative",
-    },
-    video: {
-        width: width,
-        height: height,
-        position: "absolute",
     },
     loader: {
         position: "absolute",
-        bottom: height * 0.05, 
+        bottom: height * 0.05,
     }
 });

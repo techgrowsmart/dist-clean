@@ -854,9 +854,9 @@ const CreateSubject = () => {
     <SafeAreaView style={styles.safeArea}>
       {Platform.OS === 'web' ? (
         <View style={styles.webLayout}>
-          <TeacherWebHeader teacherName={teacherName} profileImage={profileImage} showSearch={true} />
+          <TeacherWebHeader showSearch={true} />
           <View style={styles.webContent}>
-            <TeacherWebSidebar activeItem="Create Subject" userEmail={userEmail} teacherName={teacherName} profileImage={profileImage} />
+            <TeacherWebSidebar activeItem="Create Subject" userEmail={userEmail} />
             <View style={styles.webMainContent}>
               <KeyboardAvoidingView behavior="height" style={styles.webKeyboardAvoid}>
                 <Pressable onPress={dismissKeyboard} style={styles.webFormContainer}>

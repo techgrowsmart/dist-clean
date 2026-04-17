@@ -688,6 +688,8 @@ export default function ProfileWeb() {
       });
       console.log('✨ Cleaned tuitions:', JSON.stringify(cleanedTuitions, null, 2));
 
+      const filteredWorkExperiences = workExperiences.filter(exp => exp && exp.trim() !== '');
+
       const profileData = {
         fullName: teacherName,
         email,
@@ -698,6 +700,7 @@ export default function ProfileWeb() {
         tuitions: cleanedTuitions,
         teachingMode,
         workExperience,
+        workExperiences: filteredWorkExperiences,
         university,
       };
 
@@ -716,6 +719,7 @@ export default function ProfileWeb() {
         ["profileImage", imageUrl || ""],
         ["introduction", introduction],
         ["workexperience", workExperience],
+        ["workExperiences", JSON.stringify(filteredWorkExperiences)],
         ["category", selectedCategory],
         ["teachingmode", JSON.stringify(teachingMode)],
         ["tutions", JSON.stringify(cleanedTuitions)],
@@ -933,11 +937,7 @@ export default function ProfileWeb() {
   return (
     Platform.OS === 'web' ? (
       <View style={styles.webLayout}>
-        <TeacherWebHeader 
-          teacherName={teacherName}
-          profileImage={profileImage}
-          showSearch={true}
-        />
+        <TeacherWebHeader showSearch={true} />
         
         <View style={styles.webContent}>
           {!isMobile && (
@@ -945,8 +945,6 @@ export default function ProfileWeb() {
               activeItem={sidebarActiveItem}
               onItemPress={handleSidebarSelect}
               userEmail={userEmail}
-              teacherName={teacherName}
-              profileImage={profileImage}
               subjectCount={qualifications.length}
               studentCount={0}
               revenue="₹8.5K"

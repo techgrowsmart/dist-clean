@@ -5,7 +5,7 @@ import { clearAllStorage, getAuthData, storeAuthData } from '../utils/authStorag
 
 // Check if user is a test user
 const isTestUser = (email: string) => {
-  const testEmails = ['test31@example.com', 'test@example.com', 'admin@test.com'];
+  const testEmails = ['student1@example.com', 'teacher56@example.com', 'teacher31@example.com'];
   return testEmails.includes(email);
 };
 
@@ -227,6 +227,33 @@ export class AuthService {
     }
   }
 
+  async checkUserExists(email: string) {
+    try {
+      console.log('Checking if user exists:', { email });
+      
+      const response = await this.makeRequest('/auth/check-user', {
+        method: 'POST',
+        body: JSON.stringify({ email })
+      });
+      
+      return {
+        exists: response.exists || false,
+        role: response.role || 'student',
+        message: response.message || ''
+      };
+    } catch (error: any) {
+      console.error('Check user exists error:', error);
+      // If the endpoint doesn't exist or returns HTML (404), assume user doesn't exist to allow signup
+      if (error.message?.includes('Not found') || 
+          error.message?.includes('404') || 
+          error.message?.includes('HTML instead of JSON')) {
+        console.log('Check-user endpoint not available, assuming user does not exist');
+        return { exists: false, role: 'student', message: '' };
+      }
+      throw error;
+    }
+  }
+
   async sendOTP(email: string, password?: string, isSignup: boolean = false, name?: string, phone?: string) {
     try {
       console.log('Sending OTP:', { email, isSignup, phone });
@@ -235,7 +262,7 @@ export class AuthService {
       const phoneNumber = phone && phone.trim() ? phone : '+0000000000';
       const body = isSignup 
         ? { email, fullName: name, phonenumber: phoneNumber, role: 'student' }
-        : { email, password };
+        : { email };
       
       const response = await this.makeRequest(endpoint, {
         method: 'POST',
@@ -381,10 +408,21 @@ export class AuthService {
     try {
       console.log('Update profile:', userData);
       
-      const response = await this.makeRequest('/profile', {
-        method: 'PUT',
+      const response = await this.makeRequest('/auth/update-role', {
+        method: 'POST',
         body: JSON.stringify(userData)
       });
+      
+      // Store the new token with updated role if returned by backend
+      if (response.token) {
+        await this.storeAuthData({
+          email: userData.email,
+          token: response.token,
+          role: response.role,
+          name: response.name
+        });
+        console.log('Auth data updated with new role:', response.role);
+      }
       
       return response;
     } catch (error: any) {
@@ -427,6 +465,47 @@ export class AuthService {
     } catch (error: any) {
       console.error('Update role error:', error);
       throw new Error(error.message || 'Failed to update role');
+    }
+  }
+
+  async testUserLogin(email: string) {
+    try {
+      console.log('Test user login attempt:', { email });
+      
+      // Import test users config
+      const { TEST_USERS, getTestUser } = await import('../config/testUsers');
+      const testUser = getTestUser(email);
+      
+      if (!testUser) {
+        throw new Error('Not a recognized test user');
+      }
+      
+      // Create mock auth response for test users
+      const mockAuthResponse = {
+        token: `test-token-${testUser.id}`,
+        user: {
+          email: testUser.email,
+          name: testUser.name,
+          role: testUser.role,
+          id: testUser.id,
+          phone: testUser.phone,
+          ...(testUser.enrolledSubjects && { enrolledSubjects: testUser.enrolledSubjects }),
+          ...(testUser.subjects && { subjects: testUser.subjects }),
+          ...(testUser.experience && { experience: testUser.experience }),
+          ...(testUser.qualification && { qualification: testUser.qualification }),
+          ...(testUser.grade && { grade: testUser.grade })
+        }
+      };
+      
+      await storeAuthData(mockAuthResponse);
+      
+      return { 
+        success: true, 
+        user: mockAuthResponse.user 
+      };
+    } catch (error: any) {
+      console.error('Test user login error:', error);
+      throw error;
     }
   }
 }

@@ -1,12 +1,12 @@
 // Backend URL configuration
 const DEV_SERVER_URL = 'http://localhost:3000';
-// Use empty string in production for relative paths (proxied by .htaccess)
-const PROD_SERVER_URL = '';
 
-// Use production URL for production, dev URL for development
-export const BASE_URL = process.env.NODE_ENV === 'production' || process.env.EXPO_PUBLIC_DEV_MODE === 'false'
-  ? PROD_SERVER_URL
-  : (process.env.EXPO_PUBLIC_API_URL || DEV_SERVER_URL);
+// Use EXPO_PUBLIC_API_URL if set, otherwise use production URL or dev URL
+export const BASE_URL = process.env.EXPO_PUBLIC_API_URL
+  ? process.env.EXPO_PUBLIC_API_URL
+  : (process.env.NODE_ENV === 'production' || process.env.EXPO_PUBLIC_DEV_MODE === 'false'
+    ? 'https://growsmartserver.gogrowsmart.com'
+    : DEV_SERVER_URL);
 
 export const RAZORPAY_KEY = process.env.EXPO_PUBLIC_RAZORPAY_KEY || 'rzp_test_RY9WNGFa44XzaQ';
 // Alias for backward compatibility - some files import as RAZOR_PAY_KEY

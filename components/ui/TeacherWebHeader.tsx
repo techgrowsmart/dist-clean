@@ -42,7 +42,7 @@ const TeacherWebHeader: React.FC<TeacherWebHeaderProps> = ({
         if (!auth?.email) return;
 
         const headers = { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" };
-        const res = await fetch(`${BASE_URL}/api/userProfile`, {
+        const res = await fetch(`${BASE_URL}/api/teacherProfile`, {
           method: 'POST',
           headers,
           body: JSON.stringify({ email: auth.email }),

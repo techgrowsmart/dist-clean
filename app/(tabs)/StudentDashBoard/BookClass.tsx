@@ -1,37 +1,32 @@
-import React, { useEffect, useState, useRef } from "react";
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  ScrollView, 
+import { Ionicons } from "@expo/vector-icons";
+import Entypo from "@expo/vector-icons/Entypo";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Modal,
   Platform,
   SafeAreaView,
-  TextInput,
-  Image,
-  Dimensions,
-  ActivityIndicator,
-  Modal,
-  Alert
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
+import { heightPercentageToDP as hp, widthPercentageToDP as wp } from "react-native-responsive-screen";
 import { io, Socket } from "socket.io-client";
-import { useLocalSearchParams, useRouter } from "expo-router";
 import BottomNavigation from "../../../app/(tabs)/BottomNavigation";
-import axios from "axios";
-import Checkbox from "expo-checkbox";
-import { BASE_URL } from "../../../config";
-import DangerousIcon from "../../../assets/svgIcons/Dangerous";
 import BulbIcon from "../../../assets/svgIcons/BulbIcon";
-import { getAuthData } from "../../../utils/authStorage";
-import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
-import Entypo from "@expo/vector-icons/Entypo";
-import { Ionicons } from "@expo/vector-icons";
 import CustomCheckbox from "../../../components/CustomCheckbox";
-import { safeBack } from "../../../utils/navigation";
 import WebNavbar from "../../../components/ui/WebNavbar";
 import WebSidebar from "../../../components/ui/WebSidebar";
-import ThoughtsCard, { ThoughtsBackground } from './ThoughtsCard';
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { BASE_URL } from "../../../config";
+import { getAuthData } from "../../../utils/authStorage";
+import { safeBack } from "../../../utils/navigation";
 
 const { width, height } = Dimensions.get("window");
 
@@ -102,6 +97,15 @@ export default function BookClass() {
       // Find the matching tuition
       const matchingTuition = tuitions.find((t) => {
         const subjectMatch = (t.subject || t.skill) === selectedSubject;
+        
+        // For university classes, match against constructed format
+        if (t.board === 'Universities') {
+          const universityClassFormat = `${t.university} (${t.year})`;
+          const classMatch = universityClassFormat === selectedClass;
+          return subjectMatch && classMatch;
+        }
+        
+        // For regular classes, match against class/className
         const classMatch = (t.class || t.className) === selectedClass;
         return subjectMatch && classMatch;
       });
@@ -109,7 +113,9 @@ export default function BookClass() {
       if (matchingTuition) {
         const tuitionKey = matchingTuition.skill 
           ? matchingTuition.skill 
-          : `${matchingTuition.subject}-${matchingTuition.class}`;
+          : matchingTuition.board === 'Universities' 
+            ? `${matchingTuition.subject}-${matchingTuition.university}-${matchingTuition.year}`
+            : `${matchingTuition.subject}-${matchingTuition.class}`;
         setSelectedTuitions([tuitionKey]);
         console.log('✅ Pre-selected tuition:', tuitionKey);
       } else {
@@ -947,7 +953,7 @@ export default function BookClass() {
                 <TouchableOpacity style={webStyles.backButton} onPress={handleBackPress}>
                   <Ionicons name="arrow-back" size={20} color={COLORS.textPrimary} />
                 </TouchableOpacity>
-                <Text style={webStyles.pageTitle}>Book Class</Text>
+                <Text style={webStyles.pageTitle}>Book Now</Text>
               </View>
 
               <View style={webStyles.boxContainer}>

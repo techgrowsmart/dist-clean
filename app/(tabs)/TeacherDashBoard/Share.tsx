@@ -18,7 +18,7 @@ import {
 import { useRouter } from 'expo-router';
 import { getAuthData } from '../../../utils/authStorage';
 import { BASE_URL, PORTAL_DOMAIN } from '../../../config';
-import WebHeader from '../../../components/ui/TeacherWebHeader';
+import TeacherWebHeader from '../../../components/ui/TeacherWebHeader';
 import WebSidebar from '../../../components/ui/TeacherWebSidebar';
 import { TeacherThoughtsBackground } from '../../../components/ui/TeacherThoughtsCard';
 import {
@@ -543,99 +543,86 @@ const Share = () => {
 
   return (
     <View style={styles.container}>
-      <WebHeader 
-        teacherName={teacherName}
-        profileImage={profileImage}
-      />
+      <TeacherWebHeader showSearch={true} />
       
-      <View style={styles.contentLayout}>
-        <WebSidebar 
-          teacherName={teacherName}
-          profileImage={profileImage}
-          activeItem={sidebarActiveItem}
-          onItemPress={handleSelect}
-          userEmail={auth?.email || ''}
-        />
-        
-        {/* ── Main area ── */}
-        <ScrollView
-          style={styles.mainWrapper}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Page header */}
-          <View style={styles.pageHeader}>
-            <View style={styles.pageHeaderLeft}>
-              <TouchableOpacity
-                style={styles.backBtn}
-                onPress={handleBackPress}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="arrow-back" size={24} color={COLORS.textDark} />
-              </TouchableOpacity>
-              <View>
-                <Text style={styles.pageTitle}>Share GrowSmart</Text>
-                <Text style={styles.pageSubtitle}>
-                  Invite students & fellow teachers to join the platform
-                </Text>
-              </View>
+      {/* ── Main area ── */}
+      <ScrollView
+        style={styles.mainWrapper}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Page header */}
+        <View style={styles.pageHeader}>
+          <View style={styles.pageHeaderLeft}>
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={handleBackPress}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={24} color={COLORS.textDark} />
+            </TouchableOpacity>
+            <View>
+              <Text style={styles.pageTitle}>Share GrowSmart</Text>
+              <Text style={styles.pageSubtitle}>
+                Invite students & fellow teachers to join the platform
+              </Text>
             </View>
           </View>
+        </View>
 
-          {/* Body */}
-          <View style={styles.body}>
-            {/* App preview card */}
-            <SharePreviewCard />
+        {/* Body */}
+        <View style={styles.body}>
+          {/* App preview card */}
+          <SharePreviewCard />
 
-            {/* Section label */}
-            <View style={styles.sectionRow}>
-              <View style={styles.sectionLine} />
-              <Text style={styles.sectionLabel}>Share via</Text>
-              <View style={styles.sectionLine} />
-            </View>
-
-            {/* Share buttons grid */}
-            <View style={styles.shareGrid}>
-              {SHARE_ITEMS.map((item) => (
-                <ShareButton
-                  key={item.id}
-                  item={item}
-                  onPress={() => handleShare(item)}
-                  copied={copied}
-                />
-              ))}
-            </View>
-
-            {/* Direct link row */}
-            <View style={styles.linkRow}>
-              <View style={styles.linkPill}>
-                <Feather name="globe" size={14} color={COLORS.primaryBlue} />
-                <Text style={styles.linkPillText} numberOfLines={1}>
-                  {APP_DOMAIN}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.linkCopyBtn}
-                onPress={async () => {
-                  const refCode = getReferralCode();
-                  const refParam = refCode ? `?ref=${refCode}` : '';
-                  await Clipboard.setStringAsync(`https://${APP_DOMAIN}${refParam}`);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2500);
-                }}
-              >
-                <Feather
-                  name={copied ? 'check' : 'copy'}
-                  size={14}
-                  color={COLORS.white}
-                />
-                <Text style={styles.linkCopyText}>{copied ? 'Copied!' : 'Copy'}</Text>
-              </TouchableOpacity>
-            </View>
-
+          {/* Section label */}
+          <View style={styles.sectionRow}>
+            <View style={styles.sectionLine} />
+            <Text style={styles.sectionLabel}>Share via</Text>
+            <View style={styles.sectionLine} />
           </View>
-        </ScrollView>
-      </View>
+
+          {/* Share buttons grid */}
+          <View style={styles.shareGrid}>
+            {SHARE_ITEMS.map((item) => (
+              <ShareButton
+                key={item.id}
+                item={item}
+                onPress={() => handleShare(item)}
+                copied={copied}
+              />
+            ))}
+          </View>
+
+          {/* Direct link row */}
+          <View style={styles.linkRow}>
+            <View style={styles.linkPill}>
+              <Feather name="globe" size={14} color={COLORS.primaryBlue} />
+              <Text style={styles.linkPillText} numberOfLines={1}>
+                {APP_DOMAIN}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.linkCopyBtn}
+              onPress={async () => {
+                const refCode = getReferralCode();
+                const refParam = refCode ? `?ref=${refCode}` : '';
+                await Clipboard.setStringAsync(`https://${APP_DOMAIN}${refParam}`);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2500);
+              }}
+            >
+              <Feather
+                name={copied ? 'check' : 'copy'}
+                size={14}
+                color={COLORS.white}
+              />
+              <Text style={styles.linkCopyText}>{copied ? 'Copied!' : 'Copy'}</Text>
+            </TouchableOpacity>
+          </View>
+
+        </View>
+      </ScrollView>
     </View>
   );
 };

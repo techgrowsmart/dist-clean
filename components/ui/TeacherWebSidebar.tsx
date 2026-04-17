@@ -26,15 +26,16 @@ import {
   View,
 } from "react-native";
 import Toast from "react-native-toast-message";
-import { clearAllStorage } from "../../utils/authStorage";
+import { clearAllStorage, getAuthData } from "../../utils/authStorage";
 import { BASE_URL } from "../../config";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type TeacherWebSidebarProps = {
   activeItem: string;
   onItemPress?: (itemName: string) => void;
   userEmail: string;
-  teacherName: string;
-  profileImage: string | null;
+  teacherName?: string;
+  profileImage?: string | null;
   subjectCount?: number;
   studentCount?: number;
   revenue?: string;
@@ -103,8 +104,8 @@ const TeacherWebSidebar = ({
   activeItem,
   onItemPress,
   userEmail,
-  teacherName,
-  profileImage,
+  teacherName: initialTeacherName,
+  profileImage: initialProfileImage,
   collapsed: propCollapsed,
   onToggleCollapse,
   showToggle = true,
@@ -120,12 +121,54 @@ const TeacherWebSidebar = ({
     Poppins_700Bold,
   });
 
+  const [teacherName, setTeacherName] = useState(initialTeacherName || "Teacher");
+  const [profileImage, setProfileImage] = useState<string | null>(initialProfileImage || null);
   const [screenWidth, setScreenWidth] = useState(
     Dimensions.get("window").width
   );
   const [isCollapsed, setIsCollapsed] = useState(propCollapsed || false);
 
   const isMobile = screenWidth < 768;
+
+  // Fetch profile data only if not provided as prop
+  useEffect(() => {
+    if (initialTeacherName && initialProfileImage) {
+      // Use props directly if provided
+      return;
+    }
+
+    const fetchProfile = async () => {
+      try {
+        const auth = await getAuthData();
+        if (!auth?.email) return;
+
+        const headers = { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" };
+        const res = await fetch(`${BASE_URL}/api/teacherProfile`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ email: auth.email }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setTeacherName(data.name || "Teacher");
+          setProfileImage(data.profileimage || null);
+          await AsyncStorage.multiSet([
+            ["teacherName", data.name || ""],
+            ["profileImage", data.profileimage || ""]
+          ]);
+        }
+      } catch (error) {
+        // Use cached data as fallback
+        const cachedName = await AsyncStorage.getItem("teacherName") || "Teacher";
+        const cachedImage = await AsyncStorage.getItem("profileImage") || null;
+        setTeacherName(cachedName);
+        setProfileImage(cachedImage);
+      }
+    };
+
+    fetchProfile();
+  }, [initialTeacherName, initialProfileImage]);
 
   useEffect(() => {
     const updateDimensions = () => {

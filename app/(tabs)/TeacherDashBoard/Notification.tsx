@@ -636,6 +636,33 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 4,
     },
+    header: {
+        backgroundColor: '#F8FAFC',
+        paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight ? StatusBar.currentHeight + 10 : 20,
+        paddingHorizontal: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E5E7EB',
+    },
+    headerTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    headerTitle: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: '#1F2937',
+        fontFamily: 'System',
+    },
+    searchButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F3F4F6',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
 
     // Search
     searchContainer: {

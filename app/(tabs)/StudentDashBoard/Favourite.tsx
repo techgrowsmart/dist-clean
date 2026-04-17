@@ -39,7 +39,7 @@ import WebNavbar from "../../../components/ui/WebNavbar";
 import ResponsiveSidebar from "../../../components/ui/ResponsiveSidebar";
 import NotificationBellIcon from "../../../assets/svgIcons/NotificationBell";
 import axios from "axios";
-import { getFavoriteTeachers } from '../../../services/favoriteTeachers'; 
+import { getFavoriteTeachers, addFavoriteTeacher, removeFavoriteTeacher } from '../../../services/favoriteTeachers'; 
 import { AntDesign, Ionicons } from '@expo/vector-icons';
 import { favoritesEvents, FAVORITES_CHANGED_EVENT } from '../../../utils/favoritesEvents';
 import BackButton from '../../../components/BackButton';
@@ -318,9 +318,38 @@ const Favourite = () => {
     },
   });
 
-  const handleFavoritePress = (itemEmail: string, event: any) => {
+  const handleFavoritePress = async (itemEmail: string, event: any) => {
     event.stopPropagation();
-    setLikedTeachers(prev => ({ ...prev, [itemEmail]: !prev[itemEmail] }));
+    
+    const isCurrentlyLiked = likedTeachers[itemEmail] || false;
+    
+    try {
+      if (isCurrentlyLiked) {
+        // Remove from favorites
+        await removeFavoriteTeacher(itemEmail);
+        setLikedTeachers(prev => ({ ...prev, [itemEmail]: false }));
+        
+        // Remove from the list and refresh
+        setAllFavourites(prev => prev.filter(item => item.email !== itemEmail));
+        
+        Alert.alert('Removed', 'Teacher removed from favorites');
+      } else {
+        // Add to favorites
+        await addFavoriteTeacher(itemEmail);
+        setLikedTeachers(prev => ({ ...prev, [itemEmail]: true }));
+        
+        // Refresh the list to show the newly added teacher
+        const favorites = await getFavoriteTeachers();
+        setAllFavourites(favorites);
+        
+        Alert.alert('Added', 'Teacher added to favorites');
+      }
+    } catch (error: any) {
+      console.error('Error updating favorite:', error);
+      Alert.alert('Error', error.message || 'Failed to update favorites');
+      // Revert the state change on error
+      setLikedTeachers(prev => ({ ...prev, [itemEmail]: isCurrentlyLiked }));
+    }
   };
 
   const handleReviewPress = (item: any, event: any) => {

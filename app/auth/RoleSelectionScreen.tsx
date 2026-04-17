@@ -38,7 +38,7 @@ export default function RoleSelectionScreen() {
     if (loading) return;
     animateButton(studentScale, () => {
       setLoading(true);
-      authService.updateProfile(email, 'student')
+      authService.updateProfile({ email, role: 'student' })
         .catch((error: any) => {
           console.error('Update role error:', error);
           // Continue to profile even if role update fails
@@ -74,7 +74,7 @@ export default function RoleSelectionScreen() {
       });
 
       // Update role in background (don't block navigation)
-      authService.updateProfile(email, 'teacher')
+      authService.updateProfile({ email, role: 'teacher' })
         .then(() => console.log('Role updated to teacher'))
         .catch((error: any) => console.error('Update role error:', error));
     });
@@ -96,8 +96,6 @@ export default function RoleSelectionScreen() {
             resizeMode="cover"
           >
             <View style={webStyles.imageOverlay} />
-            <View style={webStyles.overlayContent}>
-            </View>
           </ImageBackground>
         </View>
 
@@ -244,7 +242,7 @@ const webStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
-    boxShadow: '0 12px 20px rgba(0, 0, 0, 0.4)',
+    ...(Platform.OS === 'web' && { boxShadow: '0 12px 20px rgba(0, 0, 0, 0.4)' }),
     elevation: 16,
   },
   leftLogoText: {
@@ -331,7 +329,7 @@ const webStyles = StyleSheet.create({
     padding: 24,
     flexDirection: 'row',
     alignItems: 'center',
-    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.05)',
+    ...(Platform.OS === 'web' && { boxShadow: '0 4px 8px rgba(0, 0, 0, 0.05)' }),
     elevation: 6,
   },
   roleIcon: {
@@ -416,7 +414,7 @@ const styles = StyleSheet.create({
     padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+    ...(Platform.OS === 'web' && { boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)' }),
     elevation: 4,
   },
   mobileRoleIcon: {

@@ -23,10 +23,10 @@ export default function AuthCheck() {
                     }
                 }
 
-                router.replace("/onboarding");
+                router.replace("/auth/InitialScreen");
             } catch (error) {
                 console.error("Error checking auth:", error);
-                router.replace("/onboarding");
+                router.replace("/auth/InitialScreen");
             } finally {
                 setChecking(false);
             }

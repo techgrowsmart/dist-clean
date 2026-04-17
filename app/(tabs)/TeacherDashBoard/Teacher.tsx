@@ -164,7 +164,8 @@ const InfiniteReviewScroll = ({ reviews }: { reviews: Review[] }) => {
         {[...reviewData, ...reviewData, ...reviewData, ...reviewData].map((review, index) => (
           <View
             key={`${review.id}-${index}`}
-            style={[styles.reviewCard, { pointerEvents: "box-none" }]}
+            style={[styles.reviewCard, Platform.OS === 'web' && { pointerEvents: "box-none" }]}
+            pointerEvents={Platform.OS !== 'web' ? "box-none" : undefined}
           >
             {/* Real review badge */}
             {review.isReal && (
@@ -1878,7 +1879,6 @@ swipeOverlay: {
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    pointerEvents: 'none',
     zIndex: 10,
   },
   swipeHintArrows: {

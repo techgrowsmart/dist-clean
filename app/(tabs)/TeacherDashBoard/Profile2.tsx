@@ -1691,7 +1691,7 @@ const validateTimeRange = () => {
 </View>
 
                 {/* Timing */}
-                <View style={[styles.timecontainer, { pointerEvents: "box-none" }]}>
+                <View style={[styles.timecontainer, Platform.OS === 'web' && { pointerEvents: "box-none" }]} pointerEvents={Platform.OS !== 'web' ? "box-none" : undefined}>
                   <TouchableOpacity
                     // Replace these three onPress handlers:
                     onPress={() => {

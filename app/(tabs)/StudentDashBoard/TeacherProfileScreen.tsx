@@ -348,6 +348,10 @@ export default function TeacherProfileScreen() {
             typeof res.data.teachingmode === "string"
               ? JSON.parse(res.data.teachingmode)
               : res.data.teachingmode || [],
+          workExperiences:
+            typeof res.data.workExperiences === "string"
+              ? JSON.parse(res.data.workExperiences)
+              : res.data.workExperiences || [],
           category:
             typeof res.data.category === "string"
               ? res.data.category || ""
